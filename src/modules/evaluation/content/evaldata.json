@@ -1,0 +1,932 @@
+{
+  "id": "evaldata",
+  "moduleSlug": "evaluation",
+  "name": "Eval Datasets",
+  "shortName": "Eval datasets",
+  "question": "Is the test set itself worth trusting?",
+  "summary": "Build and maintain the set of cases every other evaluation runs on. Cases come from production logs, support tickets and subject experts; they are stratified by intent, language and risk, topped up with edge, adversarial and reviewed synthetic cases, labelled against a rubric by two people, sized for the confidence you need, versioned, and refreshed from new failures. The scoring methods live in the other techniques here; this one is about the data they score.",
+  "useCases": [
+    "Before trusting any release gate, judge or benchmark comparison on your own tasks",
+    "When scores look good but users still report failures the set never shows",
+    "When a new language, intent or product line reaches production"
+  ],
+  "keyFacts": {
+    "label": "Key measures",
+    "items": [
+      {
+        "term": "Coverage",
+        "detail": "intents, languages and risk tiers with enough cases to score"
+      },
+      {
+        "term": "95% margin",
+        "detail": "≈ 1.96 · √(p(1 − p) ÷ n) around the measured rate"
+      },
+      {
+        "term": "Label agreement",
+        "detail": "% agreement and Cohen’s κ between two annotators"
+      },
+      {
+        "term": "Label noise",
+        "detail": "share of gold labels that are wrong after review"
+      },
+      {
+        "term": "Freshness",
+        "detail": "share of cases drawn from the last one or two releases"
+      },
+      {
+        "term": "Holdout",
+        "detail": "cases never used while tuning prompts, kept for the final check"
+      }
+    ]
+  },
+  "steps": [
+    "Sample real traffic, tickets and expert cases; redact personal data first",
+    "Stratify by intent, language and risk, with a floor per stratum and adversarial cases",
+    "Label with a written rubric: two annotators, measure agreement, adjudicate disagreements",
+    "Size for the margin you need, version the set, hold some back, and add each new failure"
+  ],
+  "pitfalls": [
+    "Synthetic-only sets look easy and clean, so scores come out high and miss real traffic",
+    "Tuning prompts against the same cases over and over overfits the set",
+    "Too few cases per slice: a 4-point drop hides inside a ±5-point margin"
+  ],
+  "tools": [
+    "Argilla",
+    "Label Studio",
+    "LangSmith datasets",
+    "Braintrust datasets",
+    "DVC",
+    "statsmodels"
+  ],
+  "remember": "Real cases, every slice, two labellers, enough n, and refresh from failures.",
+  "caption": "Illustrative: Suraksha General, a fictional Indian insurer, building the test set for its claims assistant.",
+  "comparison": {
+    "scope": "The test cases and their labels",
+    "cost": 3,
+    "needs": "Production samples, a rubric and annotator time",
+    "best": "Trustworthy gates and regression checks"
+  },
+  "diagram": {
+    "file": "diagrams/evaldata.svg"
+  },
+  "lesson": {
+    "file": "build_claims_eval.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import math, random",
+        "steps": []
+      },
+      {
+        "text": "from collections import defaultdict",
+        "steps": []
+      },
+      {
+        "text": "from sklearn.metrics import cohen_kappa_score",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "logs = load_logs(\"claims-assistant\", since=\"2026-03-01\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "logs = [redact(x, fields=(\"name\", \"phone\", \"policy_no\", \"aadhaar\")) for x in logs]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "TARGET, FLOOR = 180, 3",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "by_stratum = defaultdict(list)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "for x in logs:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    by_stratum[(x[\"intent\"], x[\"lang\"], x[\"risk\"])].append(x)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "rng, cases = random.Random(7), []",
+        "steps": []
+      },
+      {
+        "text": "for key, group in by_stratum.items():",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    k = max(FLOOR, round(TARGET * len(group) / len(logs)))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    picked = rng.sample(group, min(k, len(group)))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if len(picked) < FLOOR:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        picked += sme_review(synthesise(key, FLOOR - len(picked)))  # kept only if approved",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    cases += picked",
+        "steps": []
+      },
+      {
+        "text": "cases += load_jsonl(\"adversarial_v3.jsonl\")   # 20: injected PDFs, fake claim ids",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "a = [label(c, rubric=RUBRIC, annotator=\"A\") for c in cases]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "b = [label(c, rubric=RUBRIC, annotator=\"B\") for c in cases]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "print(cohen_kappa_score(a, b))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "gold = [x if x == y else adjudicate(c, x, y) for c, x, y in zip(cases, a, b)]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def margin(p, n):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return 1.96 * math.sqrt(p * (1 - p) / n)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "print(f\"±{margin(0.85, 180):.1%}\")        # ±5.2%: too wide for a 4-point drop",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "holdout = rng.sample(range(len(cases)), k=len(cases) // 5)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "save_dataset(\"claims-eval\", version=\"v4\", cases=cases, labels=gold, holdout=holdout)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "# monthly: add_cases(\"claims-eval\", pull_failures(since=\"v4\"))",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Start from real traffic",
+        "text": "Sample six months of the claims assistant's conversations, plus support tickets and the cases claims officers say go wrong. Redact names, phone numbers, policy numbers and Aadhaar numbers before anyone reads them. The helpers here (load_logs, redact, label and so on) are stubs for your own code."
+      },
+      {
+        "title": "Stratify, with a floor",
+        "text": "Group the logs by intent, language and risk, and sample each group in proportion to its traffic, but never fewer than 3 cases. Proportional sampling alone would give a 1% intent such as a death claim about 2 cases out of 180; the floor keeps rare but costly intents in the set."
+      },
+      {
+        "title": "Fill gaps carefully",
+        "text": "Where a stratum has fewer than 3 real cases, synthetic cases fill the gap, and each is kept only if a subject expert approves it. 20 adversarial cases are added on purpose: a claim PDF with hidden instructions, a claim number that does not exist, abusive Hinglish. They are scored as their own slice."
+      },
+      {
+        "title": "Label twice, then adjudicate",
+        "text": "Two annotators grade all 200 cases against the same written rubric. They disagree on 24: 88% agreement, but Cohen's κ is only about 0.53, because most answers are correct and agreement on those is easy. A senior claims officer settles each disagreement, and unclear rubric lines are rewritten."
+      },
+      {
+        "title": "Size for the margin you need",
+        "text": "At 85% accuracy on 180 production-like cases the 95% margin is 1.96 × √(0.85 × 0.15 ÷ 180) ≈ ±5.2 points. A real 4-point regression disappears inside that. Comparing two versions needs more, about 900 cases for a margin of ±2.3 on each score."
+      },
+      {
+        "title": "Version, hold out, refresh",
+        "text": "Save the set as v4 with the labels, and keep a fifth of it as a holdout that nobody looks at while tuning prompts. Every month, add the new production failures, so the set follows the traffic instead of last year's."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"196\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"106\" y=\"24\" text-anchor=\"middle\">logs · tickets · experts</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M206 20L220 20\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"222\" y=\"8\" width=\"130\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"287\" y=\"24\" text-anchor=\"middle\">redact PII</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"54\" style=\"--d:0s\">strata: intent × language × risk</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"62\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"63\" y=\"77\" text-anchor=\"middle\">motor · en</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"124\" y=\"62\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"77\" text-anchor=\"middle\">health · hi</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx acc\" x=\"240\" y=\"62\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"77\" text-anchor=\"middle\">death · floor 3</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"94\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"110\" text-anchor=\"middle\">synthetic · SME-approved</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"94\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"110\" text-anchor=\"middle\">20 adversarial</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"128\" width=\"70\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"43\" y=\"144\" text-anchor=\"middle\">A</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"84\" y=\"128\" width=\"70\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"119\" y=\"144\" text-anchor=\"middle\">B</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"160\" y=\"128\" width=\"192\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"256\" y=\"144\" text-anchor=\"middle\">agree 88% · κ ≈ 0.53</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"8\" y=\"158\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"173\" text-anchor=\"middle\">24 disagreements → adjudicated</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"190\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"206\" text-anchor=\"middle\">n = 180 · p = 0.85 → ±5.2 points</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"224\" width=\"108\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"241\" text-anchor=\"middle\">v4</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"122\" y=\"224\" width=\"110\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"177\" y=\"241\" text-anchor=\"middle\">20% holdout</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"238\" y=\"224\" width=\"114\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"295\" y=\"241\" text-anchor=\"middle\">+ failures</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Every other evaluation becomes trustworthy only on a set that looks like real traffic",
+      "Stratification shows weak slices, such as Hindi or rare intents, that an average hides",
+      "Two annotators and a rubric turn fuzzy judgments into labels you can defend",
+      "A versioned, refreshed set lets you compare releases fairly over time"
+    ],
+    "cons": [
+      "Annotator time is the main cost: two labellers plus adjudication roughly doubles it",
+      "Production logs need redaction and consent checks under DPDP before use",
+      "Detecting small changes needs hundreds to thousands of cases",
+      "A set tuned against repeatedly stops predicting real performance"
+    ],
+    "avoidWhen": [
+      "A throwaway prototype where a dozen hand-picked cases are enough to spot obvious breaks",
+      "Comparing general model capability before you have any traffic (start with public benchmarks)"
+    ],
+    "tools": [
+      {
+        "name": "Argilla",
+        "type": "Open source (Hugging Face)",
+        "what": "Annotation UI for text and LLM outputs, with multiple annotators per record",
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "name": "Label Studio",
+        "type": "Open source, commercial edition",
+        "what": "Configurable labelling interfaces, annotator agreement and review",
+        "url": "https://labelstud.io"
+      },
+      {
+        "name": "LangSmith datasets",
+        "type": "Commercial (LangChain)",
+        "what": "Versioned datasets, annotation queues and adding traced runs as examples",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Braintrust datasets",
+        "type": "Commercial",
+        "what": "Versioned datasets connected to experiments and production logs",
+        "url": "https://www.braintrust.dev"
+      },
+      {
+        "name": "DVC",
+        "type": "Open source",
+        "what": "Git-style versioning for data files, so every score names its dataset version",
+        "url": "https://dvc.org"
+      },
+      {
+        "name": "statsmodels",
+        "type": "Open source",
+        "what": "Confidence intervals and sample-size calculations for proportions",
+        "url": "https://www.statsmodels.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Suraksha General, a fictional Indian insurer, runs a claims assistant that is right about 85% of the time on real traffic. Traffic spans 12 intents, and 20% of it is in Hindi or Hinglish. The next release is truly 4 points worse: Hindi answers drop 15 points and the new flood-claim intent drops 20. You design the test set and see whether it can tell.",
+    "controls": [
+      "Choose how many cases the set holds: 50, 200 or 1,000.",
+      "Choose where cases come from and how they are labelled: one annotator, or two plus adjudication.",
+      "Turn on the monthly refresh from new production failures, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Measured accuracy",
+        "meaning": "The score the set reports, with its 95% margin, 1.96 × √(p(1 − p) ÷ n)."
+      },
+      {
+        "name": "Intents covered",
+        "meaning": "How many of the 12 real intents have at least 3 cases in the set."
+      },
+      {
+        "name": "Hindi / Hinglish cases",
+        "meaning": "How many cases are in the Hindi slice, and that slice's own margin."
+      },
+      {
+        "name": "Label noise",
+        "meaning": "The share of gold labels that are wrong, and the labelling hours it took."
+      },
+      {
+        "name": "4-point regression detected",
+        "meaning": "Whether the measured drop is larger than the margin for a difference between two scores."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "50 synthetic, one annotator",
+        "expect": "94% ± 6.6 points, but only 6 of 12 intents and no Hindi. The regression shows as 0.00 points: missed."
+      },
+      {
+        "k": "prod",
+        "name": "200 from production, one annotator",
+        "expect": "85% ± 4.9, 9 of 12 intents, 40 Hindi cases, 12% label noise. The drop shows as 2.28 points against ±7.0: missed."
+      },
+      {
+        "k": "strat",
+        "name": "200 stratified, two annotators, refresh",
+        "expect": "All 12 intents, 50 Hindi cases, 20 adversarial, 3% noise, 22 hours of labelling. The drop shows as 3.76 against ±7.4: still missed."
+      },
+      {
+        "k": "big",
+        "name": "1,000 stratified, two annotators, refresh",
+        "expect": "85% ± 2.3 on 900 scored cases, 250 Hindi cases, 110 hours. The drop shows as 3.76 against ±3.3: detected."
+      }
+    ],
+    "missions": [
+      {
+        "k": "detect",
+        "text": "Build a set that detects the real 4-point regression.",
+        "hint": "You need 1,000 real cases, two annotators so the drop is not shrunk by noise, and the refresh so the flood-claim failures are in the set."
+      },
+      {
+        "k": "cover",
+        "text": "Cover all 12 intents, at least 40 Hindi cases and some adversarial cases, with label noise of 3% or less and no more than 25 hours of labelling.",
+        "hint": "200 stratified cases with two annotators and the refresh on: 22 hours."
+      },
+      {
+        "k": "illusion",
+        "text": "Get a margin under ±2 points that still misses the regression.",
+        "hint": "1,000 synthetic cases: very confident, about the wrong questions."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Argilla",
+        "type": "Open source · Hugging Face",
+        "start": 2,
+        "prod": 3,
+        "best": "Collaborative labelling of LLM inputs and outputs, with several annotators per record and custom rubric questions.",
+        "ex": "Two claims officers grade 200 assistant answers on a pass/fail rubric; disagreements go to a third reviewer.",
+        "pros": [
+          "Built for LLM data: prompts, responses and rankings",
+          "Self-hostable, so personal data stays in your cloud"
+        ],
+        "cons": [
+          "You run the server and user accounts",
+          "Agreement statistics need a little export code"
+        ],
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "n": "Label Studio",
+        "type": "Open source · commercial edition",
+        "start": 2,
+        "prod": 3,
+        "best": "Configurable labelling interfaces for text, audio and images, with review workflows.",
+        "ex": "Hindi voice-note transcripts of claims calls labelled for intent and correctness in one screen.",
+        "pros": [
+          "Very flexible templates",
+          "Handles audio and documents as well as text"
+        ],
+        "cons": [
+          "Agreement and reviewer workflows are richer in the paid edition",
+          "Templates take time to design well"
+        ],
+        "url": "https://labelstud.io"
+      },
+      {
+        "n": "LangSmith datasets",
+        "type": "Commercial · by LangChain · free tier",
+        "start": 3,
+        "prod": 3,
+        "best": "Turning traced production runs into versioned dataset examples, with annotation queues for reviewers.",
+        "ex": "Every thumbs-down claims conversation is queued for review and, once labelled, added to the next dataset version.",
+        "pros": [
+          "Production traces become test cases in a click",
+          "Dataset versions tie directly to experiments"
+        ],
+        "cons": [
+          "Hosted by default; check data residency",
+          "Paid at higher volumes"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "DVC",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Git-style versioning for dataset files stored in your own bucket.",
+        "ex": "claims-eval v4 is a tagged DVC version, so every reported score names the exact file it came from.",
+        "pros": [
+          "Works with any storage and any eval tool",
+          "Clear history of what changed between versions"
+        ],
+        "cons": [
+          "No labelling or review screens",
+          "Another tool for the team to learn"
+        ],
+        "url": "https://dvc.org"
+      },
+      {
+        "n": "statsmodels",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Confidence intervals and sample sizes for proportions, including the Wilson interval.",
+        "ex": "samplesize_confint_proportion shows that ±2 points at 85% needs about 1,225 cases.",
+        "pros": [
+          "Correct, well-tested statistics",
+          "A few lines of Python"
+        ],
+        "cons": [
+          "Statistics only: no data handling",
+          "Paired comparisons need their own tests"
+        ],
+        "url": "https://www.statsmodels.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Label with several reviewers and a rubric",
+        "tool": "Argilla or Label Studio"
+      },
+      {
+        "need": "Turn production traces into test cases",
+        "tool": "LangSmith datasets"
+      },
+      {
+        "need": "Size the set and version it",
+        "tool": "statsmodels and DVC"
+      }
+    ],
+    "goals": [
+      "Explain why a test set must be sampled from real traffic and stratified by intent, language and risk",
+      "Calculate a 95% margin from p and n, and the cases needed to detect a given change",
+      "Explain how label noise, overfitting and stale sets make scores untrustworthy"
+    ]
+  },
+  "practice": {
+    "scenario": "Suraksha General, a fictional Indian insurer, first tested its claims assistant on 50 questions an LLM generated from the FAQ, and it scored 94%. The rebuilt set samples real conversations, stratified by the 12 intents, Hindi and English, and risk, with a floor of 3 cases per stratum and 10% adversarial cases. Two annotators label every case against a rubric and a senior claims officer settles disagreements. Accuracy on the new set is 85%, with a margin wide enough to show why 1,000 cases are needed before a 4-point regression becomes visible. Each month's new failures are added to the next version.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Claims and policy-servicing assistants tested on real claims, stratified by product, language and claim size"
+      },
+      {
+        "industry": "Banking and payments",
+        "use": "UPI dispute and card-block assistants tested with fraud-style adversarial cases and a held-back slice"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Triage and discharge-summary assistants labelled by two clinicians, with disagreements adjudicated"
+      }
+    ],
+    "analogy": "An exam paper for a driving licence. If every question is about parking on a sunny day, a pass tells you nothing about night driving in the rain. A good paper samples every road condition, is marked by two examiners, and changes each year so nobody learns the answers.",
+    "library": {
+      "name": "statsmodels",
+      "what": "Statistics library with confidence intervals and sample-size calculations for proportions, used here with pandas for stratified sampling and scikit-learn for Cohen’s κ.",
+      "install": "pip install statsmodels pandas scikit-learn"
+    },
+    "note": "The log export and column names are illustrative. proportion_confint and samplesize_confint_proportion are real statsmodels functions; the Wilson interval behaves better than the plain normal formula when accuracy is near 0% or 100%.",
+    "samples": [
+      {
+        "file": "size_and_sample.py",
+        "language": "python",
+        "code": "import math\nimport pandas as pd\nfrom sklearn.metrics import cohen_kappa_score\nfrom statsmodels.stats.proportion import proportion_confint, samplesize_confint_proportion\n\nlogs = pd.read_parquet(\"claims_logs_redacted.parquet\")   # intent, lang, risk, text\n\n# 1. Stratified sample with a floor of 3 per stratum\nTARGET, FLOOR = 900, 3\nparts = []\nfor _, group in logs.groupby([\"intent\", \"lang\", \"risk\"]):\n    k = max(FLOOR, round(TARGET * len(group) / len(logs)))\n    parts.append(group.sample(min(k, len(group)), random_state=7))\nsample = pd.concat(parts)\nprint(sample.groupby(\"lang\").size())            # check the Hindi slice\n\n# 2. Agreement between two annotators on the same cases\na = pd.read_csv(\"labels_a.csv\")[\"verdict\"]      # pass / fail per case\nb = pd.read_csv(\"labels_b.csv\")[\"verdict\"]\nprint(\"agreement\", (a == b).mean(), \"kappa\", round(cohen_kappa_score(a, b), 2))\n\n# 3. How sure is the score? 765 of 900 correct = 85%\nlow, high = proportion_confint(count=765, nobs=900, alpha=0.05, method=\"wilson\")\nprint(f\"85.0% (95% CI {low:.1%} to {high:.1%})\")\n\n# 4. How many cases for a ±2-point margin at 85%?\nn = samplesize_confint_proportion(proportion=0.85, half_length=0.02, alpha=0.05)\nprint(math.ceil(n))                              # 1,225 cases"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Suraksha General’s claims assistant scores about 85% on real traffic. How many test cases are needed for a 95% margin of ±3 percentage points? Use n = 1.96² × p(1 − p) ÷ margin².",
+    "answer": "n = 3.8416 × 0.85 × 0.15 ÷ 0.03² = 0.4898 ÷ 0.0009 ≈ 544.2, so round up to 545 cases. Halving the margin to ±1.5 points needs four times as many, about 2,177.",
+    "expected": {
+      "value": 545,
+      "tolerance": 5,
+      "label": "cases ="
+    },
+    "interview": [
+      {
+        "question": "How would you build an evaluation dataset for a production agent?",
+        "answer": "Sample real traffic, tickets and cases subject experts flag, after redacting personal data. Stratify by intent, language and risk with a minimum per stratum, and add edge and adversarial cases; use synthetic cases only to fill gaps, after expert review. Label with a written rubric, two annotators on at least a sample, measure agreement and adjudicate. Size it for the margin you need, version it, keep a holdout, and add new production failures every cycle."
+      },
+      {
+        "question": "Your agent went from 84% to 87% on a 150-case test set. Is it better?",
+        "answer": "Not provably. At about 85% and 150 cases, one score has a margin near ±5.7 points, and the difference between two scores about ±8. A 3-point gain is inside that. Check paired results on the same cases, look at which cases flipped, and add cases, especially in the slices that matter, before claiming a win."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Testing only on synthetic questions generated from documentation",
+        "fix": "Sample real production traffic, stratify it, and keep synthetic cases to reviewed gap-fillers"
+      },
+      {
+        "mistake": "Tuning prompts against the same test set until the score rises",
+        "fix": "Keep a holdout you never tune on, and refresh the set with new failures each release"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ed01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims assistant scores 94% on 50 questions an LLM generated from the FAQ, but 85% when sampled real conversations are graded. Which number should the release decision use?",
+      "options": [
+        "94%: the generated set is cleaner",
+        "85%: it reflects the traffic the assistant actually sees",
+        "The average, 89.5%",
+        "Neither: only public benchmarks count"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Generated questions tend to be easier and tidier than real ones. The score that predicts production is the one measured on production-like cases."
+    },
+    {
+      "id": "ed02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A card-dispute assistant is 90% accurate on 400 test cases. What is the approximate 95% margin?",
+      "options": [
+        "±1.5 points",
+        "±2.9 points",
+        "±4.5 points",
+        "±9.0 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1.96 × √(0.9 × 0.1 ÷ 400) = 1.96 × 0.015 = 0.0294, about ±2.9 points."
+    },
+    {
+      "id": "ed03",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Where should cases for a claims assistant’s test set come from? Select all that apply.",
+      "options": [
+        "A redacted sample of production conversations",
+        "Support tickets and complaints about the assistant",
+        "Cases claims officers say are tricky or high-risk",
+        "Only questions the team wrote while building the prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Real traffic, complaints and expert knowledge each surface different failures. Questions written by the builders mirror what the prompt already handles."
+    },
+    {
+      "id": "ed04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A UPI help assistant’s fraud-report intent is 0.5% of traffic. With 200 cases sampled purely in proportion, how many fraud reports land in the set, and what should you do?",
+      "options": [
+        "About 10; nothing to change",
+        "About 1; set a floor per stratum so it gets at least a few cases",
+        "About 20; reduce it",
+        "None; fraud cases cannot be tested"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.5% of 200 is 1 case, too few to score. A floor per stratum keeps rare but costly intents in the set; reweight when reporting the overall score."
+    },
+    {
+      "id": "ed05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Two nurses label triage answers. They agree on 90% of cases, and each marks 90% of cases as pass. What is Cohen’s κ, roughly?",
+      "options": [
+        "0.90",
+        "0.82",
+        "0.44",
+        "0.10"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Chance agreement = 0.9² + 0.1² = 0.82. κ = (0.90 − 0.82) ÷ (1 − 0.82) = 0.08 ÷ 0.18 ≈ 0.44: moderate, much weaker than 90% suggests."
+    },
+    {
+      "id": "ed06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A plan-change assistant moves from 82% to 85% on a 100-case test set. What can you conclude?",
+      "options": [
+        "It is 3 points better",
+        "Not much: each score has a margin of about ±7 points",
+        "It is worse, because the set is small",
+        "The set must be broken"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1.96 × √(0.85 × 0.15 ÷ 100) ≈ 0.07, so about ±7 points on each score. A 3-point change is well inside the noise."
+    },
+    {
+      "id": "ed07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are signs that a returns assistant has been overfitted to its test set? Select all that apply.",
+      "options": [
+        "The test score rose 8 points over a month of prompt tweaks, but complaints did not fall",
+        "The prompt now contains phrases copied from specific test cases",
+        "A holdout nobody tuned on scores far lower than the main set",
+        "Scores on the main set and the holdout are within a point of each other"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Gains that do not carry to a holdout or to users, and prompts that quote test cases, are classic overfitting. Matching holdout scores are a good sign."
+    },
+    {
+      "id": "ed08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Labels are wrong 10% of the time, at random. The new release is truly 5 points worse. Roughly what drop will the test set show?",
+      "options": [
+        "5 points",
+        "4 points",
+        "2.5 points",
+        "0.5 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With symmetric label noise e, a real difference shrinks by (1 − 2e) = 1 − 0.2 = 0.8, so 5 × 0.8 = 4 points. Noisy labels hide real changes."
+    },
+    {
+      "id": "ed09",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC’s loan-query assistant is about 80% accurate. How many cases give a 95% margin of ±2.5 points?",
+      "options": [
+        "About 246",
+        "About 615",
+        "About 984",
+        "About 3,936"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "n = 1.96² × 0.8 × 0.2 ÷ 0.025² = 3.8416 × 0.16 ÷ 0.000625 = 0.6147 ÷ 0.000625 ≈ 983.4, so 984 cases."
+    },
+    {
+      "id": "ed10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank has only 2 real conversations about locker nominations. How should synthetic cases be used?",
+      "options": [
+        "Replace the whole test set with synthetic cases",
+        "Generate a few for that stratum and keep only those a subject expert approves",
+        "Never use synthetic cases",
+        "Generate hundreds so the stratum dominates the score"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Synthetic cases are useful gap-fillers when reviewed. They should not replace real traffic or distort the overall score."
+    },
+    {
+      "id": "ed11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Before annotators read production conversations from a hospital’s billing assistant, which fields should be redacted? Select all that apply.",
+      "options": [
+        "Patient names and phone numbers",
+        "Aadhaar and health-insurance ID numbers",
+        "The detected intent, such as “bill dispute”",
+        "Diagnosis details not needed to judge the answer"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Remove personal and health details that labelling does not need, in line with DPDP expectations. The intent is what annotators are judging."
+    },
+    {
+      "id": "ed12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A wallet’s Hindi slice has 60 test cases and scores 80%. What is its 95% margin?",
+      "options": [
+        "±2.5 points",
+        "±5.2 points",
+        "±10.1 points",
+        "±20.2 points"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1.96 × √(0.8 × 0.2 ÷ 60) = 1.96 × 0.0516 ≈ 0.101, about ±10.1 points. Slice scores need far more cases than the overall score suggests."
+    },
+    {
+      "id": "ed13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A customer reports that the assistant told her a flood claim needs a police report, which is wrong. After the prompt is fixed, what should happen to the case?",
+      "options": [
+        "Nothing: the bug is fixed",
+        "Label it and add it to the next test-set version, so the regression is caught if it returns",
+        "Delete it to protect privacy",
+        "Add it to the prompt as an example only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Every production failure is a test case you know matters. Adding it, redacted and labelled, stops the same mistake returning unnoticed."
+    },
+    {
+      "id": "ed14",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why keep a holdout slice of the test set that nobody looks at while tuning prompts?",
+      "options": [
+        "To save labelling cost",
+        "To check that improvements carry over to cases the team did not tune against",
+        "To test latency separately",
+        "Holdouts are only needed for fine-tuning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Repeated tuning against the same cases overfits them. The untouched holdout shows whether a gain is real."
+    },
+    {
+      "id": "ed15",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are useful adversarial cases for a claims assistant? Select all that apply.",
+      "options": [
+        "A claim PDF with hidden text telling the assistant to approve the claim",
+        "A claim number that does not exist",
+        "An abusive message in Hinglish",
+        "A routine “what is my motor claim status?” question"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Adversarial cases probe injection, invented facts and hostile users. A routine status query belongs in the ordinary stratified sample."
+    },
+    {
+      "id": "ed16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A test set of 150 cases gives a margin of about ±6 points. How many cases would give about ±3 points at the same accuracy?",
+      "options": [
+        "300",
+        "450",
+        "600",
+        "1,500"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The margin shrinks with √n, so halving it needs four times the cases: 150 × 4 = 600."
+    },
+    {
+      "id": "ed17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Two teams report 88% and 91% for the same assistant, but neither names the test-set version. What is the problem?",
+      "options": [
+        "None: both are good scores",
+        "The numbers cannot be compared, because the sets may differ",
+        "The lower score must be wrong",
+        "Only the higher score should be published"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A score means something only with the dataset version it came from. Version the set and log it with every result."
+    },
+    {
+      "id": "ed18",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Two annotators disagree on 15% of discharge-summary cases. What is the best next step?",
+      "options": [
+        "Keep the first annotator’s labels",
+        "Have a senior clinician adjudicate each disagreement and clarify the rubric where it caused them",
+        "Drop all disputed cases from the set",
+        "Average the two labels"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Adjudication fixes the gold labels, and rewriting unclear rubric lines stops the same disagreements next time. Dropping disputed cases removes the hardest ones."
+    },
+    {
+      "id": "ed19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A set of 1,000 synthetic English cases reports 94% ± 1.5 points, yet misses a real regression in Hindi answers. Why?",
+      "options": [
+        "The margin is too wide",
+        "The set is precise about the wrong questions: it has no Hindi cases",
+        "1,000 cases are too many",
+        "The regression must be noise"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A narrow margin only means the estimate is stable for the cases in the set. If a slice is missing, no amount of precision will reveal failures there."
+    },
+    {
+      "id": "ed20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A stratified set is 75% English and 25% Hindi, but traffic is 80% English and 20% Hindi. English accuracy is 90% and Hindi 70%. What overall accuracy should you report for traffic?",
+      "options": [
+        "85%",
+        "86%",
+        "80%",
+        "90%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reweight to the traffic mix: 0.8 × 90% + 0.2 × 70% = 72% + 14% = 86%. The unweighted set average, 0.75 × 90% + 0.25 × 70% = 85%, understates it."
+    }
+  ]
+}

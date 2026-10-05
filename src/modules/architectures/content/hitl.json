@@ -1,0 +1,937 @@
+{
+  "id": "hitl",
+  "moduleSlug": "architectures",
+  "name": "Human-in-the-Loop Checkpoints",
+  "shortName": "Human checkpoints",
+  "question": "Should a person approve this before it happens?",
+  "summary": "The agent works on its own until it reaches an action that is risky, irreversible or above a limit, and then pauses. Its state is saved, a person approves, edits or rejects the proposed action, and the run resumes from exactly where it stopped, even hours later. Frameworks call the pause an interrupt or an approval; the design work is choosing which steps pause and what the reviewer sees.",
+  "useCases": [
+    "Actions that move money, change records or contact customers",
+    "Steps above a policy limit, such as refunds over ₹10,000",
+    "Early rollout, while you still measure how often the agent is wrong"
+  ],
+  "keyFacts": {
+    "label": "Parts",
+    "items": [
+      {
+        "term": "Checkpoint",
+        "detail": "a pause point before a tool call or inside a step, chosen by a rule"
+      },
+      {
+        "term": "Approval rule",
+        "detail": "always, never, or a function of the arguments, such as amount or customer type"
+      },
+      {
+        "term": "Saved state",
+        "detail": "the paused run is stored (a checkpointer or serialised run state) so it can wait hours"
+      },
+      {
+        "term": "Review card",
+        "detail": "what the reviewer sees: the action, its arguments, the reason and the evidence"
+      },
+      {
+        "term": "Decisions",
+        "detail": "approve, edit the arguments, or reject with a note the agent reads"
+      },
+      {
+        "term": "Resume",
+        "detail": "continue from the saved point with the decision, and log who decided"
+      }
+    ]
+  },
+  "steps": [
+    "List the actions and mark which are irreversible or above a limit",
+    "Put the approval rule in code on the tool or step, not in the prompt",
+    "Save the paused run durably and send the reviewer a short card with the evidence",
+    "Resume with the decision, and log who approved what and when"
+  ],
+  "pitfalls": [
+    "Pausing on every step trains reviewers to approve without reading",
+    "Side effects placed before the pause run again when the step restarts",
+    "A paused run kept only in memory is lost on the next deploy or restart"
+  ],
+  "tools": [
+    "LangGraph interrupts",
+    "OpenAI Agents SDK approvals",
+    "Claude Agent SDK permissions",
+    "Temporal",
+    "Slack approval messages"
+  ],
+  "remember": "Pause before what you cannot undo. Save the state, show the evidence, resume cleanly.",
+  "caption": "Illustrative: 1,000 refund requests a day at KhataPay, a fictional wallet, with a ₹10,000 approval limit.",
+  "comparison": {
+    "scope": "Your code pauses; a person decides",
+    "cost": 2,
+    "needs": "Medium: saved state and a review screen",
+    "best": "Reviewers approving on autopilot"
+  },
+  "diagram": {
+    "file": "diagrams/hitl.svg"
+  },
+  "lesson": {
+    "file": "refund_approval.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from typing import TypedDict",
+        "steps": []
+      },
+      {
+        "text": "from langgraph.graph import StateGraph, START, END",
+        "steps": []
+      },
+      {
+        "text": "from langgraph.types import interrupt, Command",
+        "steps": []
+      },
+      {
+        "text": "from langgraph.checkpoint.memory import InMemorySaver   # use Postgres in production",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "LIMIT = 10_000   # rupees: the rule lives in code, not in the prompt",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class S(TypedDict, total=False):",
+        "steps": []
+      },
+      {
+        "text": "    ticket: str; plan: dict; note: str",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def decide(state):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return {\"plan\": propose_refund(state[\"ticket\"])}   # propose, don't act",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def approve(state):",
+        "steps": []
+      },
+      {
+        "text": "    plan = state[\"plan\"]",
+        "steps": []
+      },
+      {
+        "text": "    if plan[\"amount\"] <= LIMIT:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return Command(goto=\"pay\")",
+        "steps": []
+      },
+      {
+        "text": "    decision = interrupt({\"action\": \"refund\", \"amount\": plan[\"amount\"],",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "                          \"reason\": plan[\"reason\"], \"evidence\": plan[\"evidence\"]})",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if decision[\"verdict\"] == \"reject\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return Command(goto=\"explain\", update={\"note\": decision[\"note\"]})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if decision[\"verdict\"] == \"edit\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        plan = {**plan, \"amount\": decision[\"amount\"]}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return Command(goto=\"pay\", update={\"plan\": plan})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def pay(state):",
+        "steps": []
+      },
+      {
+        "text": "    issue_refund(state[\"plan\"], idempotency_key=state[\"ticket\"])",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "g = StateGraph(S)",
+        "steps": []
+      },
+      {
+        "text": "for name, fn in [(\"decide\", decide), (\"approve\", approve), (\"pay\", pay), (\"explain\", explain)]:",
+        "steps": []
+      },
+      {
+        "text": "    g.add_node(name, fn)",
+        "steps": []
+      },
+      {
+        "text": "g.add_edge(START, \"decide\"); g.add_edge(\"decide\", \"approve\")",
+        "steps": []
+      },
+      {
+        "text": "g.add_edge(\"pay\", END); g.add_edge(\"explain\", END)",
+        "steps": []
+      },
+      {
+        "text": "app = g.compile(checkpointer=InMemorySaver())",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "cfg = {\"configurable\": {\"thread_id\": \"T-7731\"}}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "out = app.invoke({\"ticket\": \"T-7731\"}, cfg)   # returns with out[\"__interrupt__\"]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# ...hours later, from the review screen:",
+        "steps": []
+      },
+      {
+        "text": "app.invoke(Command(resume={\"verdict\": \"approve\"}), cfg)",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Put the rule in code",
+        "text": "The approval limit is a constant in code: ₹10,000. Refunds at or below it go straight to payment. The prompt never decides whether a person is needed, so a clever customer message cannot talk its way past the check."
+      },
+      {
+        "title": "Propose, don't act",
+        "text": "The decide step only proposes: refund ₹25,000 on ticket T-7731, with a reason and the evidence it used. Proposing and acting are separate steps, so a check can sit between them."
+      },
+      {
+        "title": "Pause and save the state",
+        "text": "The amount is above the limit, so interrupt() pauses the run. The checkpointer saves the whole state under the thread id T-7731, and invoke returns at once. Nothing waits in memory."
+      },
+      {
+        "title": "Show the reviewer the evidence",
+        "text": "The value passed to interrupt() is what the caller receives in __interrupt__: the action, amount, reason and evidence. Your review screen turns it into a card, so the reviewer judges facts, not a bare yes or no."
+      },
+      {
+        "title": "Resume with the decision",
+        "text": "Hours later the reviewer approves, edits the amount or rejects with a note. Command(resume=…) continues the same thread, and the decision becomes the return value of interrupt(). The approve step restarts from its first line, so nothing before the pause may have side effects."
+      },
+      {
+        "title": "Act once, after approval",
+        "text": "Only the pay step touches money, and it runs after the decision. The idempotency key tied to the ticket means a retried payment call cannot refund twice."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Policy in code</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"150\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"83\" y=\"35\" text-anchor=\"middle\">LIMIT = ₹10,000</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"166\" y=\"20\" width=\"186\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"259\" y=\"35\" text-anchor=\"middle\">≤ limit → pay directly</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"56\" width=\"82\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"49\" y=\"73\" text-anchor=\"middle\">decide</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M92 69L106 69\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"108\" y=\"56\" width=\"244\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"230\" y=\"73\" text-anchor=\"middle\">plan: refund ₹25,000 · T-7731</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M230 84L230 98\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"150\" y=\"100\" width=\"202\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"251\" y=\"117\" text-anchor=\"middle\">interrupt() · state saved</text></g><text class=\"sb a\" x=\"8\" y=\"117\" style=\"text-anchor:start;--d:0.2s\">thread T-7731</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"138\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"154\" text-anchor=\"middle\">card: refund ₹25,000 · reason: double debit</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"8\" y=\"166\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"182\" text-anchor=\"middle\">evidence: 2 debits · 1 minute apart</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"200\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"56\" y=\"216\" text-anchor=\"middle\">approve</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"110\" y=\"200\" width=\"70\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"145\" y=\"216\" text-anchor=\"middle\">edit</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"186\" y=\"200\" width=\"76\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"224\" y=\"216\" text-anchor=\"middle\">reject</text></g><text class=\"tl a\" x=\"270\" y=\"216\" style=\"text-anchor:start;--d:0.3s\">resume →</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"234\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"250\" text-anchor=\"middle\">pay(…, idempotency_key=\"T-7731\") runs once</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Irreversible actions get a human decision without giving up automation",
+      "A limit keeps reviews to the few cases that matter",
+      "Every decision is logged: who, what, when and why",
+      "Reviewers can correct an argument instead of restarting the run"
+    ],
+    "cons": [
+      "Paused cases wait minutes or hours for a person",
+      "Needs durable state, a review screen and reviewers on shift",
+      "Too many pauses turn approval into a reflex",
+      "Resumed steps can repeat side effects if built carelessly"
+    ],
+    "avoidWhen": [
+      "Every action is cheap and reversible (log it and review samples afterwards)",
+      "Decisions must be made in seconds with nobody available (use automatic guardrails and hard limits)"
+    ],
+    "tools": [
+      {
+        "name": "LangGraph interrupts",
+        "type": "Open source (LangChain)",
+        "what": "interrupt() pauses a step; Command(resume=…) continues from a checkpoint",
+        "url": "https://docs.langchain.com/oss/python/langgraph/interrupts"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "needs_approval on tools; a paused run becomes a RunState you can store",
+        "url": "https://openai.github.io/openai-agents-python/human_in_the_loop/"
+      },
+      {
+        "name": "Claude Agent SDK",
+        "type": "SDK (Anthropic)",
+        "what": "Permission modes and a callback that allows or denies each tool call",
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source, commercial cloud",
+        "what": "Durable workflows that wait days for a signal, then continue",
+        "url": "https://temporal.io"
+      },
+      {
+        "name": "Slack Block Kit",
+        "type": "Commercial",
+        "what": "Approve and reject buttons delivered where reviewers already work",
+        "url": "https://api.slack.com/block-kit"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "KhataPay's refund agent handles 1,000 requests a day and gets 3% of them wrong: 30 refunds worth ₹6,00,000, mostly the larger ones. You decide which refunds pause for a person, what the reviewer sees, how many reviewers are on shift and where paused runs are kept.",
+    "controls": [
+      "Pick the approval limit: every refund, a rupee amount, or no checkpoint at all.",
+      "Choose what the reviewer sees, and drag the slider to set how many reviewers are on shift.",
+      "Choose whether paused runs live in server memory or in a database, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Paused for review",
+        "meaning": "How many of the 1,000 daily refunds stop for a person, and how many of the 30 wrong ones are among them."
+      },
+      {
+        "name": "Wrong refunds stopped",
+        "meaning": "The share and rupee value of wrong refunds that reviewers catch before payout."
+      },
+      {
+        "name": "Reviews per reviewer",
+        "meaning": "Daily reviews for each person. Past 150, reviewers start approving on autopilot."
+      },
+      {
+        "name": "Median wait",
+        "meaning": "How long a paused customer waits for a decision, or how many cases are left unreviewed."
+      },
+      {
+        "name": "Paused runs lost",
+        "meaning": "Runs that vanish at the daily deploy because their state was only in memory."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Approve everything, bare card",
+        "expect": "1,000 reviews, 500 each: reviewers approve on autopilot, only ₹1,44,000 stopped, and 250 paused runs lost at the deploy."
+      },
+      {
+        "k": "limit",
+        "name": "Limit ₹10,000, evidence, database",
+        "expect": "90 reviews, 45 each, 16-minute wait: ₹4,27,500 stopped (71%), nothing lost."
+      },
+      {
+        "k": "none",
+        "name": "No checkpoint",
+        "expect": "No reviews and no waiting, and all ₹6,00,000 of wrong refunds are paid out."
+      },
+      {
+        "k": "tuned",
+        "name": "Limit ₹5,000, evidence, database",
+        "expect": "200 reviews, 100 each, 30-minute wait: ₹4,84,500 stopped (81%)."
+      }
+    ],
+    "missions": [
+      {
+        "k": "catch",
+        "text": "Stop at least 75% of the wrong money while keeping every reviewer at 150 cases a day or fewer.",
+        "hint": "Show the evidence and try a ₹5,000 limit with 2 reviewers, or ₹2,000 with 3."
+      },
+      {
+        "k": "stamp",
+        "text": "Show how pausing every refund makes reviewers miss mistakes.",
+        "hint": "Choose every refund and keep 1 or 2 reviewers: the catch rate falls below half."
+      },
+      {
+        "k": "durable",
+        "text": "Keep paused runs through the daily deploy while stopping at least 70% of the wrong money.",
+        "hint": "Store paused runs in a database and use a ₹10,000 or lower limit with evidence."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangGraph interrupts",
+        "type": "Open source · LangChain",
+        "best": "interrupt() inside a step saves the state with a checkpointer; Command(resume=…) continues the same thread.",
+        "pros": [
+          "Resume hours later from a durable checkpoint",
+          "Approve, edit or reject in one pattern"
+        ],
+        "cons": [
+          "The step restarts on resume, so code before the pause must be safe to repeat",
+          "Needs a checkpointer and thread ids"
+        ],
+        "ex": "A refund graph that pauses above ₹10,000 and resumes with the reviewer's verdict.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://docs.langchain.com/oss/python/langgraph/interrupts"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "best": "needs_approval on a tool, as true or as a function of the arguments; paused runs become a RunState.",
+        "pros": [
+          "Approval rule sits on the tool itself",
+          "RunState serialises for long waits"
+        ],
+        "cons": [
+          "Approval is per tool call, not per arbitrary step",
+          "Newer feature: check your SDK version"
+        ],
+        "ex": "issue_refund marked needs_approval when the amount is over ₹10,000; the reviewer approves from a queue.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://openai.github.io/openai-agents-python/human_in_the_loop/"
+      },
+      {
+        "n": "Claude Agent SDK",
+        "type": "SDK · Anthropic",
+        "best": "Permission modes and a callback that allows or denies each tool call before it runs.",
+        "pros": [
+          "Fine-grained control per tool call",
+          "The same model as Claude Code permissions"
+        ],
+        "cons": [
+          "Long waits need your own storage",
+          "Tied to Claude models"
+        ],
+        "ex": "An operations agent whose write tools ask a human through the permission callback.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · commercial cloud",
+        "best": "Durable workflows that wait for a signal for days and survive restarts.",
+        "pros": [
+          "Waits survive deploys and crashes",
+          "Timeouts and escalation built in"
+        ],
+        "cons": [
+          "A platform to run and learn",
+          "Agent logic sits inside workflow code"
+        ],
+        "ex": "A loan-waiver workflow that waits up to two days for a credit officer, then escalates.",
+        "prod": 3,
+        "start": 1,
+        "url": "https://temporal.io"
+      },
+      {
+        "n": "Slack Block Kit",
+        "type": "Commercial",
+        "best": "Approval cards with buttons, delivered where reviewers already work.",
+        "pros": [
+          "No new screen to build",
+          "Fast decisions from a phone"
+        ],
+        "cons": [
+          "Keep the source of truth in your own store",
+          "Permissions must be checked on your side"
+        ],
+        "ex": "A card showing the refund, reason and evidence with Approve, Edit and Reject buttons.",
+        "prod": 2,
+        "start": 3,
+        "url": "https://api.slack.com/block-kit"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Pause inside an agent graph",
+        "tool": "LangGraph interrupts"
+      },
+      {
+        "need": "Approval on a single tool",
+        "tool": "OpenAI Agents SDK"
+      },
+      {
+        "need": "Waits of days that survive restarts",
+        "tool": "Temporal"
+      }
+    ],
+    "goals": [
+      "Decide which actions should pause for a person",
+      "Explain why the reviewer card and reviewer load matter as much as the rule",
+      "Explain why paused runs must be stored durably and resumed cleanly"
+    ]
+  },
+  "practice": {
+    "scenario": "KhataPay, a fictional wallet, lets an agent resolve refund tickets. Refunds up to ₹10,000 are paid automatically. Anything larger pauses: the run is saved, a reviewer sees the amount, the reason and the statement lines the agent relied on, and approves, edits or rejects. About 9% of refunds pause, reviewers stop most of the costly mistakes, and every decision is logged with the reviewer's name.",
+    "industries": [
+      {
+        "industry": "Payments and wallets",
+        "use": "Refunds, reversals and chargebacks above a limit wait for an operations reviewer"
+      },
+      {
+        "industry": "Lending",
+        "use": "Loan offers outside policy, or a waiver of charges, pause for a credit officer"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "A drafted prescription change or discharge note waits for a doctor to sign"
+      }
+    ],
+    "analogy": "A bank teller and a branch manager. The teller handles routine withdrawals; anything above a limit needs the manager's signature before cash leaves the counter, and the slip records who signed.",
+    "library": {
+      "name": "OpenAI Agents SDK",
+      "what": "Mark a tool with needs_approval and the run pauses before it executes; the paused run becomes a RunState you can approve, reject, store and resume.",
+      "install": "pip install openai-agents"
+    },
+    "note": "The refund body is a stub. For waits of hours, store state.to_json() and load it later with RunState.from_json(agent, stored). Check the SDK docs for your version.",
+    "samples": [
+      {
+        "file": "refund_approval_agent.py",
+        "language": "python",
+        "code": "import asyncio\nfrom agents import Agent, Runner, function_tool\n\nasync def over_limit(_ctx, params, _call_id) -> bool:\n    return params[\"amount\"] > 10_000          # the rule lives in code\n\n@function_tool(needs_approval=over_limit)\nasync def issue_refund(ticket_id: str, amount: int) -> str:\n    \"\"\"Refund a customer to the original payment method.\"\"\"\n    return f\"refunded ₹{amount} for {ticket_id}\"\n\nagent = Agent(name=\"Refunds\",\n              instructions=\"Resolve refund tickets. Check the facts, then use issue_refund.\",\n              tools=[issue_refund])\n\nasync def main():\n    result = await Runner.run(agent, \"Ticket T-7731: rent of ₹25,000 was debited twice.\")\n    if result.interruptions:                   # paused before the refund ran\n        state = result.to_state()\n        for item in result.interruptions:\n            print(\"Needs approval:\", item.name, item.arguments)\n            state.approve(item)                # or state.reject(item)\n        result = await Runner.run(agent, state)\n    print(result.final_output)\n\nasyncio.run(main())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "KhataPay pauses refunds above ₹10,000 for a person. 9% of its 1,000 daily refunds are above the limit, and a careful review takes 2 minutes. How many reviewer-hours a day does that need?",
+    "answer": "90 reviews × 2 minutes = 180 minutes = 3 hours a day. Pausing every refund would need 1,000 × 2 = 2,000 minutes, over 33 hours.",
+    "expected": {
+      "value": 3,
+      "tolerance": 0.1,
+      "label": "hours ="
+    },
+    "interview": [
+      {
+        "question": "How do you decide which agent actions need human approval?",
+        "answer": "Start from impact: actions that move money, change records, contact customers or cannot be undone. Set a rule in code, often a limit on the amount or a customer type, and measure how often the agent is wrong in each band. Pause where errors are costly and frequent enough, and keep the pause rate low enough that reviewers read each case."
+      },
+      {
+        "question": "What goes wrong when an approval step is added naively?",
+        "answer": "Pausing everything makes reviewers approve on autopilot. Keeping paused runs in memory loses them on a restart. Side effects placed before the pause repeat when the step resumes. Showing only \"approve?\" gives reviewers nothing to judge. Store state durably, show evidence, keep side effects after the decision and log who decided."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Asking for approval on every step",
+        "fix": "Pause only above a limit or for irreversible actions, and track reviewer load"
+      },
+      {
+        "mistake": "Keeping paused runs in server memory",
+        "fix": "Save them with a durable checkpointer or serialised run state"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "hl01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A wallet’s refund agent is right 97% of the time. Refunds above ₹10,000 are 9% of volume but most of the money lost to mistakes. Where should a human checkpoint go?",
+      "options": [
+        "Before every refund",
+        "Before refunds above ₹10,000",
+        "After refunds are paid, in a weekly audit only",
+        "Nowhere: 97% is good enough"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Pause where errors are costly: the high-value band holds most of the risk at a fraction of the volume."
+    },
+    {
+      "id": "hl02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC asks the model, in its system prompt, to \"ask a human before approving loans over ₹5 lakh\". A customer writes a message that talks the model out of asking. What was the design flaw?",
+      "options": [
+        "The limit was too high",
+        "The approval rule lived in the prompt instead of in code",
+        "The model was too small",
+        "The reviewer was too slow"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rules that must hold belong in code on the tool or step, where no message can argue with them."
+    },
+    {
+      "id": "hl03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent pauses for approval, but the paused runs are held in server memory. What happens at the nightly deploy?",
+      "options": [
+        "They resume automatically",
+        "Paused runs are lost and those customers never get an answer",
+        "They are approved by default",
+        "They are rejected by default"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "State that must survive hours of waiting needs a durable checkpointer or serialised run state."
+    },
+    {
+      "id": "hl04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Reviewers at a payments company approve 600 refund cards a day each, and almost never reject one. What is the most likely problem?",
+      "options": [
+        "The agent is perfect",
+        "Approval on autopilot: too many pauses for careful review",
+        "The cards are too detailed",
+        "The threshold is too high"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When reviewers are overloaded, approval becomes automatic. Raise the limit or add evidence and staff."
+    },
+    {
+      "id": "hl05",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace’s reviewer card says only \"Approve refund? Yes / No\". What should be added first?",
+      "options": [
+        "A timer",
+        "The amount, the reason and the evidence the agent used",
+        "The model’s temperature",
+        "The customer’s full order history for five years"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reviewers can only judge what they see; the action, reason and evidence make the decision checkable."
+    },
+    {
+      "id": "hl06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "In LangGraph, a node sends an SMS \"refund on its way\" and then calls interrupt(). After the reviewer approves, the customer gets the SMS twice. Why?",
+      "options": [
+        "The SMS gateway retried",
+        "On resume the node restarts from its first line, so the SMS runs again",
+        "The reviewer approved twice",
+        "The checkpointer saved two copies"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Code before interrupt() re-runs on resume. Side effects belong after the decision."
+    },
+    {
+      "id": "hl07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A reviewer spots that a proposed ₹48,000 refund should be ₹4,800. What should the checkpoint allow?",
+      "options": [
+        "Only approve or reject",
+        "Editing the amount, then resuming with the corrected action",
+        "Restarting the whole run from the customer’s message",
+        "Asking the agent to try again until it gets ₹4,800"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An edit decision fixes the argument and resumes, without losing the work already done."
+    },
+    {
+      "id": "hl08",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An approved order is sent to the exchange, times out, and the agent retries. What prevents a duplicate order?",
+      "options": [
+        "A second human approval",
+        "An idempotency key tied to the approved action",
+        "A longer timeout",
+        "A larger model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Approval decides whether to act; an idempotency key makes sure the action happens once."
+    },
+    {
+      "id": "hl09",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which actions are good candidates for a human checkpoint in a lending agent? Select all that apply.",
+      "options": [
+        "Waiving a late-payment charge above a limit",
+        "Reading the customer’s repayment schedule",
+        "Offering a loan outside the policy grid",
+        "Formatting a reply in Hindi"
+      ],
+      "correct": [
+        0,
+        2
+      ],
+      "explanation": "Pause on actions that change money or policy outcomes; reading and formatting are safe to automate."
+    },
+    {
+      "id": "hl10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital agent drafts discharge summaries. Doctors must sign each one. Which design fits?",
+      "options": [
+        "Automatic sending with a weekly sample review",
+        "A checkpoint on every summary, with the draft and source notes on the card",
+        "No agent at all",
+        "A checkpoint only on long summaries"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When every item legally needs a signature, every item pauses, and the card must make review fast."
+    },
+    {
+      "id": "hl11",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "With OpenAI’s Agents SDK, how do you make one tool pause for approval only when the amount is over ₹10,000?",
+      "options": [
+        "Put the rule in the agent instructions",
+        "Set needs_approval to a function that checks the amount",
+        "Lower max_turns",
+        "Use a smaller model for large amounts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "needs_approval accepts a function of the call’s arguments, so the rule stays in code."
+    },
+    {
+      "id": "hl12",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A benefits agent pauses decisions for an officer. Auditors ask who approved a payment six months ago. What should exist?",
+      "options": [
+        "The model’s memory of the conversation",
+        "A log of each decision: who, what, when and the evidence shown",
+        "A screenshot policy",
+        "Nothing: approvals are verbal"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Checkpoints are only auditable if every decision and its evidence are recorded."
+    },
+    {
+      "id": "hl13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Paused runs for number porting wait up to three days for a regulator’s response. Which tool suits that wait best?",
+      "options": [
+        "An in-memory Python loop",
+        "A durable workflow engine such as Temporal, or a durable checkpointer",
+        "A longer HTTP timeout",
+        "A cron job that restarts the agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Long waits need state that survives restarts and deploys."
+    },
+    {
+      "id": "hl14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Moving the refund approval limit from ₹10,000 down to ₹2,000 quadruples the pauses. What should the team watch?",
+      "options": [
+        "Only the number of wrong refunds stopped",
+        "Reviewer load and the approval rate, as signs of reviewing on autopilot",
+        "The model’s token count",
+        "Nothing else changes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "More pauses catch more only while reviewers still read each case; watch load and near-100% approval rates."
+    },
+    {
+      "id": "hl15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A paused refund resumes after approval. Which should run after the decision, not before the pause? Select all that apply.",
+      "options": [
+        "Sending the customer a confirmation",
+        "Calling the payment API",
+        "Building the review card from the evidence",
+        "Writing the refund to the ledger"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything that changes the world waits for the decision; preparing the card is read-only."
+    },
+    {
+      "id": "hl16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A reviewer rejects a claim payout with the note \"policy lapsed in May\". What should the agent do next?",
+      "options": [
+        "Retry the payout",
+        "Read the note and explain the rejection to the customer",
+        "Ask the same reviewer again",
+        "Escalate to another reviewer until someone approves"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A rejection note is input the agent acts on; shopping for an approval defeats the checkpoint."
+    },
+    {
+      "id": "hl17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An agent can cancel orders, which is easy to reverse within an hour. Should every cancellation pause for a person?",
+      "options": [
+        "Yes, every action needs approval",
+        "No: automate it, log it and review a sample afterwards",
+        "Yes, but only on weekends",
+        "No: remove the cancel tool"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cheap, reversible actions are better handled by logging and sampling than by pausing."
+    },
+    {
+      "id": "hl18",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A LangGraph agent pauses but the review screen cannot find the run to resume. What was probably missing?",
+      "options": [
+        "A larger model",
+        "A checkpointer and a stable thread id for the run",
+        "An idempotency key",
+        "A system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Resuming needs the saved state and the thread id that identifies it."
+    },
+    {
+      "id": "hl19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Three weeks after launch, reviewers approve 99.6% of paused refunds and the agent’s errors in that band are near zero. What could the team consider?",
+      "options": [
+        "Removing all logging",
+        "Raising the limit or sampling reviews, while keeping the log",
+        "Pausing every refund instead",
+        "Switching off the agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Checkpoints should follow measured risk; when a band proves safe, reduce pauses but keep the record."
+    },
+    {
+      "id": "hl20",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which make a review card faster and more reliable to judge? Select all that apply.",
+      "options": [
+        "The proposed action and its arguments",
+        "The evidence the agent relied on",
+        "The model’s full raw token stream",
+        "A short reason in plain words"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Show the action, reason and evidence; raw model output slows reviewers without helping them decide."
+    }
+  ]
+}

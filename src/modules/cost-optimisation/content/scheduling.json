@@ -1,0 +1,869 @@
+{
+  "id": "scheduling",
+  "moduleSlug": "cost-optimisation",
+  "name": "Request Scheduling",
+  "shortName": "Request scheduling",
+  "question": "Does this have to run now, and at full speed?",
+  "summary": "Control when and how requests reach the model: queue them, merge identical requests already in flight, rate-limit per user, and move non-urgent work to quiet hours or cheaper service tiers. Smoother load also lets you size reserved capacity near the average instead of the peak.",
+  "useCases": [
+    "Mixed workloads: interactive chat plus reports, indexing, enrichment",
+    "Provisioned or reserved capacity you pay for by the hour",
+    "Multi-tenant products that need fair use and spend limits"
+  ],
+  "keyFacts": {
+    "label": "Techniques",
+    "items": [
+      {
+        "term": "Priority queues",
+        "detail": "interactive first, background later"
+      },
+      {
+        "term": "Deduplication",
+        "detail": "merge identical in-flight requests"
+      },
+      {
+        "term": "Rate limits & quotas",
+        "detail": "per user, tenant and feature"
+      },
+      {
+        "term": "Off-peak shifting",
+        "detail": "run reports and indexing when demand is low"
+      },
+      {
+        "term": "Service tiers",
+        "detail": "lower-priority tiers at a discount, where offered"
+      },
+      {
+        "term": "Capacity planning",
+        "detail": "reserved throughput sized to smoothed load"
+      }
+    ]
+  },
+  "steps": [
+    "Tag every request as interactive, near-real-time or background",
+    "Send background work through a queue with retries and backoff",
+    "Set per-tenant quotas and alerts on spend",
+    "Review utilization regularly and right-size reserved capacity"
+  ],
+  "pitfalls": [
+    "Queued work adds delay, so keep interactive paths separate",
+    "Retries without backoff multiply cost during outages",
+    "Hard quotas can block legitimate spikes; allow controlled bursts"
+  ],
+  "tools": [
+    "Celery",
+    "Kafka",
+    "Amazon SQS",
+    "LiteLLM rate limits",
+    "Portkey"
+  ],
+  "remember": "Urgent now. Everything else when it’s cheap.",
+  "caption": "Same total work, lower peak. Reserved capacity only has to cover the peak.",
+  "comparison": {
+    "scope": "Requests and capacity",
+    "cost": 2,
+    "needs": "Medium",
+    "best": "Delay for deferred work"
+  },
+  "diagram": {
+    "file": "diagrams/scheduling.svg"
+  },
+  "lesson": {
+    "file": "tasks.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import hashlib, random, redis",
+        "steps": []
+      },
+      {
+        "text": "from celery import Celery",
+        "steps": []
+      },
+      {
+        "text": "from celery.schedules import crontab",
+        "steps": []
+      },
+      {
+        "text": "app = Celery(\"llm\", broker=\"redis://localhost:6379/0\")",
+        "steps": []
+      },
+      {
+        "text": "r = redis.Redis()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "app.conf.task_routes = {\"tasks.chat\": {\"queue\": \"interactive\"},",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "                        \"tasks.summarize\": {\"queue\": \"background\"}}",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@app.task(bind=True, max_retries=5, rate_limit=\"100/m\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "def summarize(self, client_id: str, note: str):",
+        "steps": []
+      },
+      {
+        "text": "    key = \"dedup:\" + hashlib.sha256(note.encode()).hexdigest()",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if not r.set(key, 1, nx=True, ex=86_400):  # same note in flight or done",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return \"duplicate skipped\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        return llm_summarize(note)",
+        "steps": []
+      },
+      {
+        "text": "    except RateLimitError as exc:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        r.delete(key)",
+        "steps": []
+      },
+      {
+        "text": "        raise self.retry(exc=exc, countdown=2 ** self.request.retries + random.random())",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "app.conf.beat_schedule = {\"nightly-notes\": {",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    \"task\": \"tasks.enqueue_notes\", \"schedule\": crontab(hour=0, minute=30)}}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# celery -A tasks worker -Q interactive --concurrency 32   (reserved)",
+        "steps": [
+          2,
+          6
+        ]
+      },
+      {
+        "text": "# celery -A tasks worker -Q background  --concurrency 6    (capped)",
+        "steps": [
+          2,
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Tag every request",
+        "text": "Label each call interactive, near-real-time or background. Chat is interactive; end-of-day contract-note summaries are background."
+      },
+      {
+        "title": "Give each class its own queue",
+        "text": "Separate queues and worker pools mean a bulk job can never sit in front of a customer’s chat message."
+      },
+      {
+        "title": "Drop duplicates",
+        "text": "The same note is often enqueued twice by a retry or a double click. A Redis key with SET NX skips work already in flight or done."
+      },
+      {
+        "title": "Retry with backoff and jitter",
+        "text": "On a 429, wait 1 s, 2 s, 4 s… plus a random fraction. Immediate retries during an outage multiply load and cost."
+      },
+      {
+        "title": "Move background work off-peak",
+        "text": "The nightly job starts at 00:30, when chat traffic is lowest, instead of at 16:00 on top of the afternoon load."
+      },
+      {
+        "title": "Right-size reserved capacity",
+        "text": "The peak falls from 11 units to the interactive peak of 8, so reserved capacity shrinks and utilization rises from 43% to 59%."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"64\" y=\"24\" text-anchor=\"middle\">interactive</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"24\" text-anchor=\"middle\">near-real-time</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"24\" text-anchor=\"middle\">background</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"42\" width=\"164\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"90\" y=\"58\">Interactive queue</text><text class=\"sb\" x=\"90\" y=\"73\">32 workers · reserved</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"188\" y=\"42\" width=\"164\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"270\" y=\"58\">Background queue</text><text class=\"sb\" x=\"270\" y=\"73\">6 workers · capped</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"188\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"228\" y=\"103\" text-anchor=\"middle\">note A17</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"272\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"312\" y=\"103\" text-anchor=\"middle\">note A17</text></g><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"270\" y=\"124\" style=\"text-anchor:middle;fill:var(--fail)\">duplicate skipped</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"88\" width=\"164\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"90\" y=\"103\" text-anchor=\"middle\">429: retry 1s, 2s, 4s</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"90\" y=\"124\" style=\"text-anchor:middle;fill:var(--warn)\">backoff + jitter</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"140\" style=\"--d:0s\">Load by hour: background moved to 00:00–08:00</text><rect class=\"bar a\" x=\"8\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0s\"/><rect class=\"a\" x=\"8\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.4s\"/><rect class=\"bar a\" x=\"22\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.02s\"/><rect class=\"a\" x=\"22\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.43000000000000005s\"/><rect class=\"bar a\" x=\"36\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.04s\"/><rect class=\"a\" x=\"36\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.46s\"/><rect class=\"bar a\" x=\"50\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.06s\"/><rect class=\"a\" x=\"50\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.49s\"/><rect class=\"bar a\" x=\"64\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.08s\"/><rect class=\"a\" x=\"64\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.52s\"/><rect class=\"bar a\" x=\"78\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.1s\"/><rect class=\"a\" x=\"78\" y=\"186\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.55s\"/><rect class=\"bar a\" x=\"92\" y=\"196\" width=\"11\" height=\"10\" rx=\"2\" style=\"--d:0.12s\"/><rect class=\"a\" x=\"92\" y=\"181\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.5800000000000001s\"/><rect class=\"bar a\" x=\"106\" y=\"191\" width=\"11\" height=\"15\" rx=\"2\" style=\"--d:0.14s\"/><rect class=\"a\" x=\"106\" y=\"176\" width=\"11\" height=\"15\" rx=\"2\" style=\"fill:var(--warn);opacity:.85;--d:0.61s\"/><rect class=\"bar a\" x=\"120\" y=\"181\" width=\"11\" height=\"25\" rx=\"2\" style=\"--d:0.16s\"/><rect class=\"bar a\" x=\"134\" y=\"171\" width=\"11\" height=\"35\" rx=\"2\" style=\"--d:0.18s\"/><rect class=\"bar a\" x=\"148\" y=\"166\" width=\"11\" height=\"40\" rx=\"2\" style=\"--d:0.2s\"/><rect class=\"bar a\" x=\"162\" y=\"166\" width=\"11\" height=\"40\" rx=\"2\" style=\"--d:0.22s\"/><rect class=\"bar a\" x=\"176\" y=\"171\" width=\"11\" height=\"35\" rx=\"2\" style=\"--d:0.24s\"/><rect class=\"bar a\" x=\"190\" y=\"171\" width=\"11\" height=\"35\" rx=\"2\" style=\"--d:0.26s\"/><rect class=\"bar a\" x=\"204\" y=\"176\" width=\"11\" height=\"30\" rx=\"2\" style=\"--d:0.28s\"/><rect class=\"bar a\" x=\"218\" y=\"176\" width=\"11\" height=\"30\" rx=\"2\" style=\"--d:0.3s\"/><rect class=\"bar a\" x=\"232\" y=\"181\" width=\"11\" height=\"25\" rx=\"2\" style=\"--d:0.32s\"/><rect class=\"a\" x=\"232\" y=\"151\" width=\"11\" height=\"30\" rx=\"2\" style=\"fill:none;stroke:var(--warn);stroke-dasharray:2 2;--d:0.3s\"/><rect class=\"bar a\" x=\"246\" y=\"186\" width=\"11\" height=\"20\" rx=\"2\" style=\"--d:0.34s\"/><rect class=\"a\" x=\"246\" y=\"156\" width=\"11\" height=\"30\" rx=\"2\" style=\"fill:none;stroke:var(--warn);stroke-dasharray:2 2;--d:0.3s\"/><rect class=\"bar a\" x=\"260\" y=\"186\" width=\"11\" height=\"20\" rx=\"2\" style=\"--d:0.36s\"/><rect class=\"a\" x=\"260\" y=\"156\" width=\"11\" height=\"30\" rx=\"2\" style=\"fill:none;stroke:var(--warn);stroke-dasharray:2 2;--d:0.3s\"/><rect class=\"bar a\" x=\"274\" y=\"191\" width=\"11\" height=\"15\" rx=\"2\" style=\"--d:0.38s\"/><rect class=\"a\" x=\"274\" y=\"161\" width=\"11\" height=\"30\" rx=\"2\" style=\"fill:none;stroke:var(--warn);stroke-dasharray:2 2;--d:0.3s\"/><rect class=\"bar a\" x=\"288\" y=\"191\" width=\"11\" height=\"15\" rx=\"2\" style=\"--d:0.4s\"/><rect class=\"bar a\" x=\"302\" y=\"196\" width=\"11\" height=\"10\" rx=\"2\" style=\"--d:0.42s\"/><rect class=\"bar a\" x=\"316\" y=\"196\" width=\"11\" height=\"10\" rx=\"2\" style=\"--d:0.44s\"/><rect class=\"bar a\" x=\"330\" y=\"201\" width=\"11\" height=\"5\" rx=\"2\" style=\"--d:0.46s\"/><g class=\"a\" style=\"--d:0.8s\"><line x1=\"6\" x2=\"344\" y1=\"166\" y2=\"166\" class=\"ln dash\" style=\"stroke:var(--fail)\"/><text class=\"tag-t fail\" x=\"8\" y=\"162\" style=\"text-anchor:start\">capacity 8</text></g><text class=\"sb a\" x=\"8\" y=\"217\" style=\"text-anchor:start;--d:0s\">00h</text><text class=\"sb a\" x=\"342\" y=\"217\" style=\"text-anchor:end;--d:0s\">24h</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"226\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"242\" text-anchor=\"middle\">reserved capacity 11 → 8</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"182\" y=\"226\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"242\" text-anchor=\"middle\">utilization 43% → 59%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Reserved capacity can be sized near the interactive peak, not the combined peak",
+      "Interactive users are protected from bulk jobs",
+      "Deduplication removes work entirely",
+      "Backoff prevents retry storms from multiplying cost during outages"
+    ],
+    "cons": [
+      "Deferred work finishes later",
+      "Queues, workers and schedules are more infrastructure to run",
+      "Hard quotas can block legitimate spikes",
+      "Priorities need ongoing tuning as traffic changes"
+    ],
+    "avoidWhen": [
+      "All traffic is interactive and must be served immediately",
+      "You pay purely per token with no reserved capacity and no rate-limit pressure (gains are small)"
+    ],
+    "tools": [
+      {
+        "name": "Celery",
+        "type": "Open source",
+        "what": "Python task queues with routing, rate limits and retries",
+        "url": "https://docs.celeryq.dev"
+      },
+      {
+        "name": "Apache Kafka",
+        "type": "Open source",
+        "what": "High-throughput event streams feeding worker pools",
+        "url": "https://kafka.apache.org"
+      },
+      {
+        "name": "Amazon SQS",
+        "type": "Managed service (AWS)",
+        "what": "Simple managed queues with delayed delivery",
+        "url": "https://aws.amazon.com/sqs/"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source, hosted option",
+        "what": "Durable workflows with retries and schedules",
+        "url": "https://temporal.io"
+      },
+      {
+        "name": "OpenAI flex processing",
+        "type": "Provider feature",
+        "what": "Lower-priced, slower processing for non-urgent requests",
+        "url": "https://platform.openai.com/docs/guides/flex-processing"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A broker runs live chat all day and, after market close, a job that summarizes contract notes for 200,000 clients. The job becomes available at 16:00 and must be ready by 08:00. You pay for reserved capacity by the hour, sized to the busiest hour. You decide when and how the job runs.",
+    "controls": [
+      "Choose whether the job starts at 16:00 at full speed or goes through a priority queue that uses only spare capacity.",
+      "Drag the sliders to set reserved capacity and the job’s concurrency limit.",
+      "Tick the box to skip duplicate notes."
+    ],
+    "outputs": [
+      {
+        "name": "Hourly chart",
+        "meaning": "Blue is chat, amber is the background job, the dashed line is reserved capacity."
+      },
+      {
+        "name": "Capacity utilization",
+        "meaning": "All work done in the day ÷ capacity paid for (capacity × 24 hours)."
+      },
+      {
+        "name": "Chat delayed",
+        "meaning": "Unit-hours of chat demand above capacity: customers waiting."
+      },
+      {
+        "name": "Reports ready",
+        "meaning": "When the job finishes. It must be before 08:00."
+      },
+      {
+        "name": "Reserved capacity cost",
+        "meaning": "Capacity × 24 hours × $2.50 per unit-hour."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Run at 16:00",
+        "expect": "The job lands on the afternoon load: peak 11 units, so capacity is 11 ($660 a day), utilization 43%. Reports ready at 20:00."
+      },
+      {
+        "k": "queue",
+        "name": "Priority queue, still 11 units",
+        "expect": "Same capacity, chat served first: nothing changes yet except that chat is protected. Utilization is still 43%."
+      },
+      {
+        "k": "under",
+        "name": "Cut capacity to 8, no queue",
+        "expect": "The job still starts at 16:00, so chat is delayed by 8 unit-hours between 16:00 and 20:00."
+      }
+    ],
+    "missions": [
+      {
+        "k": "min",
+        "text": "Run with 8 units of capacity, no chat delays and reports ready by 08:00.",
+        "hint": "Switch to the priority queue, then lower capacity to 8."
+      },
+      {
+        "k": "dedup",
+        "text": "At 8 units, have the reports ready by 21:00.",
+        "hint": "At 8 units the queue finishes at 21:30. Removing duplicates shortens the job."
+      },
+      {
+        "k": "late",
+        "text": "Keep chat free of delays but make the reports miss 08:00.",
+        "hint": "In the priority queue, set the concurrency limit to 1 unit: 16 hours × 1 is less than 24 unit-hours."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Celery",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 3,
+        "best": "Task queues with separate worker pools, rate limits, retries with backoff and scheduled runs.",
+        "ex": "An interactive queue with 32 workers and a background queue with 6, plus a nightly beat schedule at 00:30.",
+        "pros": [
+          "Mature and widely used in Python stacks",
+          "Routing, retries and scheduling built in"
+        ],
+        "cons": [
+          "Rate limits are per worker, not global",
+          "Needs a broker such as Redis or RabbitMQ"
+        ],
+        "url": "https://docs.celeryq.dev"
+      },
+      {
+        "n": "Apache Kafka",
+        "type": "Open source · Apache",
+        "start": 1,
+        "prod": 3,
+        "best": "High-throughput event streams that decouple producers from LLM worker pools.",
+        "ex": "Stream 5 million catalogue updates overnight into an enrichment consumer group that scales with lag.",
+        "pros": [
+          "Handles very high volume durably",
+          "Replay from any offset"
+        ],
+        "cons": [
+          "Heavy to run for small workloads",
+          "Priorities and delays need extra design"
+        ],
+        "url": "https://kafka.apache.org"
+      },
+      {
+        "n": "Amazon SQS",
+        "type": "Managed service · AWS",
+        "start": 3,
+        "prod": 3,
+        "best": "Simple managed queues with delayed delivery and dead-letter queues.",
+        "ex": "Queue background summarization jobs and let a Lambda consumer drain them at a fixed concurrency.",
+        "pros": [
+          "Nothing to operate",
+          "Dead-letter queues for poison messages"
+        ],
+        "cons": [
+          "AWS only",
+          "No built-in priority within a queue"
+        ],
+        "url": "https://aws.amazon.com/sqs/"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · hosted option",
+        "start": 2,
+        "prod": 3,
+        "best": "Durable workflows with retries, timeouts and schedules for long multi-step LLM jobs.",
+        "ex": "A nightly workflow that fans out 200,000 summaries, retries failures with backoff and resumes after a crash.",
+        "pros": [
+          "Survives crashes and restarts mid-job",
+          "Retries and schedules are first-class"
+        ],
+        "cons": [
+          "New programming model to learn",
+          "A cluster to run, or a paid cloud"
+        ],
+        "url": "https://temporal.io"
+      },
+      {
+        "n": "OpenAI flex processing",
+        "type": "Provider feature · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "A lower-priced service tier for requests that can tolerate slower responses and occasional unavailability.",
+        "ex": "Send nightly enrichment calls with service_tier=\"flex\" and retry with backoff when capacity is unavailable.",
+        "pros": [
+          "Discount with a one-parameter change",
+          "Keeps the synchronous API shape"
+        ],
+        "cons": [
+          "Slower, and requests can be rejected when busy",
+          "Limited to supported models"
+        ],
+        "url": "https://platform.openai.com/docs/guides/flex-processing"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Python workers and queues",
+        "tool": "Celery"
+      },
+      {
+        "need": "Managed queue on AWS",
+        "tool": "Amazon SQS"
+      },
+      {
+        "need": "Long, crash-proof jobs",
+        "tool": "Temporal"
+      }
+    ],
+    "goals": [
+      "Explain why reserved capacity is sized to the peak, and how shifting work lowers it",
+      "Design separate queues, deduplication and backoff for LLM traffic",
+      "Calculate peak demand and utilization before and after shifting work"
+    ]
+  },
+  "practice": {
+    "scenario": "A broker generates end-of-day contract-note summaries for 200,000 clients. Instead of running at 4 pm alongside live chat, the jobs go to a queue processed overnight with rate limits and retries, while live chat keeps its own reserved capacity.",
+    "industries": [
+      {
+        "industry": "Stockbroking",
+        "use": "End-of-day reports and statements queued after market hours"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Catalogue enrichment overnight, customer chat in real time"
+      },
+      {
+        "industry": "SaaS",
+        "use": "Per-tenant quotas so one customer’s bulk job can’t starve others"
+      }
+    ],
+    "analogy": "Running the washing machine at night on a cheaper electricity tariff, while the kettle still boils on demand.",
+    "library": {
+      "name": "Celery",
+      "what": "The standard Python task queue: separate queues, rate limits, retries with backoff and scheduled runs.",
+      "install": "pip install \"celery[redis]\""
+    },
+    "samples": [
+      {
+        "file": "tasks.py",
+        "language": "python",
+        "code": "from celery import Celery\napp = Celery(\"llm\", broker=\"redis://localhost:6379/0\")\n\n@app.task(bind=True, max_retries=5, rate_limit=\"60/m\")\ndef summarize_contract_note(self, client_id: str):\n    try:\n        return llm_summarize(load_contract_note(client_id))\n    except RateLimitError as exc:\n        raise self.retry(exc=exc, countdown=2 ** self.request.retries)   # backoff\n\n# After market close: push background work to its own queue\nfor cid in client_ids:\n    summarize_contract_note.apply_async(args=[cid], queue=\"overnight\")\n\n# Workers:  celery -A tasks worker -Q overnight --concurrency 8\n#           celery -A tasks worker -Q interactive --concurrency 32"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Interactive load peaks at 6 units. Background work adds 3 units per hour for 4 hours, currently during that peak. Move it to hours where interactive load is 1. What peak capacity do you now need?",
+    "answer": "Peak drops from 6 + 3 = 9 to max(6, 1 + 3) = 6 units: a third less reserved capacity for the same work.",
+    "expected": {
+      "value": 6,
+      "tolerance": 0.1,
+      "label": "peak units ="
+    },
+    "interview": [
+      {
+        "question": "How do you keep interactive latency low while heavy background jobs run?",
+        "answer": "Separate queues and worker pools, prioritize interactive traffic, schedule background work off-peak, and cap background concurrency so it can't use up shared rate limits."
+      },
+      {
+        "question": "Why use exponential backoff on retries?",
+        "answer": "Immediate retries during an outage or rate limit multiply load and cost. Backoff (1 s, 2 s, 4 s… with jitter) spreads them out, lets the provider recover and avoids synchronized retry storms."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Retrying immediately in a tight loop",
+        "fix": "Exponential backoff with jitter and a retry cap"
+      },
+      {
+        "mistake": "One shared rate limit for chat and batch jobs",
+        "fix": "Separate quotas and queues per workload"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rs01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "End-of-day report generation runs at 16:00 alongside live chat and sets the peak you reserve capacity for. What is the best move?",
+      "options": [
+        "Buy more capacity",
+        "Use a larger model",
+        "Move the reports to an off-peak queue overnight",
+        "Stop generating reports"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Deferrable work moved to quiet hours stops adding to the peak."
+    },
+    {
+      "id": "rs02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Interactive load peaks at 10 units. A background job adds 4 units for 3 hours during that peak. If you move it to hours where interactive load is 2, what peak must you provision for?",
+      "options": [
+        "14",
+        "6",
+        "10",
+        "12"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The peak becomes max(10, 2 + 4) = 10 units, down from 14."
+    },
+    {
+      "id": "rs03",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which measures give fair use across tenants of a multi-tenant AI product? Select all that apply.",
+      "options": [
+        "Per-tenant rate limits",
+        "Per-tenant spend quotas with alerts",
+        "Separate queues for bulk and interactive work",
+        "One shared key with no limits"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Limits, quotas and separate queues stop one tenant’s bulk job from starving the others."
+    },
+    {
+      "id": "rs04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Retries back off from 1 second and double each time, for up to 5 retries. What is the total wait if all 5 happen?",
+      "options": [
+        "16 s",
+        "31 s",
+        "15 s",
+        "32 s"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1 + 2 + 4 + 8 + 16 = 31 seconds."
+    },
+    {
+      "id": "rs05",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "20% of catalogue-enrichment requests are duplicates created by retries and double submissions. What is the fix?",
+      "options": [
+        "Retry each request twice",
+        "Lower max_tokens",
+        "Run them on a larger model",
+        "Hash each request and skip ones already in flight or done"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Deduplication removes work entirely, the cheapest saving there is."
+    },
+    {
+      "id": "rs06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A day’s work totals 120 unit-hours, and 10 units of capacity are reserved around the clock. What is the utilization?",
+      "options": [
+        "42%",
+        "83%",
+        "50%",
+        "100%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "120 ÷ (10 × 24) = 120 ÷ 240 = 50%."
+    },
+    {
+      "id": "rs07",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "During a provider incident, spend tripled because clients retried failed calls immediately and repeatedly. What is the fix?",
+      "options": [
+        "A longer batch window",
+        "Exponential backoff with jitter and a retry cap",
+        "Turning off prompt caching",
+        "Escalating to a larger model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Immediate retries create retry storms. Backoff spreads them out and a cap stops endless loops."
+    },
+    {
+      "id": "rs08",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which requests are good candidates for deferral to off-peak hours? Select all that apply.",
+      "options": [
+        "Nightly churn-risk scoring",
+        "Re-indexing the help-centre knowledge base",
+        "Live chat with a customer whose SIM is blocked",
+        "Monthly bill-explanation emails"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything nobody is waiting on can be deferred. A blocked customer is waiting now."
+    },
+    {
+      "id": "rs09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You need Python task queues with separate worker pools, per-task rate limits and retries. Which tool fits?",
+      "options": [
+        "Celery",
+        "LLMLingua",
+        "GPTCache",
+        "RouteLLM"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Celery routes tasks to queues and supports rate limits, retries and scheduled runs."
+    },
+    {
+      "id": "rs10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A nightly job fans out 200,000 calls and must resume cleanly after a crash, with retries and timeouts. Which tool fits best?",
+      "options": [
+        "tiktoken",
+        "Temporal",
+        "Mem0",
+        "OpenRouter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Temporal runs durable workflows that survive crashes, with first-class retries and schedules."
+    },
+    {
+      "id": "rs11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Nightly enrichment calls can tolerate slow responses, but your code expects synchronous calls. Which OpenAI option lowers the price with a one-parameter change?",
+      "options": [
+        "stream=True",
+        "temperature=0",
+        "n=2",
+        "service_tier=\"flex\" (flex processing)"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Flex processing trades slower, sometimes unavailable responses for a lower price, without switching to a batch workflow."
+    },
+    {
+      "id": "rs12",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Patient chat and 50,000 discharge-summary jobs share one queue, and morning chat waits behind the jobs. What is the fix?",
+      "options": [
+        "Double max_tokens",
+        "Separate queues and worker pools, with chat served first",
+        "A single faster worker",
+        "Cache the summaries"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Separate queues mean bulk work can never sit in front of a waiting patient."
+    },
+    {
+      "id": "rs13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Reserved capacity drops from 12 to 9 units at $3 per unit-hour. What is the saving over a 30-day month?",
+      "options": [
+        "$2,160",
+        "$19,440",
+        "$6,480",
+        "$216"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "3 units × 24 hours × 30 days × $3 = $6,480."
+    },
+    {
+      "id": "rs14",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What are genuine downsides of request scheduling? Select all that apply.",
+      "options": [
+        "Deferred work finishes later",
+        "Hard quotas can block legitimate spikes",
+        "Queue backlogs can hide failures without monitoring",
+        "It raises the price per token"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Scheduling trades delay and operational complexity for lower capacity costs. It does not change token prices."
+    },
+    {
+      "id": "rs15",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "On exam-results day, a hard per-school quota blocks students from the results assistant. What is the better policy?",
+      "options": [
+        "Remove all quotas permanently",
+        "Queue student requests overnight",
+        "Retry immediately in a loop",
+        "Allow controlled bursts above the quota, with alerts"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Quotas should protect against abuse without blocking legitimate spikes."
+    },
+    {
+      "id": "rs16",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "2,000 truck devices retry at exactly 1, 2 and 4 seconds after an outage and hit the API in synchronized waves. What is the fix?",
+      "options": [
+        "Remove the retry cap",
+        "Add random jitter to each delay",
+        "Retry every second",
+        "Switch to the batch API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Jitter spreads clients out so they do not retry in lockstep."
+    },
+    {
+      "id": "rs17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Settlement summaries total 20 unit-hours of work. Data is ready at 01:00, and 4 units of spare capacity are available each hour from then. When does the job finish?",
+      "options": [
+        "05:00",
+        "07:00",
+        "06:00",
+        "21:00"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "20 ÷ 4 = 5 hours after 01:00, so 06:00."
+    },
+    {
+      "id": "rs18",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "What does a priority queue in front of fixed reserved capacity do? Select all that apply.",
+      "options": [
+        "Serves interactive requests first",
+        "Lets background work use spare capacity",
+        "Keeps the capacity you must reserve close to the interactive peak",
+        "Lowers the price per token"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Priorities protect users and fill idle capacity with deferred work. Token prices are unchanged."
+    },
+    {
+      "id": "rs19",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which requests belong on the interactive path? Select all that apply.",
+      "options": [
+        "Order-status questions in the app",
+        "Margin-call alerts to clients",
+        "End-of-day contract-note summaries",
+        "Live chat during market hours"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything a client is waiting for, or that is time-critical, stays interactive. End-of-day summaries can wait."
+    },
+    {
+      "id": "rs20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A Celery task has rate_limit=\"60/m\", and 4 workers consume its queue. What is the most that can run per minute?",
+      "options": [
+        "60 requests",
+        "15 requests",
+        "Unlimited",
+        "240 requests"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Celery task rate limits apply per worker instance, not globally: 4 × 60 = 240 a minute."
+    }
+  ]
+}

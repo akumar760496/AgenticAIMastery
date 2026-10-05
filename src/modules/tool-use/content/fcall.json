@@ -1,0 +1,929 @@
+{
+  "id": "fcall",
+  "moduleSlug": "tool-use",
+  "name": "Function Calling Basics",
+  "shortName": "Function calling",
+  "question": "How does a model actually use a tool?",
+  "summary": "Each tool is a name, a description and a JSON Schema for its inputs. The model does not run anything: it returns a structured call, your code validates and runs it, and you send the result back under the same call id. The loop repeats until the model answers in text. tool_choice sets whether the model may, must or must not call a tool.",
+  "useCases": [
+    "Any agent that must read live data or act: balances, orders, tickets",
+    "Turning free text into validated, typed arguments for an API",
+    "Replacing guesses with lookups, such as a UTR status check"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "The loop",
+        "detail": "request with tools → tool_use → run it → tool_result → repeat until end_turn"
+      },
+      {
+        "term": "tool_choice",
+        "detail": "auto (default with tools), any, tool (force one), none"
+      },
+      {
+        "term": "Call ids",
+        "detail": "each result carries the tool_use_id (OpenAI: call_id) of its call"
+      },
+      {
+        "term": "Strict schemas",
+        "detail": "strict: true constrains sampling so inputs always match the schema"
+      },
+      {
+        "term": "Errors",
+        "detail": "a failed call goes back as a tool_result with is_error: true, never dropped"
+      },
+      {
+        "term": "Tool count",
+        "detail": "OpenAI suggests fewer than 20 functions available at the start of a turn"
+      }
+    ]
+  },
+  "steps": [
+    "Write each tool as a name, a 3–4 sentence description and an input schema",
+    "Send tools with tool_choice auto; force a tool only when the step truly requires it",
+    "Validate the arguments, run the tool, and return every result under its own call id",
+    "Cap the loop with a step limit and return errors with is_error so the model can recover"
+  ],
+  "pitfalls": [
+    "Forcing a tool on every turn wastes calls and can stop the model from answering",
+    "Mismatched or reused call ids break the conversation",
+    "Some current models reject tool_choice any and tool with a 400 error, as does manual extended thinking"
+  ],
+  "tools": [
+    "Anthropic tool use",
+    "OpenAI function calling",
+    "Pydantic",
+    "OpenAI Agents SDK",
+    "BFCL"
+  ],
+  "remember": "The model asks; your code runs. Match every result to its call id.",
+  "caption": "Illustrative numbers. One lookup costs one extra model turn: 2 turns, 1 call.",
+  "comparison": {
+    "scope": "Every single tool call",
+    "cost": 1,
+    "needs": "Low: schemas and a loop",
+    "best": "Forced or malformed calls"
+  },
+  "diagram": {
+    "file": "diagrams/fcall.svg"
+  },
+  "lesson": {
+    "file": "support_loop.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json, anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "TOOLS = [{",
+        "steps": []
+      },
+      {
+        "text": "    \"name\": \"get_transaction_status\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"description\": (\"Look up a UPI payment by its 12-digit UTR number. \"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    \"Use it whenever the user asks if a payment went through. \"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    \"Never guess a status; ask for the UTR if it is missing. \"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    \"Returns status, amount in INR and last update time.\"),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"input_schema\": {\"type\": \"object\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                     \"properties\": {\"utr\": {\"type\": \"string\"}},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                     \"required\": [\"utr\"], \"additionalProperties\": False},",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    \"strict\": True,                          # inputs always match the schema",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "}]",
+        "steps": []
+      },
+      {
+        "text": "messages = [{\"role\": \"user\", \"content\": \"Did UTR 412345678901 go through?\"}]",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for turn in range(6):                        # step cap",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    resp = client.messages.create(model=\"claude-opus-5-5\", max_tokens=1024,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                  tools=TOOLS, tool_choice={\"type\": \"auto\"},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                  messages=messages)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if resp.stop_reason != \"tool_use\":",
+        "steps": [
+          3,
+          6
+        ]
+      },
+      {
+        "text": "        break                                # the model answered in text",
+        "steps": [
+          3,
+          6
+        ]
+      },
+      {
+        "text": "    messages.append({\"role\": \"assistant\", \"content\": resp.content})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    results = []",
+        "steps": []
+      },
+      {
+        "text": "    for block in (b for b in resp.content if b.type == \"tool_use\"):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        try:",
+        "steps": []
+      },
+      {
+        "text": "            out = run_tool(block.name, block.input)   # validate, then run",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                            \"content\": json.dumps(out)})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        except Exception as e:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                            \"content\": f\"Lookup failed: {e}\", \"is_error\": True})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    messages.append({\"role\": \"user\", \"content\": results})",
+        "steps": [
+          5,
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define the tool",
+        "text": "A name, a description of three or four sentences that says when to use it and when not, and a JSON Schema for the one argument, the UTR."
+      },
+      {
+        "title": "Send tools and tool_choice",
+        "text": "The request carries the tool list and tool_choice auto, so the model may answer directly or call a tool. Forcing a call is only for steps that must produce one."
+      },
+      {
+        "title": "Detect a tool call",
+        "text": "The response stops with stop_reason tool_use and contains a tool_use block: an id (toolu_01), the tool name and the arguments. The model has run nothing."
+      },
+      {
+        "title": "Validate and run",
+        "text": "Your code checks the arguments against the schema and runs the lookup. With strict mode the arguments always match the schema, so this check rarely fails."
+      },
+      {
+        "title": "Return the result under the same id",
+        "text": "Each tool_result carries the tool_use_id of the call it answers. A failure goes back too, with is_error true, so the model can recover instead of guessing."
+      },
+      {
+        "title": "Loop with a step cap",
+        "text": "The loop sends the history back until the model answers in text. Here that is turn 2: one call, two model turns. The cap of 6 stops a runaway loop."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"25\">get_transaction_status</text><text class=\"sb\" x=\"180\" y=\"40\">description · input_schema {utr: string}</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"62\" width=\"154\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"85\" y=\"77\" text-anchor=\"middle\">tool_choice: auto</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln acc\" d=\"M164 73L196 73\" marker-end=\"url(#arrA)\"/></g><g class=\"a dark-t\" style=\"--d:0.25s\"><rect class=\"bx dark\" x=\"198\" y=\"58\" width=\"154\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"275\" y=\"77.5\">Model</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"100\" width=\"96\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"56\" y=\"115\" text-anchor=\"middle\">tool_use</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"110\" y=\"100\" width=\"242\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"231\" y=\"115\" text-anchor=\"middle\">toolu_01 · utr 412345678901</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"134\" width=\"164\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"90\" y=\"148\">Validate and run</text><text class=\"sb\" x=\"90\" y=\"163\">schema ✓ · payments switch</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln acc\" d=\"M174 151L196 151\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx pass\" x=\"198\" y=\"140\" width=\"154\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"275\" y=\"155\" text-anchor=\"middle\">status: SUCCESS</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"180\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"195\" text-anchor=\"middle\">tool_result · tool_use_id toolu_01</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"212\" width=\"344\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"232.5\">Turn 2: “Your ₹1,200 payment succeeded.”</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Replaces guesses with lookups against live systems",
+      "Arguments arrive as validated, typed JSON rather than free text",
+      "The same loop works for one tool or fifty",
+      "Errors return to the model, which can often recover on its own"
+    ],
+    "cons": [
+      "Each sequential call adds a model turn and resends the history",
+      "A forced tool_choice can waste calls or block the answer",
+      "Loose schemas let malformed arguments through",
+      "Your code owns execution, timeouts and permissions"
+    ],
+    "avoidWhen": [
+      "The answer needs no live data or action",
+      "A fixed pipeline always calls the same API: call it directly, without the model"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic tool use",
+        "type": "API feature",
+        "what": "Tool definitions, tool_choice, strict schemas and the tool_use loop",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use"
+      },
+      {
+        "name": "OpenAI function calling",
+        "type": "API feature",
+        "what": "Function tools, call_id matching and parallel_tool_calls",
+        "url": "https://developers.openai.com/api/docs/guides/function-calling"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Generating JSON Schemas from typed Python models",
+        "url": "https://docs.pydantic.dev/latest/concepts/json_schema/"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source",
+        "what": "Function tools and an agent loop in a few lines",
+        "url": "https://github.com/openai/openai-agents-python"
+      },
+      {
+        "name": "BFCL",
+        "type": "Benchmark",
+        "what": "Measuring how accurately models form function calls",
+        "url": "https://openreview.net/forum?id=2GmDdhBdDk"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A UPI app’s support assistant has two tools: get_transaction_status (by UTR) and get_refund_status (by the refund id the first one returns). Users send three kinds of message: a thank-you that needs no tool, a status question that needs one lookup, and a refund question that needs two lookups in turn. The loop has a cap of 6 model turns.",
+    "controls": [
+      "Pick the user message and the tool_choice setting: auto, any, tool (force get_transaction_status) or none.",
+      "Choose whether forcing applies to the first request only or to every request in the loop.",
+      "Choose a careful or sloppy model, and turn strict schemas on or off."
+    ],
+    "outputs": [
+      {
+        "name": "Model turns",
+        "meaning": "Requests sent to the model, including the one that produces the final answer."
+      },
+      {
+        "name": "Tool calls made",
+        "meaning": "Calls the model emitted, with how many the question needed and how many were wasted."
+      },
+      {
+        "name": "Schema-valid arguments",
+        "meaning": "Calls whose arguments matched the input schema on the first try."
+      },
+      {
+        "name": "End state",
+        "meaning": "Answered, answered without data (a guess), or stuck at the step cap."
+      },
+      {
+        "name": "Turn trace",
+        "meaning": "What happened on each turn: a call (✓ valid, ✗ malformed), a repeated forced call, or the answer."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Forced on a greeting",
+        "expect": "“Thanks, that’s all!” with tool_choice any on the first request: 2 turns and 1 call, all of it wasted, before the model can say goodbye."
+      },
+      {
+        "k": "sloppy",
+        "name": "Sloppy model, no strict",
+        "expect": "The two-lookup question with auto: each tool’s first call is malformed and retried, so 5 turns, 4 calls and 50% schema-valid."
+      },
+      {
+        "k": "stuck",
+        "name": "Forced on every turn",
+        "expect": "tool_choice tool on every request: the lookup succeeds on turn 1, then 5 more forced calls follow and the loop stops at the cap of 6 turns without an answer."
+      },
+      {
+        "k": "none",
+        "name": "tool_choice none",
+        "expect": "The status question with no tools allowed: 1 turn and 0 calls, but the answer is a guess, not a lookup."
+      }
+    ],
+    "missions": [
+      {
+        "k": "zero",
+        "text": "Answer the thank-you message with zero tool calls.",
+        "hint": "Choose the no-tool message and let the model decide: tool_choice auto (or none)."
+      },
+      {
+        "k": "three",
+        "text": "Finish the two-lookup question in exactly 3 model turns.",
+        "hint": "One turn per lookup plus one for the answer. Use auto, and make sure no argument is malformed."
+      },
+      {
+        "k": "valid",
+        "text": "Get 100% schema-valid arguments from the sloppy model and still reach an answer.",
+        "hint": "Strict mode constrains sampling to the schema. Keep tool_choice auto so the loop can end."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic tool use",
+        "type": "API feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Tool definitions with JSON Schemas, tool_choice, strict schemas and the tool_use / tool_result loop.",
+        "ex": "A support assistant defines get_transaction_status with a 12-digit UTR argument and answers from its result.",
+        "pros": [
+          "Clear loop with ids on every call",
+          "Strict mode guarantees schema-valid inputs"
+        ],
+        "cons": [
+          "Your code must run and secure every tool",
+          "Some tool_choice options are limited on some models"
+        ],
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use"
+      },
+      {
+        "n": "OpenAI function calling",
+        "type": "API feature · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Function tools with JSON Schemas; results are returned by call_id.",
+        "ex": "A travel assistant calls get_pnr_status and returns the output with the same call_id.",
+        "pros": [
+          "Widely documented five-step loop",
+          "Strict mode for schema adherence"
+        ],
+        "cons": [
+          "Guidance to keep functions under about 20 per turn",
+          "Provider-specific message formats"
+        ],
+        "url": "https://developers.openai.com/api/docs/guides/function-calling"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source · library",
+        "start": 3,
+        "prod": 3,
+        "best": "Generating JSON Schemas from typed Python models and validating arguments before running a tool.",
+        "ex": "A TransactionQuery model with a 12-character utr field produces the input schema and validates the call.",
+        "pros": [
+          "One model gives schema and validation",
+          "Very widely used"
+        ],
+        "cons": [
+          "Some generated schema features exceed what strict modes accept",
+          "Another dependency to keep in step"
+        ],
+        "url": "https://docs.pydantic.dev/latest/concepts/json_schema/"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · framework",
+        "start": 3,
+        "prod": 2,
+        "best": "A small agent loop with function tools declared as decorated Python functions.",
+        "ex": "@function_tool on get_transaction_status, then Runner.run(agent, message).",
+        "pros": [
+          "Loop, tracing and handoffs built in",
+          "Works with several model providers"
+        ],
+        "cons": [
+          "Abstractions hide the raw messages",
+          "Framework conventions to learn"
+        ],
+        "url": "https://github.com/openai/openai-agents-python"
+      },
+      {
+        "n": "BFCL",
+        "type": "Benchmark · Berkeley",
+        "start": 2,
+        "prod": 1,
+        "best": "Comparing how accurately models form function calls: simple, multiple, parallel and multi-turn.",
+        "ex": "Check a candidate model’s parallel and multi-turn scores before adopting it for a tool-heavy agent.",
+        "pros": [
+          "Public, regularly updated results",
+          "Covers many call patterns"
+        ],
+        "cons": [
+          "Benchmark tools are not your tools",
+          "Scores do not measure your descriptions"
+        ],
+        "url": "https://openreview.net/forum?id=2GmDdhBdDk"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "A Claude-based assistant",
+        "tool": "Anthropic tool use with strict schemas"
+      },
+      {
+        "need": "Validate arguments in Python",
+        "tool": "Pydantic models"
+      },
+      {
+        "need": "Choose a model for tool-heavy work",
+        "tool": "BFCL, then your own task set"
+      }
+    ],
+    "goals": [
+      "Trace a tool call from definition to final answer, with ids",
+      "Choose tool_choice for a step and explain the cost of forcing it",
+      "Explain how strict schemas and is_error results make the loop robust"
+    ]
+  },
+  "practice": {
+    "scenario": "A UPI app’s support assistant gets “Did my ₹1,200 payment go through?” with a pasted UTR number. Instead of guessing, the model calls get_transaction_status with the 12-digit UTR, the app runs the lookup against the payments switch, and the model answers from the returned status: two model turns, one call.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Status checks on UPI, NEFT and card transactions by reference number"
+      },
+      {
+        "industry": "Airlines",
+        "use": "Look up a PNR before answering “Is my flight on time?”"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Fetch the current plan and data balance before recommending a recharge"
+      }
+    ],
+    "analogy": "A waiter taking an order. The waiter writes the dish on a ticket in the kitchen’s format; the kitchen cooks it; the waiter brings back exactly that plate to the table that ordered it.",
+    "library": {
+      "name": "Anthropic SDK (tool use)",
+      "what": "Pass tools with JSON Schemas; the response contains tool_use blocks that you run and answer with tool_result blocks.",
+      "install": "pip install anthropic"
+    },
+    "note": "Minimal loop. get_transaction_status stands for your own lookup. Check the docs for current model names and strict-schema support.",
+    "samples": [
+      {
+        "file": "support_loop.py",
+        "language": "python",
+        "code": "import json, anthropic\nclient = anthropic.Anthropic()\n\ntools = [{\n    \"name\": \"get_transaction_status\",\n    \"description\": (\"Look up the status of a UPI payment by its 12-digit UTR number. \"\n                    \"Use it whenever the user asks whether a payment succeeded, failed or was reversed. \"\n                    \"Never guess a status; if the user has not given a UTR, ask for it. \"\n                    \"Returns status, amount in INR and the time of the last update.\"),\n    \"input_schema\": {\"type\": \"object\",\n                     \"properties\": {\"utr\": {\"type\": \"string\", \"description\": \"12-digit UTR\"}},\n                     \"required\": [\"utr\"], \"additionalProperties\": False},\n    \"strict\": True,                                   # inputs always match the schema\n}]\n\nmessages = [{\"role\": \"user\", \"content\": \"Did UTR 412345678901 go through?\"}]\nfor step in range(6):                                 # step cap\n    resp = client.messages.create(model=\"claude-opus-5-5\", max_tokens=1024,\n                                  tools=tools, tool_choice={\"type\": \"auto\"}, messages=messages)\n    if resp.stop_reason != \"tool_use\":\n        print(next(b.text for b in resp.content if b.type == \"text\")); break\n    messages.append({\"role\": \"assistant\", \"content\": resp.content})\n    results = []\n    for b in resp.content:\n        if b.type != \"tool_use\":\n            continue\n        try:\n            out = get_transaction_status(**b.input)\n            results.append({\"type\": \"tool_result\", \"tool_use_id\": b.id, \"content\": json.dumps(out)})\n        except Exception as e:                        # send the failure back, don't drop it\n            results.append({\"type\": \"tool_result\", \"tool_use_id\": b.id,\n                            \"content\": f\"Lookup failed: {e}\", \"is_error\": True})\n    messages.append({\"role\": \"user\", \"content\": results})"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A question needs 3 lookups, each depending on the one before, with tool_choice auto. Every turn resends 2,000 tokens of prompt and tool definitions, and each tool result adds 300 tokens that stay in the history. Ignoring the model’s own output, how many input tokens does the whole exchange use?",
+    "answer": "3 calls in sequence plus the final answer = 4 turns. Turn 1: 2,000. Turn 2: 2,300. Turn 3: 2,600. Turn 4: 2,900. Total 9,800 input tokens. Each extra sequential call adds a turn that resends everything.",
+    "expected": {
+      "value": 9800,
+      "tolerance": 50,
+      "label": "input tokens ="
+    },
+    "interview": [
+      {
+        "question": "Walk me through what happens when a model “calls a tool”.",
+        "answer": "The model never executes anything. You send tool definitions (name, description, input schema). If the model decides to use one, the response stops with stop_reason tool_use and contains a structured call with an id and arguments. Your code validates and runs it, then sends a tool_result carrying the same id. The model continues, possibly calling more tools, until it answers in text."
+      },
+      {
+        "question": "When would you use tool_choice any or tool, and what are the risks?",
+        "answer": "Force a tool only when the step must produce a structured call, such as an extraction step, and usually only for the first turn. Forcing on a greeting wastes a call, and leaving it forced in a loop can stop the model from ever answering. Some current models and manual extended thinking reject any and tool, so check the docs and fall back to auto."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Setting every tool_use_id to the first block’s id",
+        "fix": "Return each result under the id of the call it answers"
+      },
+      {
+        "mistake": "Dropping a failed call from the results",
+        "fix": "Return it as a tool_result with is_error: true and a clear message"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fc01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A UPI app’s assistant is asked “Did UTR 412345678901 go through?” It has a get_transaction_status tool. What does the model actually return when it decides to use the tool?",
+      "options": [
+        "The payment status, fetched from the switch",
+        "A tool_use block with an id, the tool name and the UTR as an argument",
+        "A Python function call that the API runs on your server",
+        "A request for your database credentials"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The model never runs tools. It returns a structured call; your code executes it and returns the result."
+    },
+    {
+      "id": "fc02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Your code runs a balance lookup and sends back the result. What must the tool_result block contain so the model can use it?",
+      "options": [
+        "The tool name only",
+        "The tool_use_id of the call it answers",
+        "The full original request",
+        "A new system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each result is matched to its call by id; without the right tool_use_id the result cannot be attributed."
+    },
+    {
+      "id": "fc03",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A recharge assistant greets a user who says “Thanks, bye!”. The request uses tool_choice any on every turn. What happens?",
+      "options": [
+        "The model says goodbye",
+        "The model is forced to call a tool on every turn and cannot reply in text",
+        "The API ignores tool_choice for greetings",
+        "The model calls every tool once and then answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "any requires a tool call in each response, so a loop that always sends it never lets the model answer in text."
+    },
+    {
+      "id": "fc04",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A PNR-status question needs one lookup. With tool_choice auto, how many model turns does the exchange take, including the answer?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Turn 1 returns the call; after your code sends the result, turn 2 is the answer."
+    },
+    {
+      "id": "fc05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims assistant’s model sometimes sends policy_no as a number instead of the string the schema requires. What is the most direct fix?",
+      "options": [
+        "Lower the temperature",
+        "Turn on strict schemas so sampling is constrained to the schema",
+        "Add “please use strings” to the system prompt",
+        "Increase max_tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Strict mode uses grammar-constrained sampling so inputs always match the schema."
+    },
+    {
+      "id": "fc06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An order-tracking tool throws a timeout. What should your loop send back?",
+      "options": [
+        "Nothing; skip that call",
+        "A tool_result for that call with is_error true and a short message",
+        "A fabricated “delivered” status",
+        "A new user message asking the model to try again"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Every call needs a result; an error result lets the model retry, try another path or explain."
+    },
+    {
+      "id": "fc07",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A brokerage assistant defines get_holdings. Which belong in a good tool definition? Select all that apply.",
+      "options": [
+        "A name that says what it does",
+        "A description of when to use it and when not",
+        "A JSON Schema for the inputs",
+        "The user’s password for the trading API"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Name, description and input schema define a tool. Credentials stay in your executor, never in the definition."
+    },
+    {
+      "id": "fc08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A lab-report assistant has a step whose only job is to extract fields into a record_vitals call. When is forcing that tool reasonable?",
+      "options": [
+        "On every turn of every conversation",
+        "For that one extraction step, typically on the first request only",
+        "Never; forcing is not supported",
+        "Only when the model is uncertain"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Forcing a specific tool suits a step that must produce a structured call; afterwards switch back to auto."
+    },
+    {
+      "id": "fc09",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A question needs 3 dependent lookups. Each turn resends 2,000 tokens of prompt and tool definitions, and each tool result adds 300 tokens that stay in the history. Ignoring model output, how many input tokens does the exchange use?",
+      "options": [
+        "6,900",
+        "8,000",
+        "9,800",
+        "11,600"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "4 turns: 2,000 + 2,300 + 2,600 + 2,900 = 9,800 input tokens."
+    },
+    {
+      "id": "fc10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "An OpenAI-based assistant returns function results. Which field ties a function output to the call it answers?",
+      "options": [
+        "function_name",
+        "call_id",
+        "response_id",
+        "thread_id"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "OpenAI matches outputs to calls by call_id, as Anthropic does with tool_use_id."
+    },
+    {
+      "id": "fc11",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A loan assistant’s loop sometimes never ends. Which safeguards help? Select all that apply.",
+      "options": [
+        "A step cap on model turns",
+        "Stopping forcing a tool after the first request",
+        "Returning errors as is_error so the model can conclude",
+        "Removing all tool descriptions"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A cap bounds the loop, forcing only once lets the model answer, and error results let it wrap up. Removing descriptions makes things worse."
+    },
+    {
+      "id": "fc12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "With tool_choice none, a student asks “What is my exam hall number?” and a lookup tool exists. What happens?",
+      "options": [
+        "The model calls the tool anyway",
+        "The model answers without calling any tool, so it cannot know the hall",
+        "The API returns an error",
+        "The tool is called automatically by the API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "none prevents tool calls, so a question that needs data gets an answer without it."
+    },
+    {
+      "id": "fc13",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An engineer sets tool_choice {\"type\":\"tool\",\"name\":\"refund\"} and gets HTTP 400 on one current model with extended thinking enabled. What is the likely cause?",
+      "options": [
+        "The refund tool has too long a description",
+        "Forcing a specific tool is not supported in that configuration, so fall back to auto",
+        "The API key lacks refund permission",
+        "The model is overloaded"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Forced tool_choice (any or tool) is not supported with extended thinking and is rejected by some current models."
+    },
+    {
+      "id": "fc14",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which statements about the tool loop are true? Select all that apply.",
+      "options": [
+        "The model decides whether to call a tool when tool_choice is auto",
+        "Your application executes the tool",
+        "A response can contain more than one tool_use block",
+        "The model can read your database directly once a tool is defined"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The model chooses, your code executes, and several calls can appear in one response. The model never gets direct access."
+    },
+    {
+      "id": "fc15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A policy tool’s schema uses a JSON Schema feature that strict mode does not support. What should you expect?",
+      "options": [
+        "Strict mode silently ignores the feature and still guarantees validity",
+        "The request can be rejected; strict supports a subset of JSON Schema, so simplify the schema",
+        "The model ignores the whole schema",
+        "The tool is called without arguments"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Strict mode supports only a subset of JSON Schema, so unsupported features must be removed or rewritten."
+    },
+    {
+      "id": "fc16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An agent runs 5,000 conversations a day. 40% need one lookup, 30% two sequential lookups and 30% none. With tool_choice auto, how many tool calls a day?",
+      "options": [
+        "3,500",
+        "5,000",
+        "5,500",
+        "7,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "5,000 × (0.4 × 1 + 0.3 × 2 + 0.3 × 0) = 5,000 × 1.0 = 5,000 calls."
+    },
+    {
+      "id": "fc17",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "OpenAI’s guidance on how many functions to make available at the start of a turn is roughly what?",
+      "options": [
+        "Fewer than 5",
+        "Fewer than 20",
+        "Up to 200",
+        "There is no guidance"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "OpenAI suggests keeping fewer than 20 functions available at the start of a turn for accuracy."
+    },
+    {
+      "id": "fc18",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A clinic assistant’s calls sometimes fail validation. Which fixes address the arguments themselves? Select all that apply.",
+      "options": [
+        "Enable strict schemas",
+        "Use enums and clear parameter descriptions",
+        "Raise max_tokens",
+        "Switch the loop to streaming output"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Strict mode and clearer, constrained parameters improve argument validity; token limits and streaming do not."
+    },
+    {
+      "id": "fc19",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Which benchmark is designed to score how accurately models form function calls, including parallel and multi-turn calls?",
+      "options": [
+        "MMLU",
+        "BFCL",
+        "HumanEval",
+        "GSM8K"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "BFCL, the Berkeley function-calling benchmark, evaluates simple, multiple, parallel and multi-turn function calling."
+    },
+    {
+      "id": "fc20",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which situations are better served by calling an API directly from your code, without letting a model choose tools? Select all that apply.",
+      "options": [
+        "A nightly job that always fetches the same shipment report",
+        "A fixed webhook that always posts a delivery status to one endpoint",
+        "A chat assistant answering open questions about orders",
+        "An agent that must decide which of several lookups a question needs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fixed pipelines need no model decision. Open questions and choosing between lookups are where tool calling helps."
+    }
+  ]
+}

@@ -1,0 +1,810 @@
+{
+  "id": "rag",
+  "moduleSlug": "evaluation",
+  "name": "RAG Grounding Metrics",
+  "shortName": "RAG grounding",
+  "question": "Is the answer backed by the sources?",
+  "summary": "Split retrieval-augmented generation into its two halves. Retrieval metrics ask whether the right context was found. Grounding metrics ask whether the answer stays within that context. A low score tells you which half to fix.",
+  "useCases": [
+    "Any agent that answers from documents, a knowledge base or search results",
+    "Diagnosing hallucination: bad retrieval or bad generation?",
+    "Tuning chunk size, top-k, embeddings and re-rankers"
+  ],
+  "keyFacts": {
+    "label": "Key metrics",
+    "items": [
+      {
+        "term": "Faithfulness",
+        "detail": "supported claims ÷ total claims in the answer"
+      },
+      {
+        "term": "Answer relevancy",
+        "detail": "how directly the answer addresses the question"
+      },
+      {
+        "term": "Context precision",
+        "detail": "relevant chunks ranked near the top"
+      },
+      {
+        "term": "Context recall",
+        "detail": "share of the reference answer covered by retrieved context"
+      },
+      {
+        "term": "Recall@k · MRR · nDCG",
+        "detail": "classic retrieval ranking metrics"
+      }
+    ]
+  },
+  "steps": [
+    "Collect questions with reference answers, plus ideal source chunks if you can",
+    "Log the retrieved context alongside every answer",
+    "Score retrieval (precision, recall) and generation (faithfulness, relevancy) separately",
+    "Fix retrieval first when recall is low. Fix the prompt when faithfulness is low"
+  ],
+  "pitfalls": [
+    "Context recall needs ground-truth answers",
+    "An LLM extracts the claims, so scores carry judge noise",
+    "A faithful answer is still wrong if the source document is wrong"
+  ],
+  "tools": [
+    "Ragas",
+    "TruLens (RAG triad)",
+    "DeepEval",
+    "Arize Phoenix",
+    "LlamaIndex evaluators"
+  ],
+  "remember": "Found the right context? Stayed inside it?",
+  "caption": "Every claim must trace back to a retrieved chunk. Unsupported claims lower faithfulness.",
+  "comparison": {
+    "scope": "Answer vs retrieved context",
+    "cost": 2,
+    "needs": "Logged context; gold answers for recall",
+    "best": "Knowledge agents, hallucination triage"
+  },
+  "diagram": {
+    "file": "diagrams/rag.svg"
+  },
+  "lesson": {
+    "file": "rag_metrics.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "question = \"How often do NEFT batches settle?\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "chunks = retriever.search(question, k=4)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "answer = llm(question, context=chunks)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "claims = llm_split_into_claims(answer)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "supported = [c for c in claims if llm_is_supported(c, chunks)]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "faithfulness = len(supported) / len(claims)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "facts = llm_split_into_claims(reference_answer)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "covered = [f for f in facts if llm_is_supported(f, chunks)]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "context_recall = len(covered) / len(facts)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "if context_recall < 0.8: print(\"fix retrieval: hybrid search, re-ranking\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "if faithfulness < 0.8:   print(\"fix generation: grounding check, prompt\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# In production: ragas.evaluate(data, metrics=[Faithfulness(), LLMContextRecall()])",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Retrieve context",
+        "text": "The retriever returns the top chunks. Keep them: every metric is computed against what was actually retrieved."
+      },
+      {
+        "title": "Generate the answer",
+        "text": "The model answers using those chunks. Nothing yet tells us whether each part is supported."
+      },
+      {
+        "title": "Faithfulness: split and check claims",
+        "text": "An LLM splits the answer into claims and checks each against the chunks. Two of three are supported: 0.67."
+      },
+      {
+        "title": "Context recall: check the reference",
+        "text": "Split the reference answer into facts. The holiday rule sits in a chunk retrieval missed, so recall is 0.67."
+      },
+      {
+        "title": "Diagnose which half to fix",
+        "text": "Low recall points at retrieval; low faithfulness points at generation. Here both need work."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"10\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"27\" text-anchor=\"middle\">“How often do NEFT batches settle?”</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"50\" width=\"110\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"67\" text-anchor=\"middle\">C1 · circular</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"124\" y=\"50\" width=\"110\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"179\" y=\"67\" text-anchor=\"middle\">C2 · FAQ</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"90\" width=\"344\" height=\"28\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"108\" text-anchor=\"middle\">Answer: every 30 min, 24x7; instant under INR 2 lakh</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"134\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"150\" text-anchor=\"middle\">every 30 min</text></g><path class=\"ln draw pass\" pathLength=\"1\" d=\"M63 134 L63 76\" style=\"--d:0.3s\"/><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"126\" y=\"134\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"181\" y=\"150\" text-anchor=\"middle\">24x7</text></g><path class=\"ln draw pass\" pathLength=\"1\" d=\"M181 134 L179 76\" style=\"--d:0.44999999999999996s\"/><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx fail\" x=\"244\" y=\"134\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"299\" y=\"150\" text-anchor=\"middle\">instant < 2 lakh</text></g><g class=\"a\" style=\"--d:0.7s\"><rect class=\"bx warn\" x=\"8\" y=\"170\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"186\" text-anchor=\"middle\">faithfulness 2 ÷ 3 = 0.67</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"240\" y=\"50\" width=\"112\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"67\" text-anchor=\"middle\">C3 · missed</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx warn\" x=\"182\" y=\"170\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"186\" text-anchor=\"middle\">recall 2 ÷ 3 = 0.67</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"204\" width=\"344\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"221\">Fix both halves</text><text class=\"sb\" x=\"180\" y=\"236\">recall → hybrid search · faithfulness → grounding check</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Separates retrieval problems from generation problems",
+      "Standard, widely supported metrics",
+      "Claim-level results show exactly what’s unsupported",
+      "Faithfulness needs no reference answers"
+    ],
+    "cons": [
+      "LLM-based metrics are noisy",
+      "Context recall needs reference answers",
+      "Can’t tell when the source document itself is wrong",
+      "Claim splitting is sensitive to wording"
+    ],
+    "avoidWhen": [
+      "There is no retrieval step",
+      "Quality is judged by actions taken rather than text"
+    ],
+    "tools": [
+      {
+        "name": "Ragas",
+        "type": "Open source",
+        "what": "Faithfulness, context precision and recall, answer relevancy",
+        "url": "https://github.com/explodinggradients/ragas"
+      },
+      {
+        "name": "TruLens",
+        "type": "Open source",
+        "what": "The RAG triad with feedback functions and tracing",
+        "url": "https://github.com/truera/trulens"
+      },
+      {
+        "name": "DeepEval",
+        "type": "Open source",
+        "what": "RAG metrics inside pytest-style tests",
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "name": "Arize Phoenix",
+        "type": "Open source",
+        "what": "Retrieval tracing with relevance and hallucination evals",
+        "url": "https://github.com/Arize-ai/phoenix"
+      },
+      {
+        "name": "LlamaIndex evaluators",
+        "type": "Open source",
+        "what": "Faithfulness and relevancy evaluators for LlamaIndex pipelines",
+        "url": "https://docs.llamaindex.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A bank’s assistant answered “How often do NEFT batches settle?”. You control which document chunks the retriever returned and whether the model added an invented claim, then watch how each metric reacts.",
+    "controls": [
+      "Tick the chunks the retriever returned. C1–C3 are relevant; C4 is off-topic.",
+      "Toggle whether the answer includes an invented claim.",
+      "The rest of the answer is held fixed so you can see each metric move on its own."
+    ],
+    "outputs": [
+      {
+        "name": "Faithfulness",
+        "meaning": "Supported claims ÷ all claims in the answer. Is the answer backed by what was retrieved?"
+      },
+      {
+        "name": "Context recall",
+        "meaning": "Reference facts found in the retrieved chunks ÷ all reference facts. Did retrieval find everything needed?"
+      },
+      {
+        "name": "Context precision",
+        "meaning": "Relevant chunks ÷ retrieved chunks. How much of what was retrieved was useful?"
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Missed a document",
+        "expect": "C3 was missed and C4 is noise, plus an invented claim. All three metrics are below target."
+      },
+      {
+        "k": "perfect",
+        "name": "Perfect retrieval",
+        "expect": "Only the three relevant chunks and no invented claim. Everything is 100%."
+      },
+      {
+        "k": "noisy",
+        "name": "Noisy retrieval",
+        "expect": "Everything retrieved, including the off-topic chunk. Recall and faithfulness are 100%; precision drops to 75%."
+      },
+      {
+        "k": "hallu",
+        "name": "Hallucinating model",
+        "expect": "Retrieval is perfect but the model invents a claim. Only faithfulness drops, to 75%: fix generation, not retrieval."
+      }
+    ],
+    "missions": [
+      {
+        "k": "all",
+        "text": "Get all three metrics to 100%.",
+        "hint": "Only the relevant chunks, and no invented claim."
+      },
+      {
+        "k": "recallfaith",
+        "text": "Make recall 100% while faithfulness stays below 100%.",
+        "hint": "Retrieve C1–C3 and keep the invented claim."
+      },
+      {
+        "k": "precrec",
+        "text": "Make precision 100% but recall only 33%.",
+        "hint": "Retrieve a single relevant chunk."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Ragas",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "The most widely used set of RAG metrics: faithfulness, context precision and recall, answer relevancy.",
+        "ex": "Score 200 logged question–answer pairs every night and chart faithfulness over time.",
+        "pros": [
+          "The de facto standard metrics",
+          "Can generate synthetic test sets"
+        ],
+        "cons": [
+          "LLM-based metrics add cost and noise",
+          "Its API has changed between versions"
+        ],
+        "url": "https://github.com/explodinggradients/ragas"
+      },
+      {
+        "n": "TruLens",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "The RAG triad (context relevance, groundedness, answer relevance) with feedback functions.",
+        "ex": "Wrap a RAG app and view groundedness for each query in the local dashboard.",
+        "pros": [
+          "Clear triad framing",
+          "Local dashboard"
+        ],
+        "cons": [
+          "Smaller ecosystem than Ragas",
+          "Basic dashboard for team use"
+        ],
+        "url": "https://github.com/truera/trulens"
+      },
+      {
+        "n": "DeepEval",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "RAG metrics as unit tests that run in CI.",
+        "ex": "Fail the build when contextual recall on the test set drops below 0.8.",
+        "pros": [
+          "Pytest workflow",
+          "Covers retrieval and generation metrics"
+        ],
+        "cons": [
+          "Judge-model dependent",
+          "Dashboards need the paid platform"
+        ],
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "n": "Arize Phoenix",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Seeing which chunks each query retrieved alongside relevance and hallucination evals.",
+        "ex": "Open a bad answer and see the three chunks it was built from, each with a relevance score.",
+        "pros": [
+          "Retrieval and evals side by side",
+          "Runs locally"
+        ],
+        "cons": [
+          "Large-scale monitoring points to the commercial platform",
+          "Fewer team features"
+        ],
+        "url": "https://github.com/Arize-ai/phoenix"
+      },
+      {
+        "n": "LlamaIndex evaluators",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Faithfulness and relevancy evaluators built into LlamaIndex pipelines.",
+        "ex": "Run FaithfulnessEvaluator on a LlamaIndex query engine’s responses.",
+        "pros": [
+          "No extra dependency if you already use LlamaIndex",
+          "Simple API"
+        ],
+        "cons": [
+          "Best inside LlamaIndex",
+          "Fewer metrics than dedicated tools"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Standard metrics, fast",
+        "tool": "Ragas"
+      },
+      {
+        "need": "Tests that gate CI",
+        "tool": "DeepEval"
+      },
+      {
+        "need": "Debug retrieval per query",
+        "tool": "Arize Phoenix or TruLens"
+      }
+    ],
+    "goals": [
+      "Calculate faithfulness and context recall by hand",
+      "Tell from the metrics whether retrieval or generation is at fault",
+      "Name the usual fix for low recall and for low faithfulness"
+    ]
+  },
+  "practice": {
+    "scenario": "A bank's internal policy assistant answers staff questions from 3,000 circulars. Ragas shows faithfulness at 0.93 but context recall at 0.62: the model sticks to what it retrieves, but retrieval misses the right circular. The team adds hybrid search and re-measures recall before touching the prompt.",
+    "industries": [
+      {
+        "industry": "Banking & compliance",
+        "use": "Keep policy and regulatory answers tied to the circular they cite"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Check clinical-guideline assistants add no unsupported advice"
+      },
+      {
+        "industry": "Legal",
+        "use": "Verify contract Q&A answers quote the right clause"
+      }
+    ],
+    "analogy": "Checking a student's essay against the reading list. Every claim needs a page reference, and a missing key book means the library search failed.",
+    "library": {
+      "name": "Ragas",
+      "what": "The most widely used RAG evaluation library: faithfulness, context precision and recall, answer relevancy.",
+      "install": "pip install ragas langchain-openai"
+    },
+    "samples": [
+      {
+        "file": "rag_eval.py",
+        "language": "python",
+        "code": "from ragas import EvaluationDataset, evaluate\nfrom ragas.metrics import Faithfulness, LLMContextRecall\nfrom ragas.llms import LangchainLLMWrapper\nfrom langchain_openai import ChatOpenAI\n\ndata = EvaluationDataset.from_list([{\n    \"user_input\": \"How often do NEFT batches settle?\",\n    \"retrieved_contexts\": [\"NEFT operates 24x7 and settles in half-hourly batches.\"],\n    \"response\": \"NEFT settles every 30 minutes, round the clock.\",\n    \"reference\": \"NEFT settles in half-hourly batches, 24x7.\",\n}])\n\njudge = LangchainLLMWrapper(ChatOpenAI(model=\"gpt-4o-mini\"))\nresult = evaluate(dataset=data, llm=judge,\n                  metrics=[Faithfulness(), LLMContextRecall()])\nprint(result)   # {'faithfulness': 1.0, 'context_recall': 1.0}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An answer makes 5 claims; 4 are supported by the retrieved chunks. The reference answer has 4 facts, and the retrieved context covers 3. What is the faithfulness score?",
+    "answer": "Faithfulness = 4 ÷ 5 = 0.8. Context recall = 3 ÷ 4 = 0.75. Both halves need work, but the unsupported claim is the more urgent risk.",
+    "expected": {
+      "value": 0.8,
+      "tolerance": 0.01,
+      "label": "faithfulness ="
+    },
+    "interview": [
+      {
+        "question": "A RAG system gives wrong answers. How do you tell whether retrieval or generation is at fault?",
+        "answer": "Score them separately. Low context recall or precision means retrieval missed. High recall with low faithfulness means the model is ignoring or going beyond its context. Fix the half the metrics point to."
+      },
+      {
+        "question": "What is the RAG triad?",
+        "answer": "Context relevance (is the retrieved context on topic), groundedness (is the answer supported by it) and answer relevance (does it address the question). TruLens popularized the term."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Measuring only end-to-end answer accuracy",
+        "fix": "Score retrieval and generation separately"
+      },
+      {
+        "mistake": "Testing with questions written from the documents",
+        "fix": "Use real user questions, which are messier and expose retrieval gaps"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rg01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A policy-bot answer makes 5 claims, and 3 are supported by the retrieved chunks. What is the faithfulness?",
+      "options": [
+        "0.6",
+        "0.3",
+        "0.5",
+        "1.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "3 ÷ 5 = 0.6."
+    },
+    {
+      "id": "rg02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Faithfulness is 0.93 but context recall is 0.62. What do you fix first?",
+      "options": [
+        "The generation prompt",
+        "Retrieval",
+        "The judge",
+        "Temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The model sticks to what it retrieves; it just is not retrieving the right material."
+    },
+    {
+      "id": "rg03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which metric needs a reference answer?",
+      "options": [
+        "Faithfulness",
+        "Context recall",
+        "Toxicity",
+        "Latency"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Recall compares the retrieved context with the facts in the reference answer."
+    },
+    {
+      "id": "rg04",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are symptoms of a retrieval problem? Select all that apply.",
+      "options": [
+        "Low context recall",
+        "Low context precision",
+        "The answer invents a fee no document mentions",
+        "The relevant document is ranked 40th"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "An invented fee is a generation problem (faithfulness), not retrieval."
+    },
+    {
+      "id": "rg05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "5 chunks are retrieved and 2 are relevant. What share of the retrieved chunks is relevant (unweighted precision@5)?",
+      "options": [
+        "0.4",
+        "0.6",
+        "2.5",
+        "0.2"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2 ÷ 5 = 0.4. Ragas’s context precision also weights by rank, so the same 2 chunks score higher when they come first."
+    },
+    {
+      "id": "rg06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The bot says “instant transfer under INR 2 lakh”, but no retrieved chunk says that. What is it?",
+      "options": [
+        "Low recall",
+        "A hallucination that lowers faithfulness",
+        "Low precision",
+        "Contamination"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An unsupported claim is a faithfulness failure."
+    },
+    {
+      "id": "rg07",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What are common fixes for low context recall? Select all that apply.",
+      "options": [
+        "Hybrid search",
+        "Re-ranking a wider set of candidates",
+        "Better chunking",
+        "Lowering the temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Temperature affects generation, not retrieval."
+    },
+    {
+      "id": "rg08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An answer is perfectly faithful to its sources but still wrong. What is the most likely cause?",
+      "options": [
+        "The retrieved circular was outdated or superseded",
+        "Faithfulness is broken",
+        "Temperature",
+        "Too many claims"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Faithfulness only checks against the context. A stale source gives a faithful but wrong answer."
+    },
+    {
+      "id": "rg09",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "You have no reference answers yet. Which set of checks works without them?",
+      "options": [
+        "Context relevance, groundedness, answer relevance (the RAG triad)",
+        "Context recall and exact match",
+        "BLEU and ROUGE",
+        "pass^k"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The RAG triad, popularized by TruLens, needs only the question, the context and the answer."
+    },
+    {
+      "id": "rg10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You need faithfulness and context recall in CI for a Python RAG app this week. Which library fits?",
+      "options": [
+        "Ragas",
+        "hnswlib",
+        "Presidio",
+        "Celery"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Ragas provides faithfulness, context precision and recall, and more."
+    },
+    {
+      "id": "rg11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A guideline assistant adds dosage advice that is not in the retrieved guideline. How should eval treat it?",
+      "options": [
+        "Fine, if the advice is correct",
+        "As a faithfulness failure that blocks release for high-risk content",
+        "As low recall",
+        "As low precision"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "In high-stakes domains, anything unsupported by the source is a failure, even if it happens to be true."
+    },
+    {
+      "id": "rg12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "An answer cites clause 7.2, but the claim actually comes from clause 9.1, which was also retrieved. What failed?",
+      "options": [
+        "Nothing: the answer is faithful",
+        "Citation accuracy; check each claim against the chunk it cites",
+        "Recall",
+        "Precision"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Users trust citations. Check that each claim is supported by the chunk it points to."
+    },
+    {
+      "id": "rg13",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Someone asks about the return window, and all 5 retrieved chunks are about shipping. What does this show?",
+      "options": [
+        "A generation problem",
+        "A retrieval problem: low precision and low recall",
+        "A judge problem",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieval brought back none of the right material, so the answer cannot be grounded."
+    },
+    {
+      "id": "rg14",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Precision is 0.9, recall 0.9 and faithfulness 0.95, but users say answers don’t address their question. Which metric is likely low?",
+      "options": [
+        "Answer relevancy",
+        "Context precision",
+        "Faithfulness",
+        "Latency"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "An answer can be grounded yet off-target. Answer relevancy measures whether it addresses the question."
+    },
+    {
+      "id": "rg15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Smaller chunks raised recall from 0.62 to 0.78, but precision dropped. What next?",
+      "options": [
+        "Revert",
+        "Add a re-ranker to restore precision while keeping the higher recall",
+        "Raise the temperature",
+        "Stop measuring precision"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieve more, then re-rank so the best chunks come first."
+    },
+    {
+      "id": "rg16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "You are building an eval set for a staff policy assistant. What should it include? Select all that apply.",
+      "options": [
+        "Real staff questions",
+        "Reference answers written by compliance experts",
+        "Questions the corpus cannot answer, where the bot should decline",
+        "Only questions the bot already answers well"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Include hard and unanswerable cases, not just the ones that already work."
+    },
+    {
+      "id": "rg17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A question cannot be answered from the policy corpus, and the bot answers from general knowledge. What should eval reward?",
+      "options": [
+        "A confident general answer",
+        "Saying it cannot find this in the policy and pointing to a person",
+        "A longer answer",
+        "Any answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "For grounded assistants, declining is the correct behaviour when the source is silent."
+    },
+    {
+      "id": "rg18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Your faithfulness score comes from an LLM judge. How do you know you can trust it?",
+      "options": [
+        "Trust the library",
+        "Calibrate it against human-labelled claims on a sample",
+        "Run it twice",
+        "Use a lower temperature only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Judge-based metrics need the same calibration as any LLM judge."
+    },
+    {
+      "id": "rg19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which metrics can you compute on live traffic with no reference answers? Select all that apply.",
+      "options": [
+        "Faithfulness",
+        "Context relevance or precision (LLM-judged)",
+        "Answer relevancy",
+        "Context recall"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Context recall needs a reference answer, so it runs offline on your labelled set."
+    },
+    {
+      "id": "rg20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You can afford reference answers for only 50 questions. Which metric gains most from them?",
+      "options": [
+        "Context recall",
+        "Faithfulness",
+        "Answer relevancy",
+        "Latency"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The others can run without references; context recall cannot."
+    }
+  ]
+}

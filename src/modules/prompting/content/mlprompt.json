@@ -1,0 +1,842 @@
+{
+  "id": "mlprompt",
+  "moduleSlug": "prompting",
+  "name": "Multilingual Prompting (Hindi, Hinglish)",
+  "shortName": "Multilingual prompts",
+  "question": "Will the prompt work when users write in Hindi or Hinglish?",
+  "summary": "Prompts and structured outputs for users who write in Hindi, Hinglish in Roman script, or another Indian language. Keep JSON keys and enum labels in English while values may be in any language, say explicitly which language and script to reply in, normalise spoken amounts and dates (“saadhe teen hazaar” → 3500), and include a code-mixed example or two. Measure accuracy per language slice, not only overall.",
+  "useCases": [
+    "Support bots and assistants for Indian customers",
+    "Extraction of intents, amounts and dates from chat messages",
+    "Any prompt first written and tested only in English"
+  ],
+  "keyFacts": {
+    "label": "Rules",
+    "items": [
+      {
+        "term": "English keys and enums",
+        "detail": "labels stay stable whatever the input language"
+      },
+      {
+        "term": "Reply language",
+        "detail": "“reply in the user’s language and script” written into the prompt"
+      },
+      {
+        "term": "Number normalisation",
+        "detail": "spoken or mixed amounts to digits in rupees"
+      },
+      {
+        "term": "Code-mixed examples",
+        "detail": "one or two Hinglish and Hindi examples, not only English"
+      },
+      {
+        "term": "Per-slice evaluation",
+        "detail": "accuracy for English, Hinglish and Hindi separately"
+      },
+      {
+        "term": "Token cost",
+        "detail": "Devanagari often takes more tokens than Roman text; measure it"
+      }
+    ]
+  },
+  "steps": [
+    "Keep keys and enum labels in English, values in any language",
+    "Tell the model which language and script to reply in",
+    "Add rules and examples for amounts, dates and names in code-mixed text",
+    "Evaluate each language slice and fix the weakest first"
+  ],
+  "pitfalls": [
+    "Translating every message to English first and losing names and amounts",
+    "Enum labels that come back in Hindi and break the schema",
+    "Reporting one overall accuracy that hides a weak Hinglish slice"
+  ],
+  "tools": [
+    "Structured outputs (JSON schema)",
+    "Pydantic",
+    "IndicTrans2",
+    "AI4Bharat IndicNLP"
+  ],
+  "remember": "English labels, the user’s language in replies, and test every slice.",
+  "caption": "Illustrative: Kaveri Bank, a fictional bank, extracts intents and amounts from 1,000 messages in English, Hinglish and Hindi.",
+  "comparison": {
+    "scope": "Prompts for Indian languages",
+    "cost": 2,
+    "needs": "Code-mixed users",
+    "best": "Hidden weak slices"
+  },
+  "diagram": {
+    "file": "diagrams/mlprompt.svg"
+  },
+  "lesson": {
+    "file": "extract_multilingual.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from typing import Literal",
+        "steps": []
+      },
+      {
+        "text": "from pydantic import BaseModel",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Ticket(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    intent: Literal[\"refund_status\", \"block_card\", \"kyc_update\", \"other\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    amount_inr: int | None",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "    reply_lang: Literal[\"en\", \"hi-Deva\", \"hi-Latn\"]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    reply: str",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "SYSTEM = \"\"\"Extract the ticket as JSON. Keys and intent labels stay in English.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Reply in the same language and script as the customer:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "Hinglish in Roman letters gets Hinglish, Hindi in Devanagari gets Devanagari.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "Amounts: convert words to digits in rupees.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "\"saadhe teen hazaar\" = 3500, \"dedh lakh\" = 150000, \"₹2.5k\" = 2500.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "Example: \"mera card block karo, kho gaya\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "{\"intent\": \"block_card\", \"amount_inr\": null, \"reply_lang\": \"hi-Latn\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": " \"reply\": \"Aapka card abhi block kar diya gaya hai.\"}\"\"\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ticket = client.responses.parse(model=MODEL, instructions=SYSTEM,",
+        "steps": []
+      },
+      {
+        "text": "                                input=message, text_format=Ticket).output_parsed",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for lang, rows in eval_set.groupby(\"lang\"):",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "    print(lang, accuracy(rows), amount_accuracy(rows))",
+        "steps": [
+          5,
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Keep keys and labels in English",
+        "text": "The schema fixes the keys and the four intent labels. Whatever the customer writes, “refund_status” comes back spelled the same way, so the JSON validates."
+      },
+      {
+        "title": "Say which language to reply in",
+        "text": "Without this line about one Hindi or Hinglish reply in five came back in English. Stating the language and the script fixes almost all of them."
+      },
+      {
+        "title": "Normalise amounts",
+        "text": "Customers write “saadhe teen hazaar”, “3.5k” or “₹3,500”. A short rule with examples turns them all into 3500."
+      },
+      {
+        "title": "Show a code-mixed example",
+        "text": "One Hinglish example teaches the pattern better than any English example. Hinglish intent accuracy rises from 78% to 90%."
+      },
+      {
+        "title": "Test each language separately",
+        "text": "English at 95% can hide Hinglish at 78%. Report accuracy for every slice."
+      },
+      {
+        "title": "Fix the weakest slice first",
+        "text": "Add examples and rules where the slice is weakest, then re-run all slices so English does not regress."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">intent: refund_status | block_card | kyc_update</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"56\" text-anchor=\"middle\">reply in the customer’s language and script</text></g><text class=\"tl l a\" x=\"8\" y=\"80\" style=\"--d:0.2s\">wrong-language replies: 132 → 12</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"90\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"106\" text-anchor=\"middle\">“saadhe teen hazaar”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 102L192 102\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"194\" y=\"90\" width=\"158\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"273\" y=\"106\" text-anchor=\"middle\">3500</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"124\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"140\" text-anchor=\"middle\">example: “mera card block karo” → block_card</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"172\" style=\"--d:0s\">English</text><rect x=\"80\" y=\"162\" width=\"200\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"80\" y=\"162\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"288\" y=\"172\" style=\"--d:0.2s\">95%</text><text class=\"tl l a\" x=\"8\" y=\"192\" style=\"--d:0.1s\">Hinglish</text><rect x=\"80\" y=\"182\" width=\"200\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"80\" y=\"182\" width=\"180\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.2s\"/><text class=\"mono l a\" x=\"288\" y=\"192\" style=\"--d:0.30000000000000004s\">90%</text><text class=\"tl l a\" x=\"8\" y=\"212\" style=\"--d:0.2s\">Hindi</text><rect x=\"80\" y=\"202\" width=\"200\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"80\" y=\"202\" width=\"184\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.30000000000000004s\"/><text class=\"mono l a\" x=\"288\" y=\"212\" style=\"--d:0.4s\">92%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"230\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"246\" text-anchor=\"middle\">fix the weakest slice, then re-run all</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Outputs validate whatever language the user writes in",
+      "Replies match the customer’s language and script",
+      "Amounts and dates are captured reliably from code-mixed text",
+      "Per-slice tests reveal the users you are failing"
+    ],
+    "cons": [
+      "Examples in several languages lengthen the prompt",
+      "Devanagari text can cost more tokens",
+      "Needs labelled test data per language",
+      "Rules for numbers and dates need upkeep"
+    ],
+    "avoidWhen": [
+      "All users write in one language and the output is free text",
+      "A translation service is required anyway for audit copies (translate the output, not the input)"
+    ],
+    "tools": [
+      {
+        "name": "Structured outputs",
+        "type": "API feature",
+        "what": "JSON schema enforcement for stable keys and enums",
+        "url": "https://platform.openai.com/docs/guides/structured-outputs"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Typed schemas with Literal enums",
+        "url": "https://docs.pydantic.dev"
+      },
+      {
+        "name": "IndicTrans2",
+        "type": "Open model (AI4Bharat)",
+        "what": "Translation between English and 22 Indian languages",
+        "url": "https://github.com/AI4Bharat/IndicTrans2"
+      },
+      {
+        "name": "Indic NLP Library",
+        "type": "Open source (AI4Bharat)",
+        "what": "Script conversion, transliteration and normalisation",
+        "url": "https://github.com/anoopkunchukuttan/indic_nlp_library"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kaveri Bank, a fictional bank, extracts intent and amount from 1,000 support messages: 400 in English, 300 in Hinglish (Roman script) and 300 in Hindi (Devanagari). The model returns JSON with a reply.",
+    "controls": [
+      "Tell the model to reply in the customer's language and script.",
+      "Keep keys and intent labels in English.",
+      "Add amount rules and code-mixed examples."
+    ],
+    "outputs": [
+      {
+        "name": "Schema-valid JSON",
+        "meaning": "Outputs whose intent label is one of the allowed English values."
+      },
+      {
+        "name": "Intent accuracy",
+        "meaning": "Overall and for Hinglish and Hindi separately."
+      },
+      {
+        "name": "Amounts captured",
+        "meaning": "Amounts converted to the right number of rupees."
+      },
+      {
+        "name": "Wrong-language replies",
+        "meaning": "Hindi or Hinglish customers answered in another language or script."
+      },
+      {
+        "name": "Prompt tokens",
+        "meaning": "Tokens the instructions and examples add to each message."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "English-only prompt",
+        "expect": "Schema 90%, intent 86.6% (Hinglish 78%), amounts 81.6%, 132 wrong-language replies."
+      },
+      {
+        "k": "enum",
+        "name": "English enums",
+        "expect": "Schema 99%; intent 87.8%; replies and amounts unchanged."
+      },
+      {
+        "k": "lean",
+        "name": "Rules, no examples",
+        "expect": "Schema 99%, amounts 94.5%, 12 wrong-language replies, 530 tokens; Hinglish still 80%."
+      },
+      {
+        "k": "full",
+        "name": "Everything on",
+        "expect": "Intent 92.6% (Hinglish 90%, Hindi 92%), amounts 94.5%, 12 wrong-language replies, 880 tokens."
+      }
+    ],
+    "missions": [
+      {
+        "k": "good",
+        "text": "Reach 92% intent, 94% amounts and 98% valid JSON with at most 20 wrong-language replies.",
+        "hint": "Everything on."
+      },
+      {
+        "k": "lean",
+        "text": "Fix replies and amounts while keeping the prompt under 600 tokens.",
+        "hint": "The instruction, English enums and amount rules, but no examples."
+      },
+      {
+        "k": "enum",
+        "text": "Get schema-valid JSON to 98% or more.",
+        "hint": "Keep keys and intent labels in English."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Structured outputs",
+        "type": "API feature",
+        "start": 3,
+        "prod": 3,
+        "best": "JSON-schema enforcement so keys and enums never drift.",
+        "ex": "A Pydantic Ticket model passed as the output format.",
+        "pros": [
+          "Invalid JSON is rare",
+          "Enums enforced"
+        ],
+        "cons": [
+          "Schema limits vary by provider"
+        ],
+        "url": "https://platform.openai.com/docs/guides/structured-outputs"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Typed models with Literal enums for intents and languages.",
+        "ex": "intent: Literal[\"refund_status\", \"block_card\"].",
+        "pros": [
+          "Clear validation errors",
+          "Works with most SDKs"
+        ],
+        "cons": [
+          "Python only"
+        ],
+        "url": "https://docs.pydantic.dev"
+      },
+      {
+        "n": "IndicTrans2",
+        "type": "Open model · AI4Bharat",
+        "start": 2,
+        "prod": 2,
+        "best": "Translating outputs into Indian languages for audit copies.",
+        "ex": "Translate the English summary of a ticket into Hindi for a branch team.",
+        "pros": [
+          "22 Indian languages",
+          "Self-hostable"
+        ],
+        "cons": [
+          "Another model to run"
+        ],
+        "url": "https://github.com/AI4Bharat/IndicTrans2"
+      },
+      {
+        "n": "Indic NLP Library",
+        "type": "Open source · AI4Bharat",
+        "start": 2,
+        "prod": 2,
+        "best": "Script conversion and normalisation for Indian languages.",
+        "ex": "Normalise Devanagari digits before validation.",
+        "pros": [
+          "Lightweight",
+          "Many scripts"
+        ],
+        "cons": [
+          "Rule-based, needs care"
+        ],
+        "url": "https://github.com/anoopkunchukuttan/indic_nlp_library"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Stable JSON across languages",
+        "tool": "Structured outputs with English enums"
+      },
+      {
+        "need": "Hinglish accuracy",
+        "tool": "Code-mixed examples"
+      },
+      {
+        "need": "Audit copies in Hindi",
+        "tool": "IndicTrans2"
+      }
+    ],
+    "goals": [
+      "Keep schemas stable across languages",
+      "Control the reply language and normalise amounts",
+      "Evaluate and fix each language slice"
+    ]
+  },
+  "practice": {
+    "scenario": "Kaveri Bank, a fictional bank, reads support messages in English, Hinglish and Hindi. The prompt keeps JSON keys and the intent labels in English, tells the model to reply in the customer's language and script, converts spoken amounts such as “saadhe teen hazaar” to 3500, and shows one Hinglish and one Hindi example. Accuracy is reported for each language separately.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Balance, refund and card-block requests typed in Hinglish"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Recharge and plan questions in Hindi and regional languages"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Order and return messages mixing English and Hindi"
+      }
+    ],
+    "analogy": "A bank form printed in English with boxes a customer may fill in any language: the form stays the same, the answers vary.",
+    "library": {
+      "name": "OpenAI Python SDK",
+      "what": "Structured outputs: responses.parse with a Pydantic model fixes keys and enum values.",
+      "install": "pip install openai pydantic"
+    },
+    "note": "The model name is a placeholder; any API with JSON-schema outputs works the same way.",
+    "samples": [
+      {
+        "file": "extract.py",
+        "language": "python",
+        "code": "from typing import Literal\nfrom openai import OpenAI\nfrom pydantic import BaseModel\n\nclient = OpenAI()\n\nclass Ticket(BaseModel):\n    intent: Literal[\"refund_status\", \"block_card\", \"kyc_update\", \"other\"]\n    amount_inr: int | None\n    reply_lang: Literal[\"en\", \"hi-Deva\", \"hi-Latn\"]\n    reply: str\n\nSYSTEM = \"\"\"Extract the ticket. Keys and intent labels stay in English.\nReply in the customer's language and script.\nConvert amounts to digits in rupees: \"saadhe teen hazaar\" = 3500, \"dedh lakh\" = 150000.\nExample: \"mera card kho gaya, block karo\" -> block_card, reply_lang hi-Latn.\"\"\"\n\nfor msg in [\"bhai 3500 ka refund kab aayega?\", \"मेरा कार्ड ब्लॉक कर दो\"]:\n    t = client.responses.parse(model=\"gpt-5-mini\", instructions=SYSTEM,\n                               input=msg, text_format=Ticket).output_parsed\n    print(t.intent, t.amount_inr, t.reply_lang, t.reply)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "400 English messages score 95%, 300 Hinglish 90% and 300 Hindi 92% on intent. What is the overall accuracy, in percent?",
+    "answer": "(400 × 0.95 + 300 × 0.90 + 300 × 0.92) ÷ 1,000 = (380 + 270 + 276) ÷ 1,000 = 92.6%.",
+    "expected": {
+      "value": 92.6,
+      "tolerance": 0.1,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "How do you design an extraction prompt for Hinglish users?",
+        "answer": "Keep keys and enum labels in English, state the reply language and script, add rules and examples for amounts and dates, include code-mixed examples, and report accuracy per language slice."
+      },
+      {
+        "question": "Should you translate user messages to English before the model?",
+        "answer": "Usually not: modern models read Hindi and Hinglish directly, and translation can mangle names, amounts and intent. Translate outputs when an English audit copy is needed."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Enum labels allowed in any language",
+        "fix": "Fix labels in English with a schema"
+      },
+      {
+        "mistake": "One overall accuracy number",
+        "fix": "Report English, Hinglish and Hindi separately"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mq01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why keep intent labels in English when users write in Hindi?",
+      "options": [
+        "English is faster",
+        "Labels stay stable, so the JSON validates and code can rely on them",
+        "Hindi cannot be stored in JSON",
+        "Models refuse Hindi labels"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stable labels matter to downstream code, whatever the input language."
+    },
+    {
+      "id": "mq02",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What should a prompt say about reply language?",
+      "options": [
+        "Nothing",
+        "Reply in the customer’s language and script",
+        "Always reply in English",
+        "Always reply in Hindi"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stating language and script avoids English replies to Hinglish users."
+    },
+    {
+      "id": "mq03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "“saadhe teen hazaar” should become which amount?",
+      "options": [
+        "300",
+        "3,500",
+        "3,000",
+        "35,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Saadhe teen hazaar means three and a half thousand."
+    },
+    {
+      "id": "mq04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "“dedh lakh” is how many rupees?",
+      "options": [
+        "1,50,000",
+        "15,000",
+        "1,00,500",
+        "1,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Dedh lakh is one and a half lakh: 1,50,000."
+    },
+    {
+      "id": "mq05",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which improve a prompt for code-mixed users? Select all that apply.",
+      "options": [
+        "A Hinglish example",
+        "An explicit reply-language rule",
+        "Amount normalisation rules",
+        "Translating every message to English first"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Pre-translation can mangle names and amounts."
+    },
+    {
+      "id": "mq06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Overall accuracy is 93% but Hinglish is 79%. What is the problem with reporting only 93%?",
+      "options": [
+        "None",
+        "It hides the users you are failing",
+        "It is too low",
+        "It is too high"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Averages hide weak slices."
+    },
+    {
+      "id": "mq07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "English 95% on 400, Hinglish 90% on 300, Hindi 92% on 300. Overall?",
+      "options": [
+        "92.3%",
+        "92.6%",
+        "93.0%",
+        "91.8%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(380 + 270 + 276) ÷ 1,000 = 92.6%."
+    },
+    {
+      "id": "mq08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A reply to a Hinglish message comes back in Devanagari. What was missing?",
+      "options": [
+        "The script in the instruction",
+        "A larger model",
+        "A lower temperature",
+        "More tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Say language and script: Hinglish in Roman letters."
+    },
+    {
+      "id": "mq09",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Where is translation useful in a multilingual pipeline?",
+      "options": [
+        "Translating inputs always",
+        "Translating outputs when an English or Hindi copy is needed",
+        "Never",
+        "Only for numbers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Translate outputs for audit or other teams, not inputs by default."
+    },
+    {
+      "id": "mq10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in a multilingual test set? Select all that apply.",
+      "options": [
+        "Hinglish messages in Roman script",
+        "Hindi messages in Devanagari",
+        "Messages with spoken amounts",
+        "Only English messages"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Test every language and pattern your users write in."
+    },
+    {
+      "id": "mq11",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Code-mixed examples add 350 tokens to each of 1,00,000 daily messages. How many extra tokens a day?",
+      "options": [
+        "3.5 crore",
+        "35 lakh",
+        "3.5 lakh",
+        "35 crore"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "350 × 1,00,000 = 3,50,00,000 tokens, or 3.5 crore."
+    },
+    {
+      "id": "mq12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why can Devanagari text cost more than Roman text?",
+      "options": [
+        "It is longer to read",
+        "Tokenizers often split Devanagari into more tokens",
+        "It uses more bytes on disk only",
+        "It does not"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Many tokenizers produce more tokens for Indic scripts; measure yours."
+    },
+    {
+      "id": "mq13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "The model returns intent \"रिफंड स्थिति\". What fixes this for good?",
+      "options": [
+        "Asking politely",
+        "A schema with English enum values",
+        "Lowering temperature",
+        "Adding more Hindi text"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A schema enforces the allowed labels."
+    },
+    {
+      "id": "mq14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Adding Hinglish examples raised Hinglish to 90%. What next?",
+      "options": [
+        "Ship it",
+        "Re-run every slice to check English did not drop",
+        "Remove the English examples",
+        "Double the examples"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Changes can shift other slices."
+    },
+    {
+      "id": "mq15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A customer writes \"recharge 299 wala plan chahiye\". Intent?",
+      "options": [
+        "Plan purchase or recharge",
+        "Complaint",
+        "Card block",
+        "KYC update"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The customer wants the ₹299 plan."
+    },
+    {
+      "id": "mq16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are good normalisation rules? Select all that apply.",
+      "options": [
+        "Words to digits in rupees",
+        "₹2.5k to 2500",
+        "Devanagari digits to ASCII digits",
+        "Removing all numbers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Removing numbers loses the data."
+    },
+    {
+      "id": "mq17",
+      "kind": "single",
+      "industry": "Government",
+      "question": "Users write in Tamil too. What is the minimum change?",
+      "options": [
+        "Nothing",
+        "Add Tamil to the reply rule, a Tamil example and a Tamil test slice",
+        "Translate everything to Hindi",
+        "Block Tamil messages"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each language needs examples and a test slice."
+    },
+    {
+      "id": "mq18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "\"refund kab aayega\" is in which script?",
+      "options": [
+        "Devanagari",
+        "Roman (Hinglish)",
+        "Tamil",
+        "Bengali"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hindi words written in Roman letters."
+    },
+    {
+      "id": "mq19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Intent accuracy on Hinglish rose from 78% to 90% on 300 messages. How many more are right?",
+      "options": [
+        "36",
+        "12",
+        "90",
+        "30"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "12 points of 300 is 36 messages."
+    },
+    {
+      "id": "mq20",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which is the best first step when a multilingual bot underperforms?",
+      "options": [
+        "Switch to the largest model",
+        "Measure accuracy per language to find the weak slice",
+        "Add English examples",
+        "Shorten the prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Find where it fails before changing things."
+    }
+  ]
+}

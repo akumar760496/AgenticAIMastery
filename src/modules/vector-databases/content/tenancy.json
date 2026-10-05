@@ -1,0 +1,927 @@
+{
+  "id": "tenancy",
+  "moduleSlug": "vector-databases",
+  "name": "Multi-Tenancy and Access Control",
+  "shortName": "Tenancy and ACLs",
+  "question": "Can one vector store keep every client’s data apart?",
+  "summary": "One vector store serves many customers (tenants) and many users, and every search must return only chunks the caller may see. Tenant isolation is a separate layer from document permissions: a namespace, collection or shard per tenant, a shared index with a tenant filter, or row-level security in the database. Document ACLs are synced from the source system, tenant-qualified, and enforced inside the query rather than asked of the model. Metadata filtering in general, and filtered-search recall, are covered by their own technique; this one is about who may see what.",
+  "useCases": [
+    "A SaaS product serving many client companies from one vector store",
+    "Enterprise search where users see only the documents their groups may open",
+    "Regulated data (NBFC loan files, KYC, health records) that must be erasable per client"
+  ],
+  "keyFacts": {
+    "label": "Parts",
+    "items": [
+      {
+        "term": "Isolation model",
+        "detail": "namespace or shard per tenant, shared index with a tenant filter, or database row-level security"
+      },
+      {
+        "term": "Tenant context",
+        "detail": "taken from the verified token and set per request, never from the prompt or request body"
+      },
+      {
+        "term": "Document ACL",
+        "detail": "groups or users allowed to read each chunk, prefixed with the tenant (t042:pune-credit)"
+      },
+      {
+        "term": "ACL sync",
+        "detail": "how fast a revocation in the source system reaches the index: nightly, hourly or on change"
+      },
+      {
+        "term": "Enforcement point",
+        "detail": "in the query (filter before ranking), after retrieval, or only as a prompt instruction"
+      },
+      {
+        "term": "Offboarding",
+        "detail": "deleting every chunk, cache and backup copy of a tenant when the contract or purpose ends"
+      }
+    ]
+  },
+  "steps": [
+    "Choose the isolation model per tier: namespaces for big or regulated clients, a shared index for the long tail",
+    "Take the tenant from the verified token and let the database enforce it (RLS, namespace or tenant index)",
+    "Store tenant-qualified ACLs on every chunk and filter by them inside the query",
+    "Sync ACL changes on events, red-team cross-tenant queries, and rehearse deleting a tenant"
+  ],
+  "pitfalls": [
+    "A tenant filter added by hand in app code is forgotten on one new endpoint",
+    "Group names such as “credit-ops” exist in many tenants, so an ACL check alone lets another client’s chunks through",
+    "A nightly ACL sync lets a revoked user read documents for up to a day"
+  ],
+  "tools": [
+    "Postgres row-level security + pgvector",
+    "Pinecone namespaces",
+    "Weaviate multi-tenancy",
+    "Qdrant is_tenant index",
+    "OpenFGA"
+  ],
+  "remember": "Tenant from the token, enforced by the database. ACLs in the query, synced on change.",
+  "caption": "Illustrative: LendStack, a fictional loan-servicing SaaS for 400 NBFC clients, with 2,400 access revocations a day.",
+  "comparison": {
+    "scope": "Database policy + query filter",
+    "cost": 3,
+    "needs": "Many tenants or users in one store",
+    "best": "Filters forgotten in app code; stale ACLs"
+  },
+  "diagram": {
+    "file": "diagrams/tenancy.svg"
+  },
+  "lesson": {
+    "file": "tenant_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import psycopg",
+        "steps": []
+      },
+      {
+        "text": "from pgvector.psycopg import register_vector",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "DDL = [",
+        "steps": []
+      },
+      {
+        "text": "    \"ALTER TABLE chunks ENABLE ROW LEVEL SECURITY\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"ALTER TABLE chunks FORCE ROW LEVEL SECURITY\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"\"\"CREATE POLICY tenant_only ON chunks",
+        "steps": []
+      },
+      {
+        "text": "       USING (tenant_id = current_setting('app.tenant_id'))\"\"\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"CREATE INDEX ON chunks USING gin (acl)\",   # acl text[]: allowed groups",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "]",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def search(user, query_vec, k=10):",
+        "steps": []
+      },
+      {
+        "text": "    with psycopg.connect(APP_DSN) as conn:      # app role: not the owner",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        register_vector(conn)",
+        "steps": []
+      },
+      {
+        "text": "        with conn.transaction():",
+        "steps": []
+      },
+      {
+        "text": "            conn.execute(\"SELECT set_config('app.tenant_id', %s, true)\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                         (user.tenant_id,))     # from the verified token",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            conn.execute(\"SET LOCAL hnsw.iterative_scan = relaxed_order\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            groups = [f\"{user.tenant_id}:{g}\" for g in user.groups]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            return conn.execute(",
+        "steps": []
+      },
+      {
+        "text": "                \"\"\"SELECT doc_id, body FROM chunks",
+        "steps": []
+      },
+      {
+        "text": "                   WHERE acl && %s::text[]",
+        "steps": []
+      },
+      {
+        "text": "                   ORDER BY embedding <=> %s LIMIT %s\"\"\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                (groups, query_vec, k)).fetchall()",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_acl_change(event):                # webhook from the source system",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    with psycopg.connect(SYNC_DSN) as conn, conn.transaction():",
+        "steps": []
+      },
+      {
+        "text": "        conn.execute(\"SELECT set_config('app.tenant_id', %s, true)\", (event.tenant_id,))",
+        "steps": []
+      },
+      {
+        "text": "        conn.execute(\"UPDATE chunks SET acl = %s WHERE doc_id = %s\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                     ([f\"{event.tenant_id}:{g}\" for g in event.groups], event.doc_id))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def offboard(tenant_id):                 # contract ended: erase the client",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    with psycopg.connect(ADMIN_DSN) as conn, conn.transaction():",
+        "steps": []
+      },
+      {
+        "text": "        n = conn.execute(\"DELETE FROM chunks WHERE tenant_id = %s\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                         (tenant_id,)).rowcount",
+        "steps": []
+      },
+      {
+        "text": "        audit_log(\"tenant_erased\", tenant_id=tenant_id, rows=n)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Put the tenant rule in the database",
+        "text": "LendStack keeps all 400 NBFC clients' chunks in one pgvector table, so a row-level security policy compares every row's tenant_id with the tenant set for the session. FORCE applies it to the table owner too, and the app connects as a separate role without BYPASSRLS. A query that forgets its WHERE clause still sees only one client."
+      },
+      {
+        "title": "Set the tenant from the token, per transaction",
+        "text": "The tenant comes from the verified login token, never from the request body or the model. set_config(…, true) is local to the transaction, so when the pooled connection is reused for the next request it no longer carries t042. With no tenant set, the policy matches no rows or raises an error: it fails closed."
+      },
+      {
+        "title": "Store tenant-qualified ACLs",
+        "text": "Each chunk carries the groups allowed to read it, copied from the source system. Priya is in pune-credit at t042, so her groups become t042:pune-credit. Another client also has a pune-credit group; without the prefix, an ACL check alone would let her match its chunks."
+      },
+      {
+        "title": "Check permission in the query",
+        "text": "acl && groups sits in the WHERE clause, so only chunks Priya may read are ranked and the top 10 is full. The iterative scan keeps walking the HNSW index when the filter removes candidates. Forbidden text never reaches the prompt, so no instruction to the model is needed to hide it."
+      },
+      {
+        "title": "Sync ACL changes on events",
+        "text": "When a branch manager removes someone in the source system, a webhook updates acl within about a minute. With a nightly sync the average stale window is 12 hours: 2,400 revocations a day × 0.05 queries an hour × 12 hours is about 1,440 exposures a day. Syncing on change brings that to about 2."
+      },
+      {
+        "title": "Erase a client on offboarding",
+        "text": "When a client leaves, delete its chunks by tenant, then its caches, backups past their retention and any copies in evaluation sets, and record the erasure in an audit log. Under India's DPDP Act, personal data must be erased once its purpose is served. A namespace or shard per tenant makes this a single drop instead of a large delete."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"8\" width=\"210\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"113\" y=\"24\" text-anchor=\"middle\">policy: tenant_id = app.tenant_id</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"226\" y=\"8\" width=\"126\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"289\" y=\"24\" text-anchor=\"middle\">app role ≠ owner</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"44\" width=\"150\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"83\" y=\"60\" text-anchor=\"middle\">token → t042</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M160 56L174 56\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"176\" y=\"44\" width=\"176\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"60\" text-anchor=\"middle\">set_config(…, true)</text></g><text class=\"sb a\" x=\"8\" y=\"84\" style=\"--d:0.3s\">local to this transaction: the pooled connection forgets it</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"96\" width=\"166\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"112\" text-anchor=\"middle\">t042:pune-credit</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"186\" y=\"96\" width=\"166\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"269\" y=\"112\" text-anchor=\"middle\">t117:pune-credit</text></g><text class=\"sb a\" x=\"8\" y=\"136\" style=\"--d:0.3s\">same group name, different client: prefix it</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"146\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"162\" text-anchor=\"middle\">WHERE acl && groups ORDER BY embedding <=> q</text></g><text class=\"sb a\" x=\"8\" y=\"186\" style=\"--d:0.2s\">only allowed chunks are ranked · top 10 stays full</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"196\" width=\"172\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"94\" y=\"212\" text-anchor=\"middle\">revoked 10:02 · webhook</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M182 208L194 208\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"196\" y=\"196\" width=\"156\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"212\" text-anchor=\"middle\">index 10:03</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"230\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"246\" text-anchor=\"middle\">offboard: DELETE WHERE tenant_id · audit log</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "The database, not each endpoint, enforces the tenant, so a forgotten filter cannot leak",
+      "Only allowed chunks are ranked, so pages stay full and the model never sees forbidden text",
+      "Namespaces or shards per tenant make offboarding and per-client limits simple",
+      "On-change ACL sync closes the gap between a revocation and the index"
+    ],
+    "cons": [
+      "Per-tenant namespaces or shards add operational work at hundreds of tenants",
+      "Row-level security and ACL filters add query latency that needs index tuning",
+      "ACL sync needs webhooks or change feeds from every source system",
+      "Shared indexes still share compute, so one busy tenant can slow the rest"
+    ],
+    "avoidWhen": [
+      "One customer and one permission level: a plain collection is enough",
+      "Documents that everyone in the organisation may read, such as a public help centre"
+    ],
+    "tools": [
+      {
+        "name": "Postgres RLS + pgvector",
+        "type": "Open source",
+        "what": "Row security policies enforce the tenant in every query, next to SQL ACL filters",
+        "url": "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+      },
+      {
+        "name": "Pinecone namespaces",
+        "type": "Commercial · managed",
+        "what": "One namespace per tenant in a serverless index; queries and deletes are scoped to it",
+        "url": "https://docs.pinecone.io/guides/index-data/implement-multitenancy"
+      },
+      {
+        "name": "Weaviate multi-tenancy",
+        "type": "Open source · managed cloud",
+        "what": "A shard per tenant inside a collection; tenants can be set inactive or offloaded",
+        "url": "https://docs.weaviate.io/weaviate/manage-collections/multi-tenancy"
+      },
+      {
+        "name": "Qdrant",
+        "type": "Open source · managed cloud",
+        "what": "One collection with an is_tenant payload index that stores each tenant’s vectors together",
+        "url": "https://qdrant.tech/documentation/guides/multitenancy/"
+      },
+      {
+        "name": "OpenFGA",
+        "type": "Open source (CNCF)",
+        "what": "Relationship-based permission checks for document ACLs",
+        "url": "https://openfga.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "LendStack, a fictional loan-servicing SaaS, serves 400 NBFC clients from one vector store. Loan officers search their own client’s loan files, KYC notes and policies, and the clients’ source systems revoke 2,400 user–document permissions a day. A red-team test fires 1,000 queries: 500 try to reach another client’s chunks and 500 try to reach documents the user’s groups may not open. One of ten search endpoints forgets the tenant filter, and group names such as pune-credit exist at many clients.",
+    "controls": [
+      "Choose the isolation model: a shared index with a tenant filter added in app code, a namespace per client, or Postgres row-level security.",
+      "Choose how often ACLs sync from the clients’ source systems: nightly, hourly or on change.",
+      "Choose where permission is checked: as a prompt instruction, in app code after retrieval, or in the query before ranking. Or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Leaks in the red-team test",
+        "meaning": "Chunks from another client, and forbidden documents within a client, that reached the user in 1,000 attack queries."
+      },
+      {
+        "name": "Stale-permission exposures",
+        "meaning": "Retrievals a day by users whose access was already revoked in the source system."
+      },
+      {
+        "name": "p95 retrieval latency",
+        "meaning": "The 95th-percentile search time, including noisy neighbours in a shared index and the cost of the permission check."
+      },
+      {
+        "name": "Ops cost",
+        "meaning": "Monthly cost of the store, the ACL sync and the permission check, in rupees."
+      },
+      {
+        "name": "Erase one client",
+        "meaning": "How long it takes to delete a departing client’s data."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "App filter, nightly sync, prompt rule",
+        "expect": "330 leaks (30 cross-tenant, 300 forbidden documents), 1,440 stale exposures a day, p95 70 ms, ₹4,00,000 a month."
+      },
+      {
+        "k": "after",
+        "name": "Hourly sync, check after retrieval",
+        "expect": "Forbidden-document leaks fall to 0 but 20 cross-tenant leaks remain; 60 stale exposures a day, p95 100 ms, ₹4,25,000 a month."
+      },
+      {
+        "k": "namespace",
+        "name": "Namespace per client, on-change sync",
+        "expect": "0 leaks, 2 stale exposures a day, p95 53 ms, ₹4,55,000 a month; erasing a client takes about 2 minutes."
+      },
+      {
+        "k": "rls",
+        "name": "Postgres RLS, on-change sync",
+        "expect": "0 leaks, 2 stale exposures a day, p95 103 ms, ₹4,05,000 a month; erasing a client takes about 40 minutes."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fast",
+        "text": "Get zero leaks of any kind with p95 latency of 60 ms or less.",
+        "hint": "Give each client its own namespace and check permission in the query."
+      },
+      {
+        "k": "fresh",
+        "text": "Get zero leaks and no more than 5 stale exposures a day for ₹4,10,000 a month or less.",
+        "hint": "Postgres row-level security, ACL sync on change and the check in the query."
+      },
+      {
+        "k": "groups",
+        "text": "Show that a working ACL check alone does not stop cross-tenant leaks.",
+        "hint": "Keep the tenant filter in app code, and move the permission check after retrieval or into the query."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Postgres RLS + pgvector",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "A row security policy applies the tenant to every query; ACL arrays and vectors sit in the same table.",
+        "ex": "A policy on tenant_id = current_setting('app.tenant_id'), set per transaction from the login token.",
+        "pros": [
+          "A forgotten WHERE clause cannot leak",
+          "Deletes, joins and audits in plain SQL"
+        ],
+        "cons": [
+          "Policy and filters add latency",
+          "One large table to tune and vacuum"
+        ],
+        "url": "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+      },
+      {
+        "n": "Pinecone namespaces",
+        "type": "Commercial · managed",
+        "start": 3,
+        "prod": 3,
+        "best": "One namespace per tenant in a serverless index; queries and deletes are scoped to it.",
+        "ex": "index.query(namespace=\"t042\", …) and index.delete(delete_all=True, namespace=\"t042\") on offboarding.",
+        "pros": [
+          "Physical separation per tenant",
+          "Near-instant tenant deletion"
+        ],
+        "cons": [
+          "Namespace comes from your code, so derive it from the token",
+          "Cross-tenant analytics need extra work"
+        ],
+        "url": "https://docs.pinecone.io/guides/index-data/implement-multitenancy"
+      },
+      {
+        "n": "Weaviate multi-tenancy",
+        "type": "Open source · managed cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "A shard per tenant inside one collection; idle tenants can be set inactive or offloaded.",
+        "ex": "A collection with multi-tenancy enabled, one tenant per NBFC client, inactive clients offloaded to cheap storage.",
+        "pros": [
+          "Strong isolation with one schema",
+          "Cost control for idle tenants"
+        ],
+        "cons": [
+          "Every request must name the tenant",
+          "Many tenants to monitor"
+        ],
+        "url": "https://docs.weaviate.io/weaviate/manage-collections/multi-tenancy"
+      },
+      {
+        "n": "Qdrant",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "One collection with an is_tenant payload index, so each tenant’s vectors are stored together and filtered fast.",
+        "ex": "A tenant_id keyword index with is_tenant=True and payload_m=16 for a graph per tenant.",
+        "pros": [
+          "Handles thousands of small tenants",
+          "Filter applied inside the search"
+        ],
+        "cons": [
+          "Isolation is a filter your code must add",
+          "Large tenants may need their own shard"
+        ],
+        "url": "https://qdrant.tech/documentation/guides/multitenancy/"
+      },
+      {
+        "n": "OpenFGA",
+        "type": "Open source (CNCF)",
+        "start": 2,
+        "prod": 3,
+        "best": "Relationship-based permission checks, such as which documents a user can view.",
+        "ex": "A model where a loan file is viewable by members of the branch group of the same client.",
+        "pros": [
+          "Rich sharing rules in one place",
+          "Can list the documents a user may see"
+        ],
+        "cons": [
+          "Another service to run and keep in sync",
+          "Large allowed lists do not fit in a vector filter"
+        ],
+        "url": "https://openfga.dev"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Hundreds of small clients in one store",
+        "tool": "Qdrant with an is_tenant index"
+      },
+      {
+        "need": "A few large or regulated clients",
+        "tool": "Pinecone namespaces or Weaviate tenants"
+      },
+      {
+        "need": "Already on Postgres",
+        "tool": "Row-level security with pgvector"
+      }
+    ],
+    "goals": [
+      "Choose an isolation model and explain how each handles leaks, noisy neighbours and offboarding",
+      "Explain why permissions must be enforced in the query, not in the prompt",
+      "Estimate stale-permission exposure from the ACL sync interval"
+    ]
+  },
+  "practice": {
+    "scenario": "LendStack, a fictional loan-servicing SaaS, runs one vector store for 400 NBFC clients. Every chunk carries its client's tenant id and the tenant-qualified groups allowed to read it, copied from the client's own document system. The tenant comes from the loan officer's verified login and is enforced by the database; the group filter runs inside the query; and a webhook updates permissions within a minute of a change. A red-team run of 1,000 cross-client and forbidden-document queries finds nothing, and a departing client's data is erased in one step.",
+    "industries": [
+      {
+        "industry": "Lending SaaS",
+        "use": "Hundreds of NBFC clients share one store; a loan officer sees only her client, and only her branch’s files"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "A hospital group’s assistant shows each doctor only the records of patients under their care"
+      },
+      {
+        "industry": "Enterprise search",
+        "use": "A company-wide assistant respects SharePoint and Google Drive sharing, synced on every change"
+      }
+    ],
+    "analogy": "A bank’s safe-deposit vault. Every customer shares the building, but each box has its own lock, the vault checks your key before it opens a box rather than asking you to promise not to look, and when you close your account the box is emptied the same day.",
+    "library": {
+      "name": "Qdrant",
+      "what": "One collection for all tenants with an is_tenant payload index, so each client’s vectors are stored together and searched with a tenant filter the database applies inside the search.",
+      "install": "pip install qdrant-client"
+    },
+    "note": "The embed() and verify_token() helpers are stubs for your own embedding model and authentication. is_tenant needs Qdrant 1.11 or later. The Pinecone example uses the serverless one-namespace-per-tenant pattern; check both SDKs’ docs for your versions.",
+    "samples": [
+      {
+        "file": "qdrant_tenants.py",
+        "language": "python",
+        "code": "from qdrant_client import QdrantClient, models\n\nclient = QdrantClient(url=\"http://localhost:6333\")\n\nclient.create_collection(\n    collection_name=\"loan_docs\",\n    vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),\n    hnsw_config=models.HnswConfigDiff(payload_m=16, m=0),   # a graph per tenant\n)\nclient.create_payload_index(\n    collection_name=\"loan_docs\",\n    field_name=\"tenant_id\",\n    field_schema=models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD,\n                                           is_tenant=True),\n)\nclient.create_payload_index(collection_name=\"loan_docs\", field_name=\"acl\",\n                            field_schema=models.PayloadSchemaType.KEYWORD)\n\ndef search(token: str, question: str, k: int = 10):\n    user = verify_token(token)                    # tenant comes from the token\n    groups = [f\"{user.tenant_id}:{g}\" for g in user.groups]\n    allowed = models.Filter(must=[\n        models.FieldCondition(key=\"tenant_id\",\n                              match=models.MatchValue(value=user.tenant_id)),\n        models.FieldCondition(key=\"acl\", match=models.MatchAny(any=groups)),\n    ])\n    hits = client.query_points(\"loan_docs\", query=embed(question),\n                               query_filter=allowed, limit=k)\n    return [p.payload[\"text\"] for p in hits.points]"
+      },
+      {
+        "file": "pinecone_offboard.py",
+        "language": "python",
+        "code": "from pinecone import Pinecone\n\npc = Pinecone(api_key=\"YOUR_API_KEY\")\nindex = pc.Index(\"loan-docs\")\n\ndef search(user, vector, k=10):\n    groups = [f\"{user.tenant_id}:{g}\" for g in user.groups]\n    return index.query(namespace=user.tenant_id, vector=vector, top_k=k,\n                       filter={\"acl\": {\"$in\": groups}}, include_metadata=True)\n\ndef offboard(tenant_id: str):\n    index.delete(delete_all=True, namespace=tenant_id)   # the whole client, at once\n    print(f\"erased namespace {tenant_id}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "LendStack’s clients revoke 2,400 user–document permissions a day. A revoked user queries each lost document about 0.05 times an hour, and with a nightly ACL sync the average stale window is 12 hours. How many stale-permission exposures happen a day?",
+    "answer": "2,400 × 0.05 × 12 = 1,440 exposures a day. An hourly sync (average window 0.5 hours) gives 60; syncing on change, within about a minute, gives about 2.",
+    "expected": {
+      "value": 1440,
+      "tolerance": 1,
+      "label": "exposures ="
+    },
+    "interview": [
+      {
+        "question": "How would you isolate tenants in a shared vector store?",
+        "answer": "Pick the model by tenant size and risk: a namespace, collection or shard per tenant for large or regulated clients, and a shared index with a tenant index such as Qdrant’s is_tenant for many small ones, or row-level security if the vectors live in Postgres. In every case the tenant comes from the verified token and is enforced below the application code, so one forgotten filter cannot leak. Red-team it with cross-tenant queries before launch."
+      },
+      {
+        "question": "Why not just tell the model which documents the user may see?",
+        "answer": "A prompt instruction is not a permission check. Once forbidden text is in the context, prompt injection or a cleverly worded question can extract it. Enforce ACLs inside the query, before ranking, so forbidden chunks never reach the model, and keep the ACLs fresh by syncing on change from the source system."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Checking permissions in the prompt or after the model answers",
+        "fix": "Filter by tenant-qualified ACLs inside the database query"
+      },
+      {
+        "mistake": "Syncing ACLs nightly",
+        "fix": "Sync revocations on change with webhooks or change feeds, and alert on sync lag"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tn01",
+      "kind": "single",
+      "industry": "Lending SaaS",
+      "question": "A loan-servicing SaaS keeps 400 NBFC clients in one vector index and adds \"tenant_id = X\" in each search endpoint. A new “similar loans” endpoint ships without it. What is the design flaw?",
+      "options": [
+        "The index type is wrong",
+        "Tenant isolation depends on every endpoint remembering a filter in app code",
+        "There are too many tenants for one index",
+        "The embeddings are too small"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Enforce the tenant below the app, with row-level security, a namespace per tenant or a single shared retrieval function, so one forgotten filter cannot leak."
+    },
+    {
+      "id": "tn02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s assistant is told in its system prompt: “Only use documents the user is allowed to see.” All retrieved chunks, allowed or not, go into the context. What is the risk?",
+      "options": [
+        "None, if the model is large enough",
+        "Prompt injection or a clever question can extract forbidden text already in the context",
+        "The answers become slower",
+        "The embeddings leak"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A prompt instruction is not a permission check. Filter forbidden chunks out in the query so they never reach the model."
+    },
+    {
+      "id": "tn03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should a multi-tenant search take the tenant id from?",
+      "options": [
+        "A tenant_id field in the JSON request body",
+        "The verified login token, set by the server for this request",
+        "The model’s guess from the question",
+        "A browser cookie the client can edit"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only the signed, verified token is trustworthy. Anything in the request can be changed by the caller."
+    },
+    {
+      "id": "tn04",
+      "kind": "single",
+      "industry": "Lending SaaS",
+      "question": "A loan officer at client t042 is in the group \"pune-credit\". Another client also has a \"pune-credit\" group. The search filters only on groups. What happens?",
+      "options": [
+        "Nothing: groups are unique",
+        "She can retrieve the other client’s chunks shared with its pune-credit group",
+        "The search returns nothing",
+        "The other client’s officers lose access"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Group names repeat across tenants. Filter on the tenant separately and prefix groups with it, for example t042:pune-credit."
+    },
+    {
+      "id": "tn05",
+      "kind": "single",
+      "industry": "HR tech",
+      "question": "An HR platform’s clients revoke 2,400 user–document permissions a day. A revoked user queries each lost document 0.05 times an hour. With an hourly ACL sync (average stale window 0.5 hours), how many stale exposures happen a day?",
+      "options": [
+        "1,440",
+        "120",
+        "60",
+        "6"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2,400 × 0.05 × 0.5 = 60 a day. A nightly sync (12-hour average) would give 1,440."
+    },
+    {
+      "id": "tn06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital network’s search fetches the top 10 chunks, then removes those the doctor may not see. Often only 3 remain. What is the better design?",
+      "options": [
+        "Ask the model to fill the gaps",
+        "Apply the permission filter inside the query so only allowed chunks are ranked",
+        "Fetch the top 5 instead",
+        "Turn off permissions for senior doctors"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Filtering after ranking leaves short pages. Filtering in the query ranks only allowed chunks and keeps the page full."
+    },
+    {
+      "id": "tn07",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Only 20% of a payments firm’s chunks are allowed for a typical support agent. If permissions are checked after retrieval, how many candidates must be fetched, on average, to end with 10 allowed ones?",
+      "options": [
+        "10",
+        "20",
+        "50",
+        "200"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "10 ÷ 0.2 = 50 candidates on average, and more for a safety margin. Filtering in the query avoids the oversampling."
+    },
+    {
+      "id": "tn08",
+      "kind": "multi",
+      "industry": "Lending SaaS",
+      "question": "Which are ways to isolate tenants in a vector store? Select all that apply.",
+      "options": [
+        "A Pinecone namespace per tenant",
+        "Postgres row-level security with pgvector",
+        "A system-prompt line naming the tenant",
+        "A Weaviate collection with multi-tenancy enabled, one tenant shard per client"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Namespaces, database policies and tenant shards enforce isolation in the data layer. A prompt line enforces nothing."
+    },
+    {
+      "id": "tn09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom SaaS uses Postgres row-level security and pooled connections. It sets the tenant with set_config('app.tenant_id', …, false). What can go wrong?",
+      "options": [
+        "Nothing",
+        "The setting persists on the pooled connection, so the next request may run as the previous tenant",
+        "The policy is ignored for SELECT",
+        "The vector index is rebuilt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With false the setting lasts for the whole session. Use true, which is local to the transaction, and set it on every request."
+    },
+    {
+      "id": "tn10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace SaaS has 5,000 small sellers, each with a few thousand chunks. Which Qdrant setup fits?",
+      "options": [
+        "One collection per seller",
+        "One collection with a tenant_id payload index marked is_tenant",
+        "One collection with no tenant field",
+        "A separate Qdrant server per seller"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Thousands of tiny tenants fit one collection with an is_tenant index, which stores each tenant’s vectors together; per-tenant collections add heavy overhead."
+    },
+    {
+      "id": "tn11",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A departing NBFC client asks LendStack to erase its data. Which isolation model makes this simplest?",
+      "options": [
+        "A shared index with a tenant filter",
+        "A namespace per tenant, deleted in one call",
+        "Keeping the data but hiding it in the prompt",
+        "Re-embedding the data with a new model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deleting a namespace or tenant shard removes the whole client at once. A shared index needs a large delete by filter and a check that nothing is left."
+    },
+    {
+      "id": "tn12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A client leaves and its data must be erased once the purpose is served, as India’s DPDP Act expects. What should the erasure cover? Select all that apply.",
+      "options": [
+        "Its chunks and vectors in the store",
+        "Cached answers and retrieval caches",
+        "Copies in evaluation or test sets",
+        "Other clients’ chunks that mention the same RBI circular"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Copies of the client’s text live in caches and test sets as well as the store. Other clients’ data is theirs and stays."
+    },
+    {
+      "id": "tn13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "One big tenant bulk re-indexes 3 million chunks during office hours, and every other tenant’s p95 latency doubles. What is this called?",
+      "options": [
+        "A cold start",
+        "A noisy neighbour",
+        "Index drift",
+        "A cache stampede"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Shared compute means one tenant’s load affects others. Rate limits per tenant, off-peak jobs or a dedicated shard for large tenants help."
+    },
+    {
+      "id": "tn14",
+      "kind": "single",
+      "industry": "Lending SaaS",
+      "question": "In a red-team test, 50 cross-tenant probes hit an endpoint missing the tenant filter. The ACL check lets 40% of foreign chunks through because group names repeat. How many cross-tenant leaks?",
+      "options": [
+        "0",
+        "20",
+        "30",
+        "50"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "50 × 0.4 = 20. The ACL check helps but is not a tenant boundary; enforce the tenant separately."
+    },
+    {
+      "id": "tn15",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital’s records system removes a nurse from a ward at 10:02. The vector store syncs ACLs nightly at 02:00. Until when can she still retrieve that ward’s notes?",
+      "options": [
+        "10:03 the same day",
+        "02:00 the next night",
+        "Never: it is instant",
+        "Until she logs out"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The index learns of the change only at the next sync. Syncing on change, by webhook, closes the gap to about a minute."
+    },
+    {
+      "id": "tn16",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which practices keep document permissions correct in a RAG system? Select all that apply.",
+      "options": [
+        "Copy ACLs from the source system onto every chunk",
+        "Sync ACL changes by webhook or change feed",
+        "Store groups prefixed with the tenant id",
+        "Let the model decide which documents look confidential"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Permissions come from the source system, stay fresh and are tenant-qualified. A model’s guess is not a permission."
+    },
+    {
+      "id": "tn17",
+      "kind": "single",
+      "industry": "Lending SaaS",
+      "question": "A namespace-per-client store has a base p95 of 45 ms, and the in-query ACL filter adds 8 ms. What is the p95?",
+      "options": [
+        "37 ms",
+        "45 ms",
+        "53 ms",
+        "360 ms"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "45 + 8 = 53 ms. Checking after retrieval would add about 30 ms instead, for the extra candidates."
+    },
+    {
+      "id": "tn18",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A broker’s research assistant serves 12 large institutional clients with strict contracts and very different load. Which isolation fits best?",
+      "options": [
+        "A shared index with a filter added in app code",
+        "A dedicated namespace, collection or shard per client",
+        "No isolation, since the research is similar",
+        "One index per user"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A few large, regulated clients justify dedicated partitions: stronger isolation, no noisy neighbours and easy erasure."
+    },
+    {
+      "id": "tn19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which query keeps a Postgres RLS tenant policy but still returns a full top 10 when the ACL filter removes many HNSW candidates?",
+      "options": [
+        "Lower LIMIT to 3",
+        "Enable pgvector’s iterative index scan (hnsw.iterative_scan)",
+        "Drop the ACL filter",
+        "Sort by id instead of distance"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Iterative index scans, added in pgvector 0.8, keep walking the index until enough rows pass the filter."
+    },
+    {
+      "id": "tn20",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A payments SaaS moves its permission check from a prompt instruction into the query. Which change in a 500-probe forbidden-document red-team test is expected? Select all that apply.",
+      "options": [
+        "Forbidden-document leaks drop to zero",
+        "The model never sees forbidden chunks",
+        "Stale-permission exposures from a nightly sync disappear",
+        "Cross-tenant leaks through an unfiltered endpoint necessarily disappear"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "In-query checks stop forbidden text reaching the model, but they are only as fresh as the ACL sync and are not a tenant boundary."
+    }
+  ]
+}

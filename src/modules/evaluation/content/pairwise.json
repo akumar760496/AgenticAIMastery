@@ -1,0 +1,818 @@
+{
+  "id": "pairwise",
+  "moduleSlug": "evaluation",
+  "name": "Pairwise Comparison and Statistical Significance",
+  "shortName": "Pairwise + significance",
+  "question": "Is version B really better, or is it noise?",
+  "summary": "When two versions of a prompt, model or agent are compared, the question is not “what score did B get” but “how often is B better than A on the same inputs, and could that be chance”. Pairwise comparison shows a judge (human or LLM) both answers to each question and asks which is better, in both orders to cancel position bias. The result is a win rate with a confidence interval; if the interval includes 50%, the data cannot tell the versions apart. Sample size sets the interval width, so it is chosen before running. Many versions can be ranked with a Bradley–Terry or Elo model fitted to pairwise results. Writing good rubrics and calibrating judges is covered by LLM-as-a-Judge; this technique is about comparing and deciding.",
+  "useCases": [
+    "Deciding whether to ship a new prompt, model or retrieval change",
+    "Ranking several candidate models on your own tasks",
+    "Reporting eval results with error bars instead of single numbers"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Win rate",
+        "detail": "share of paired questions where B beats A, ties counted as half"
+      },
+      {
+        "term": "Position bias",
+        "detail": "judges often favour the first or second slot; run both orders and count split verdicts as ties"
+      },
+      {
+        "term": "95% interval",
+        "detail": "about ±1.96 × √(p(1−p)/n); about ±3.5 points at n=800 and ±7 at n=200"
+      },
+      {
+        "term": "Significance",
+        "detail": "ship only if the lower bound is above 50%, or a paired test gives p below your threshold"
+      },
+      {
+        "term": "Sample size",
+        "detail": "decide in advance from the smallest gain worth detecting"
+      },
+      {
+        "term": "Bradley–Terry / Elo",
+        "detail": "turn many pairwise results into a ranking with uncertainty"
+      }
+    ]
+  },
+  "steps": [
+    "Fix the question set and the smallest improvement worth shipping",
+    "Generate answers from A and B on the same questions",
+    "Judge each pair in both orders; count split verdicts as ties",
+    "Report the win rate with a 95% interval and ship only if it clears 50%"
+  ],
+  "pitfalls": [
+    "Showing B always in the same slot, so position bias decides the result",
+    "Peeking at results and stopping as soon as B looks ahead",
+    "Comparing two separate average scores instead of paired outcomes on the same questions"
+  ],
+  "tools": [
+    "SciPy (binomtest, bootstrap)",
+    "statsmodels",
+    "Chatbot Arena methodology",
+    "LangSmith pairwise experiments",
+    "Promptfoo"
+  ],
+  "remember": "Same questions, both orders, a win rate with an interval; ship only if it clears 50%.",
+  "caption": "Illustrative: Kaveri Bank, a fictional bank, compares a new prompt for its loan-query assistant against the current one.",
+  "comparison": {
+    "scope": "Two versions on the same inputs",
+    "cost": 2,
+    "needs": "Paired outputs + a judge",
+    "best": "Ship or hold decisions"
+  },
+  "diagram": {
+    "file": "diagrams/pairwise.svg"
+  },
+  "lesson": {
+    "file": "pairwise_ab.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import math",
+        "steps": []
+      },
+      {
+        "text": "from scipy.stats import binomtest",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "qs = load_questions(\"loan_queries_800.jsonl\")        # fixed before running",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "A = [current_bot(q) for q in qs]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "B = [new_prompt_bot(q) for q in qs]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def verdict(q, a, b):",
+        "steps": []
+      },
+      {
+        "text": "    first = judge(q, a, b)            # \"1\" or \"2\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    second = judge(q, b, a)           # same pair, swapped",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if first == \"2\" and second == \"1\": return 1.0      # B wins both",
+        "steps": []
+      },
+      {
+        "text": "    if first == \"1\" and second == \"2\": return 0.0      # A wins both",
+        "steps": []
+      },
+      {
+        "text": "    return 0.5                                          # split: a tie",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "scores = [verdict(q, a, b) for q, a, b in zip(qs, A, B)]",
+        "steps": []
+      },
+      {
+        "text": "p = sum(scores) / len(scores)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "half = 1.96 * math.sqrt(p * (1 - p) / len(scores))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "print(f\"B win rate {p:.0%}, 95% CI [{p-half:.1%}, {p+half:.1%}]\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "wins = sum(s == 1.0 for s in scores); losses = sum(s == 0.0 for s in scores)",
+        "steps": []
+      },
+      {
+        "text": "print(binomtest(wins, wins + losses, 0.5).pvalue)     # sign test, ties out",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Fix the question set first",
+        "text": "Kaveri Bank, a fictional bank, samples 800 real loan queries before looking at any results, so it cannot pick questions that flatter the new prompt."
+      },
+      {
+        "title": "Answer the same questions",
+        "text": "Both versions answer every question. Paired answers remove the difference in difficulty between questions."
+      },
+      {
+        "title": "Judge in both orders",
+        "text": "Its judge prefers the first slot by about 10 points. Each pair is judged as A,B and as B,A; if the verdicts disagree, the pair is a tie."
+      },
+      {
+        "title": "Compute the win rate",
+        "text": "B wins 56% of pairs, ties counted as half."
+      },
+      {
+        "title": "Add the interval",
+        "text": "±1.96 × √(0.56 × 0.44 ÷ 800) ≈ ±3.4 points, so 53% to 59%. The whole interval is above 50%: ship."
+      },
+      {
+        "title": "Check with a paired test",
+        "text": "A sign test on decisive pairs gives the same answer. With only 200 questions, the interval would be 49% to 63% and the right call would be “not proven”."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">800 questions, fixed in advance</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">A: current</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">B: new prompt</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"87\" text-anchor=\"middle\">A,B → 2</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"124\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"87\" text-anchor=\"middle\">B,A → 1</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"240\" y=\"72\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"87\" text-anchor=\"middle\">B wins</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"117\" text-anchor=\"middle\">win rate 56%</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"132\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"148\" text-anchor=\"middle\">95% CI 53–59% · above 50% → ship</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"164\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"180\" text-anchor=\"middle\">n=200 would give 49–63% → not proven</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Relative judgments are more reliable than absolute scores",
+      "Pairing on the same questions removes difficulty noise",
+      "Intervals show when data cannot decide",
+      "Scales to ranking many versions with Bradley–Terry"
+    ],
+    "cons": [
+      "Two judge calls per pair when swapping orders",
+      "Needs enough questions for a narrow interval",
+      "Says which is better, not whether either is good enough",
+      "Ties and judge inconsistency need a rule"
+    ],
+    "avoidWhen": [
+      "A version fails a hard requirement: fix that first, no comparison needed",
+      "Tiny question sets where any interval spans 50%"
+    ],
+    "tools": [
+      {
+        "name": "SciPy",
+        "type": "Open source",
+        "what": "binomtest for sign tests and bootstrap for intervals",
+        "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binomtest.html"
+      },
+      {
+        "name": "statsmodels",
+        "type": "Open source",
+        "what": "Proportion intervals, McNemar and power calculations",
+        "url": "https://www.statsmodels.org"
+      },
+      {
+        "name": "LangSmith",
+        "type": "LangChain",
+        "what": "Pairwise experiments over a dataset with an LLM judge",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Promptfoo",
+        "type": "Open source",
+        "what": "Side-by-side prompt comparisons with assertions",
+        "url": "https://www.promptfoo.dev"
+      },
+      {
+        "name": "FastChat / Chatbot Arena",
+        "type": "Open source · LMSYS",
+        "what": "Pairwise judging and Bradley–Terry ranking code",
+        "url": "https://github.com/lm-sys/FastChat"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kaveri Bank, a fictional bank, compares a new prompt (B) for its loan assistant with the current one (A). B is truly better and wins 56% of the time. The LLM judge favours the first slot by about 10 points; each judge call costs ₹0.60.",
+    "controls": [
+      "Set how many questions are compared: 50, 200 or 800.",
+      "Judge each pair in both orders, or always show B second.",
+      "Choose the ship rule: win rate above 50%, or the whole 95% interval above 50%."
+    ],
+    "outputs": [
+      {
+        "name": "Measured win rate",
+        "meaning": "Share of pairs B wins, ties as half."
+      },
+      {
+        "name": "95% interval",
+        "meaning": "Range the true win rate is likely in."
+      },
+      {
+        "name": "Decision",
+        "meaning": "Ship B or keep A under the chosen rule."
+      },
+      {
+        "name": "Judge cost",
+        "meaning": "₹ for all judge calls."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "50 questions, both orders",
+        "expect": "Win rate 56%, interval 42% to 70%, ships by luck, ₹60."
+      },
+      {
+        "k": "noswap",
+        "name": "200 questions, B always second",
+        "expect": "Measured 46%, keeps A: the wrong call. ₹120."
+      },
+      {
+        "k": "ci200",
+        "name": "200 questions, interval rule",
+        "expect": "Interval 49% to 63%: not proven, keeps A. ₹240."
+      },
+      {
+        "k": "n800",
+        "name": "800 questions, interval rule",
+        "expect": "Interval 53% to 59%: ships B. ₹960."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Ship B using the interval rule, with both orders, for ₹1,000 or less.",
+        "hint": "More questions narrow the interval."
+      },
+      {
+        "k": "bias",
+        "text": "Show position bias reversing the result.",
+        "hint": "Always show B second."
+      },
+      {
+        "k": "narrow",
+        "text": "Get the interval to ±4 points or less.",
+        "hint": "The width shrinks with the square root of n."
+      }
+    ],
+    "tools": [
+      {
+        "n": "SciPy",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Sign tests and exact intervals.",
+        "ex": "binomtest on decisive pairs.",
+        "pros": [
+          "Standard and exact",
+          "One line"
+        ],
+        "cons": [
+          "You build the pipeline"
+        ],
+        "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binomtest.html"
+      },
+      {
+        "n": "statsmodels",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Power calculations and McNemar tests.",
+        "ex": "How many questions to detect a 5-point gain?",
+        "pros": [
+          "Many tests",
+          "Power analysis"
+        ],
+        "cons": [
+          "Steeper API"
+        ],
+        "url": "https://www.statsmodels.org"
+      },
+      {
+        "n": "LangSmith",
+        "type": "LangChain",
+        "start": 3,
+        "prod": 2,
+        "best": "Pairwise experiments on a stored dataset.",
+        "ex": "Compare two prompt versions with an LLM judge.",
+        "pros": [
+          "UI for review",
+          "Keeps history"
+        ],
+        "cons": [
+          "Hosted service"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "FastChat / Chatbot Arena code",
+        "type": "Open source · LMSYS",
+        "start": 2,
+        "prod": 2,
+        "best": "Bradley–Terry ranking of many models.",
+        "ex": "Rank six candidate models from pairwise votes.",
+        "pros": [
+          "Proven method",
+          "Uncertainty estimates"
+        ],
+        "cons": [
+          "Research code"
+        ],
+        "url": "https://github.com/lm-sys/FastChat"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Two versions, quick decision",
+        "tool": "Pairwise with both orders + binomtest"
+      },
+      {
+        "need": "How many questions?",
+        "tool": "statsmodels power analysis"
+      },
+      {
+        "need": "Many versions",
+        "tool": "Bradley–Terry ranking"
+      }
+    ],
+    "goals": [
+      "Run a pairwise comparison that cancels position bias",
+      "Report a win rate with a 95% interval",
+      "Choose a sample size before running"
+    ]
+  },
+  "practice": {
+    "scenario": "Kaveri Bank, a fictional bank, has a new prompt for its loan-query assistant. On 50 questions it looked better, but the interval ran from 42% to 70%. It fixes 800 real queries in advance, answers each with both versions, and has an LLM judge compare every pair in both orders, because the judge favours the first slot. B wins 56% of pairs with a 95% interval of 53% to 59%, entirely above 50%, so the bank ships it. Judging cost ₹960.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Choosing between prompts for a customer assistant"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Comparing two ranking or recommendation models on the same queries"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Checking a new summariser against the current one with clinician judges"
+      }
+    ],
+    "analogy": "A blind taste test where every taster tries both cups, in both orders, and you count how many prefer the new recipe, rather than asking each taster to score one cup out of ten.",
+    "library": {
+      "name": "SciPy",
+      "what": "binomtest gives an exact sign test and a confidence interval for the win rate.",
+      "install": "pip install scipy"
+    },
+    "note": "Store verdicts from both orders so you can measure how often the judge disagrees with itself; a high split rate means the rubric or the judge needs work.",
+    "samples": [
+      {
+        "file": "win_rate.py",
+        "language": "python",
+        "code": "import json\nfrom scipy.stats import binomtest\n\nrows = [json.loads(l) for l in open(\"verdicts.jsonl\")]   # {\"ab\": \"2\", \"ba\": \"1\"} per pair\nwins = sum(r[\"ab\"] == \"2\" and r[\"ba\"] == \"1\" for r in rows)\nlosses = sum(r[\"ab\"] == \"1\" and r[\"ba\"] == \"2\" for r in rows)\nties = len(rows) - wins - losses\n\nwin_rate = (wins + 0.5 * ties) / len(rows)\ntest = binomtest(wins, wins + losses, 0.5)\nci = test.proportion_ci(confidence_level=0.95)\nprint(f\"win rate {win_rate:.1%}; ties {ties}; decisive-pair CI {ci.low:.1%}-{ci.high:.1%}; p={test.pvalue:.4f}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "B wins 56% of 800 paired comparisons. What is the half-width of the 95% interval, in percentage points, using 1.96 × √(p(1−p)/n)?",
+    "answer": "√(0.56 × 0.44 ÷ 800) = √0.000308 ≈ 0.01755; × 1.96 ≈ 0.0344, about 3.4 points. The interval is roughly 52.6% to 59.4%, above 50%.",
+    "expected": {
+      "value": 3.4,
+      "tolerance": 0.2,
+      "label": "points ="
+    },
+    "interview": [
+      {
+        "question": "How do you decide whether a new prompt is better?",
+        "answer": "Run both on the same fixed question set, judge each pair in both orders, compute B’s win rate with a 95% interval, and ship only if the interval is above 50%. Choose the sample size beforehand from the smallest gain worth detecting."
+      },
+      {
+        "question": "Why judge both orders?",
+        "answer": "LLM judges have position bias. Swapping the order and treating split verdicts as ties cancels the bias; the split rate also shows how consistent the judge is."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Stopping when B first looks ahead",
+        "fix": "Fix n in advance and run to the end"
+      },
+      {
+        "mistake": "Comparing two separate averages",
+        "fix": "Use paired results on the same questions"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pw01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a pairwise judge decide?",
+      "options": [
+        "An absolute score out of 10",
+        "Which of two answers to the same question is better",
+        "Whether the question is valid",
+        "The latency"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A relative judgment."
+    },
+    {
+      "id": "pw02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why judge each pair in both orders?",
+      "options": [
+        "To cancel position bias",
+        "To save money",
+        "To double recall",
+        "Required by SEBI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Split verdicts become ties."
+    },
+    {
+      "id": "pw03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "B wins 400, loses 304, ties 96 of 800. Win rate with ties as half?",
+      "options": [
+        "50%",
+        "53%",
+        "56%",
+        "60%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "(400 + 48) ÷ 800."
+    },
+    {
+      "id": "pw04",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "The 95% interval is 49% to 63%. What can you conclude?",
+      "options": [
+        "B is better",
+        "A is better",
+        "The data cannot tell them apart yet",
+        "B is 63% better"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "It includes 50%."
+    },
+    {
+      "id": "pw05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Half-width at p = 0.5, n = 400 (1.96 × √(0.25/n))?",
+      "options": [
+        "about 2.5 points",
+        "about 4.9 points",
+        "about 9.8 points",
+        "about 1 point"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "√(0.25/400) = 0.025; × 1.96 = 0.049."
+    },
+    {
+      "id": "pw06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "To halve the interval width you need about?",
+      "options": [
+        "2× the questions",
+        "4× the questions",
+        "Half the questions",
+        "10× the questions"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Width scales with 1/√n."
+    },
+    {
+      "id": "pw07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which practices make a comparison trustworthy? Select all that apply.",
+      "options": [
+        "Fixing the question set in advance",
+        "Judging both orders",
+        "Stopping as soon as B is ahead",
+        "Reporting an interval"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Early stopping inflates false wins."
+    },
+    {
+      "id": "pw08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The judge always sees B second and favours slot 1. Effect?",
+      "options": [
+        "B’s gain is hidden or reversed",
+        "No effect",
+        "B looks better",
+        "Costs fall"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Bias counts against B."
+    },
+    {
+      "id": "pw09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "800 pairs judged in both orders at ₹0.60 a call cost?",
+      "options": [
+        "₹480",
+        "₹960",
+        "₹1,920",
+        "₹600"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,600 calls × ₹0.60."
+    },
+    {
+      "id": "pw10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which test fits paired win/loss counts with ties removed?",
+      "options": [
+        "Sign (binomial) test",
+        "t-test on raw text",
+        "Chi-square on tokens",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Wins versus losses against 50%."
+    },
+    {
+      "id": "pw11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "How are many versions ranked from pairwise votes?",
+      "options": [
+        "Bradley–Terry or Elo",
+        "Alphabetically",
+        "By cost",
+        "By latency"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pairwise strength model."
+    },
+    {
+      "id": "pw12",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why are paired comparisons more precise than two separate averages?",
+      "options": [
+        "They remove question-difficulty variation",
+        "They use more tokens",
+        "They ignore ties",
+        "They are always larger"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Each question is its own control."
+    },
+    {
+      "id": "pw13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A judge splits on 30% of pairs. What does that suggest?",
+      "options": [
+        "The judge or rubric is inconsistent",
+        "B is perfect",
+        "Nothing",
+        "Costs are too low"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Improve the rubric or judge."
+    },
+    {
+      "id": "pw14",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which belong in an eval report for a ship decision? Select all that apply.",
+      "options": [
+        "Win rate",
+        "95% interval",
+        "Number of questions",
+        "Only the best example"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Cherry-picked examples are not evidence."
+    },
+    {
+      "id": "pw15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A 0.3-point gain on a 10-point scale over 50 questions is?",
+      "options": [
+        "Proof of improvement",
+        "Likely within noise; needs an interval",
+        "A regression",
+        "Always significant"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Small n, small difference."
+    },
+    {
+      "id": "pw16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Interval 53% to 59% on 800 questions. Decision?",
+      "options": [
+        "Ship B",
+        "Keep A",
+        "Not proven",
+        "Need 10,000 more"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Entirely above 50%."
+    },
+    {
+      "id": "pw17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which technique covers writing the judge’s rubric?",
+      "options": [
+        "LLM-as-a-Judge",
+        "Vector compression",
+        "Caching",
+        "Sharding"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one covers comparing and deciding."
+    },
+    {
+      "id": "pw18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Minimum gain worth shipping is 5 points; current win-rate interval is ±7. What next?",
+      "options": [
+        "Ship anyway",
+        "Increase the sample size",
+        "Remove ties",
+        "Stop evaluating"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Make the interval narrower than the gain."
+    },
+    {
+      "id": "pw19",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which are common LLM judge biases? Select all that apply.",
+      "options": [
+        "Position bias",
+        "Verbosity bias",
+        "Self-preference",
+        "Exact arithmetic"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Arithmetic is not a bias."
+    },
+    {
+      "id": "pw20",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Win rate 46% with B always second, 56% with both orders. The difference comes from?",
+      "options": [
+        "Position bias",
+        "Sampling noise only",
+        "Cost",
+        "Tokeniser"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The judge’s slot preference."
+    }
+  ]
+}

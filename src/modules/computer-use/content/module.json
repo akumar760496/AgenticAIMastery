@@ -1,0 +1,268 @@
+{
+  "slug": "computer-use",
+  "number": 17,
+  "techniqueOrder": [
+    "gui",
+    "browser",
+    "voice",
+    "multimodal",
+    "actsafe",
+    "agenteval",
+    "indicspeech",
+    "telephony"
+  ],
+  "glossary": [
+    {
+      "term": "computer use",
+      "definition": "A model controlling a computer through screenshots and mouse and keyboard actions."
+    },
+    {
+      "term": "grounding",
+      "definition": "Mapping an instruction to the right element or coordinates on screen."
+    },
+    {
+      "term": "accessibility tree",
+      "definition": "A structured view of a page’s elements with roles, names and states, used by assistive technology."
+    },
+    {
+      "term": "aria snapshot",
+      "definition": "Playwright’s compact text view of the accessibility tree for part of a page."
+    },
+    {
+      "term": "cascaded voice pipeline",
+      "definition": "Speech-to-text, then an LLM, then text-to-speech, each streaming."
+    },
+    {
+      "term": "speech-to-speech model",
+      "definition": "A model that takes audio in and produces audio out directly."
+    },
+    {
+      "term": "turn detection",
+      "definition": "Deciding when the caller has finished speaking; also called endpointing."
+    },
+    {
+      "term": "barge-in",
+      "definition": "The caller interrupting while the agent is speaking, and the agent stopping to listen."
+    },
+    {
+      "term": "WER",
+      "definition": "Word error rate: the share of words a speech recogniser gets wrong."
+    },
+    {
+      "term": "code-mixing",
+      "definition": "Switching between languages within a sentence, such as Hindi and English."
+    },
+    {
+      "term": "OCR",
+      "definition": "Optical character recognition: turning images of text into text."
+    },
+    {
+      "term": "allowlist",
+      "definition": "The only domains or actions an agent is permitted to use."
+    },
+    {
+      "term": "OSWorld",
+      "definition": "A benchmark of real desktop and web tasks in virtual machines with scripted success checks."
+    },
+    {
+      "term": "WebArena",
+      "definition": "A benchmark of 812 web tasks on self-hosted sites such as shops, forums and GitLab."
+    },
+    {
+      "term": "pass^k",
+      "definition": "The share of tasks an agent passes on all of k repeated runs; a measure of reliability."
+    },
+    {
+      "term": "language identification (LID)",
+      "definition": "Detecting which language is being spoken, ideally on every turn, so the right recogniser and reply language are used."
+    },
+    {
+      "term": "inverse text normalisation",
+      "definition": "Turning spoken forms into written ones, such as “saadhe teen hazaar” into ₹3,500 or “double nine” into 99."
+    },
+    {
+      "term": "custom vocabulary",
+      "definition": "Phrase hints or a trained lexicon that make a recogniser prefer domain words such as plan names and policy terms."
+    },
+    {
+      "term": "narrowband audio",
+      "definition": "Telephone audio sampled at 8 kHz, which carries sound only up to about 4 kHz and loses detail that wideband models rely on."
+    },
+    {
+      "term": "SIP trunk",
+      "definition": "A connection carrying phone calls over the internet between a telephony provider and your systems."
+    },
+    {
+      "term": "DTMF",
+      "definition": "Keypad tones pressed during a call, used for menus and entering numbers."
+    },
+    {
+      "term": "warm transfer",
+      "definition": "Handing a call to a person together with a summary of the conversation."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Xie et al.: OSWorld, benchmarking multimodal agents in real computer environments (2024)",
+      "url": "https://arxiv.org/abs/2404.07972"
+    },
+    {
+      "id": "S2",
+      "title": "BenchLM: OSWorld-Verified scoreboard (Sep 2026)",
+      "url": "https://benchlm.ai/benchmarks/osworld-verified"
+    },
+    {
+      "id": "S3",
+      "title": "Zhou et al.: WebArena, a realistic web environment for building autonomous agents (2023)",
+      "url": "https://arxiv.org/abs/2307.13854"
+    },
+    {
+      "id": "S4",
+      "title": "Steel.dev: WebArena scoreboard (2026)",
+      "url": "https://steel.dev/"
+    },
+    {
+      "id": "S5",
+      "title": "Deng et al.: Mind2Web, towards a generalist agent for the web (2023)",
+      "url": "https://arxiv.org/abs/2306.06070"
+    },
+    {
+      "id": "S6",
+      "title": "Yao et al.: τ-bench and the pass^k reliability metric (2024)",
+      "url": "https://arxiv.org/abs/2406.12045"
+    },
+    {
+      "id": "S7",
+      "title": "Anthropic: computer use tool documentation",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool"
+    },
+    {
+      "id": "S8",
+      "title": "Playwright: ARIA snapshots",
+      "url": "https://playwright.dev/docs/aria-snapshots"
+    },
+    {
+      "id": "S9",
+      "title": "The Prompt Bench: latency budgets for realtime voice",
+      "url": "https://thepromptbench.com/voice-and-realtime/latency-budgets-for-realtime-voice/"
+    },
+    {
+      "id": "S10",
+      "title": "Voice of India: a large-scale benchmark for real-world speech recognition in India (2026)",
+      "url": "https://arxiv.org/abs/2604.19151"
+    },
+    {
+      "id": "S11",
+      "title": "Sarvam AI launches Saaras V4 speech model (Sep 2026)",
+      "url": "https://freepresskashmir.news/2026/09/25/sarvam-ai-launches-saaras-v4-speech-model-supporting-22-indian-languages/"
+    },
+    {
+      "id": "S12",
+      "title": "LiveKit Agents documentation",
+      "url": "https://docs.livekit.io/agents/"
+    },
+    {
+      "id": "S13",
+      "title": "OWASP Top 10 for LLM Applications",
+      "url": "https://genai.owasp.org"
+    },
+    {
+      "id": "S14",
+      "title": "Cheng et al.: SeeClick and ScreenSpot, GUI grounding (2024)",
+      "url": "https://arxiv.org/abs/2401.10935"
+    },
+    {
+      "id": "S15",
+      "title": "Pipecat documentation",
+      "url": "https://docs.pipecat.ai"
+    },
+    {
+      "id": "S16",
+      "title": "Javed et al.: IndicVoices, towards building an inclusive multilingual speech dataset for Indian languages (2024)",
+      "url": "https://arxiv.org/abs/2403.01926"
+    },
+    {
+      "id": "S17",
+      "title": "Bhogale et al.: Vistaar, diverse benchmarks and training sets for Indian language ASR (2023)",
+      "url": "https://arxiv.org/abs/2305.15386"
+    },
+    {
+      "id": "S18",
+      "title": "jiwer: word and character error rate in Python",
+      "url": "https://github.com/jitsi/jiwer"
+    },
+    {
+      "id": "S19",
+      "title": "Google Cloud Speech-to-Text: supported languages",
+      "url": "https://cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages"
+    },
+    {
+      "id": "S20",
+      "title": "Microsoft Azure AI Speech: language and voice support",
+      "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support"
+    },
+    {
+      "id": "S21",
+      "title": "Bhashini: National Language Translation Mission",
+      "url": "https://bhashini.gov.in"
+    },
+    {
+      "id": "S22",
+      "title": "Twilio: Media Streams",
+      "url": "https://www.twilio.com/docs/voice/media-streams"
+    },
+    {
+      "id": "S23",
+      "title": "LiveKit: SIP telephony for voice agents",
+      "url": "https://docs.livekit.io/sip/"
+    },
+    {
+      "id": "S24",
+      "title": "TRAI: Telecom Commercial Communications Customer Preference Regulations",
+      "url": "https://www.trai.gov.in"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "A back-office app has no API and staff re-key data all day",
+      "techniqueId": "gui",
+      "advice": "A computer-use agent in a VM with verification after each step, until an API exists."
+    },
+    {
+      "symptom": "The agent must collect notices from regulator and exchange websites",
+      "techniqueId": "browser",
+      "advice": "A controlled browser observed through the accessibility tree, with fixed steps scripted."
+    },
+    {
+      "symptom": "We want a Hindi and Hinglish helpline agent",
+      "techniqueId": "voice",
+      "advice": "A streaming voice stack under ~800 ms, with speech models tested on real calls and a human fallback."
+    },
+    {
+      "symptom": "Customers send phone photos of documents and receipts",
+      "techniqueId": "multimodal",
+      "advice": "Preprocess, read with a vision model, cross-check key fields, route disagreements to people."
+    },
+    {
+      "symptom": "The agent will click buttons that move money",
+      "techniqueId": "actsafe",
+      "advice": "Sandbox, allowlist, vault credentials, injection screening and human confirmation."
+    },
+    {
+      "symptom": "A vendor quotes a high OSWorld score",
+      "techniqueId": "agenteval",
+      "advice": "Test on your own tasks in staging, with repeated runs and adversarial pages."
+    },
+    {
+      "symptom": "Callers speak Hindi, Tamil, Bengali and Hinglish, and amounts come out wrong",
+      "techniqueId": "indicspeech",
+      "advice": "Test speech models on your own 8 kHz calls per language, identify the language per turn, add custom vocabulary and amount normalisation, and read amounts back."
+    },
+    {
+      "symptom": "A voice agent works in the browser but not yet on real phone lines",
+      "techniqueId": "telephony",
+      "advice": "Connect through a telephony provider’s media stream near callers, add call control and warm transfer, and follow telecom rules."
+    }
+  ]
+}

@@ -1,0 +1,870 @@
+{
+  "id": "schema",
+  "moduleSlug": "prompting",
+  "name": "JSON Schema and Constrained Decoding",
+  "shortName": "Structured outputs",
+  "question": "Can I trust the shape of the output?",
+  "summary": "Asking for “JSON only” in the prompt still fails some of the time. JSON mode guarantees valid JSON but not your fields. Strict structured outputs go further: the decoder only allows tokens that keep the output valid against your JSON Schema, so the shape is guaranteed within the schema features the provider supports. The shape is not the truth: values can still be wrong, and some constraints, such as numeric ranges, must still be checked in code.",
+  "useCases": [
+    "Any output that feeds code, a database or another tool",
+    "Extraction from documents into fixed fields",
+    "Tool arguments that must match a schema exactly"
+  ],
+  "keyFacts": {
+    "label": "Modes and limits",
+    "items": [
+      {
+        "term": "Prompt-only",
+        "detail": "“return JSON” in the prompt; occasional parse and field errors"
+      },
+      {
+        "term": "JSON mode",
+        "detail": "always parseable JSON; fields and types not enforced"
+      },
+      {
+        "term": "Strict schema",
+        "detail": "Anthropic output_config.format, OpenAI strict json_schema, strict tool use"
+      },
+      {
+        "term": "OpenAI strict rules",
+        "detail": "additionalProperties false; every field required; optional fields allow null"
+      },
+      {
+        "term": "Unsupported keywords",
+        "detail": "e.g. Anthropic: minimum, maximum, lengths and most regex patterns; validate these in code"
+      },
+      {
+        "term": "Local models",
+        "detail": "constrained decoding with Outlines, XGrammar, llama.cpp grammars or vLLM structured outputs"
+      }
+    ]
+  },
+  "steps": [
+    "Define the output as a Pydantic model or JSON Schema",
+    "Use the provider’s strict structured-output mode or strict tools",
+    "Put a reasoning field before the answer fields when the task needs thought",
+    "Still validate values and business rules in code"
+  ],
+  "pitfalls": [
+    "Assuming a valid shape means correct values",
+    "Schemas so rigid that the model has no room to reason first",
+    "Relying on schema keywords the provider silently drops"
+  ],
+  "tools": [
+    "Anthropic structured outputs",
+    "OpenAI Structured Outputs",
+    "Pydantic",
+    "Outlines",
+    "XGrammar",
+    "vLLM structured outputs"
+  ],
+  "remember": "The schema guarantees the shape, not the truth.",
+  "caption": "Illustrative: share of outputs matching an invoice schema under three modes.",
+  "comparison": {
+    "scope": "Broken or missing fields",
+    "cost": 1,
+    "needs": "A schema and a supporting API",
+    "best": "Mistaking valid for correct"
+  },
+  "diagram": {
+    "file": "diagrams/schema.svg"
+  },
+  "lesson": {
+    "file": "extract_invoice.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from anthropic import Anthropic",
+        "steps": []
+      },
+      {
+        "text": "from pydantic import BaseModel, Field",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class LineItem(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    description: str",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    amount_inr: float",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Invoice(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    reasoning: str = Field(description=\"Where each total came from\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    gstin: str = Field(description=\"15-character GSTIN of the vendor\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    invoice_date: str = Field(description=\"ISO date, YYYY-MM-DD\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    items: list[LineItem]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    total_inr: float",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client = Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def extract(text: str) -> Invoice:",
+        "steps": []
+      },
+      {
+        "text": "    r = client.messages.parse(model=\"claude-sonnet-4-5-20250929\", max_tokens=1500,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": f\"<invoice>{text}</invoice>\"}],",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        output_format=Invoice)                  # strict JSON schema",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if r.stop_reason == \"max_tokens\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        raise RuntimeError(\"output truncated; raise max_tokens\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    inv = r.parsed_output",
+        "steps": []
+      },
+      {
+        "text": "    check_business_rules(inv)                   # shape is not truth",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return inv",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define the output as a model",
+        "text": "A Pydantic model describes the fields and types. The SDK turns it into a JSON Schema for the API."
+      },
+      {
+        "title": "Describe fields, don’t rely on keywords",
+        "text": "Constraints such as “15 characters” or date formats go in descriptions. Some schema keywords, like lengths and ranges, are not enforced and may be moved into descriptions by the SDK."
+      },
+      {
+        "title": "Let it reason first",
+        "text": "A reasoning field before the numbers gives the model room to work out totals before committing to them. Very tight formats can otherwise cost accuracy."
+      },
+      {
+        "title": "Parse with the strict mode",
+        "text": "messages.parse sends the schema through output_config.format; decoding is constrained, so the result always matches the model’s shape."
+      },
+      {
+        "title": "Handle truncation",
+        "text": "If the response hit max_tokens, the object may be incomplete. Check the stop reason and raise the limit rather than trusting a cut-off answer."
+      },
+      {
+        "title": "Still check the values",
+        "text": "Every field is present and typed, but a total can still disagree with its items. Business rules are checked next, in the repair loop."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"176\" height=\"92\" rx=\"8\"/><text class=\"sb\" x=\"18\" y=\"24\" style=\"text-anchor:start\">class Invoice:</text><text class=\"sb\" x=\"26\" y=\"40\" style=\"text-anchor:start\">gstin: str</text><text class=\"sb\" x=\"26\" y=\"56\" style=\"text-anchor:start\">items: list[LineItem]</text><text class=\"sb\" x=\"26\" y=\"72\" style=\"text-anchor:start\">total_inr: float</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"192\" y=\"6\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"272\" y=\"21\" text-anchor=\"middle\">rules → descriptions</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"192\" y=\"34\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"272\" y=\"49\" text-anchor=\"middle\">reasoning: first</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"192\" y=\"62\" width=\"160\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"272\" y=\"79\">Constrained decoder</text><text class=\"sb\" x=\"272\" y=\"94\">schema always met</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">stop_reason == max_tokens → retry with a higher limit</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"161\" style=\"text-anchor:end;--d:0s\">schema-valid</text><rect x=\"118\" y=\"151\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"151\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"161\" style=\"text-anchor:start;--d:0.2s\">100%</text><text class=\"tl a\" x=\"112\" y=\"183\" style=\"text-anchor:end;--d:0.1s\">values correct</text><rect x=\"118\" y=\"173\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"173\" width=\"172.9\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"183\" style=\"text-anchor:start;--d:0.30000000000000004s\">91%</text><g class=\"a\" style=\"--d:0.25s\"><text class=\"tag-t\" x=\"180\" y=\"212\" style=\"text-anchor:middle;fill:var(--warn)\">the shape is guaranteed; the truth is not</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Removes parse failures and missing fields",
+      "Typed objects plug straight into code",
+      "Works with Pydantic models directly",
+      "Available on major APIs and local engines"
+    ],
+    "cons": [
+      "Guarantees shape, not correct values",
+      "Only a subset of JSON Schema is supported",
+      "Very tight formats can reduce reasoning quality",
+      "First use of a new schema can add latency while it compiles"
+    ],
+    "avoidWhen": [
+      "Free-form writing where a schema adds nothing",
+      "Relying on unsupported keywords, such as ranges, for correctness"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic structured outputs",
+        "type": "Model API",
+        "what": "output_config.format and strict tool use",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+      },
+      {
+        "name": "OpenAI Structured Outputs",
+        "type": "Model API",
+        "what": "Strict json_schema and parse helpers",
+        "url": "https://developers.openai.com/api/docs/guides/structured-outputs"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Define schemas as Python models",
+        "url": "https://docs.pydantic.dev"
+      },
+      {
+        "name": "Outlines",
+        "type": "Open source",
+        "what": "Constrained generation for local models",
+        "url": "https://github.com/dottxt-ai/outlines"
+      },
+      {
+        "name": "vLLM structured outputs",
+        "type": "Open source",
+        "what": "Schema-constrained decoding when self-hosting",
+        "url": "https://docs.vllm.ai/en/latest/features/structured_outputs/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An NBFC extracts vendor invoices into its ledger. Choose how output is requested, how complex the schema is, and whether the model reasons before giving values, and see how many outputs parse, match the schema and have correct values.",
+    "controls": [
+      "Choose the output mode: a prompt asking for JSON, JSON mode, or strict structured outputs.",
+      "Choose a flat six-field schema or a nested one with line items and enums.",
+      "Tick a reasoning field before the values, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Parses as JSON",
+        "meaning": "Share of outputs your code can parse."
+      },
+      {
+        "name": "Matches the schema",
+        "meaning": "Share with every field present and correctly typed."
+      },
+      {
+        "name": "Values correct",
+        "meaning": "Share whose totals, dates and GSTINs are actually right."
+      },
+      {
+        "name": "Usable without review",
+        "meaning": "Matches the schema and has correct values."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Prompt-only, flat",
+        "expect": "93% parse, 85% match the schema, 76.5% usable."
+      },
+      {
+        "k": "json",
+        "name": "JSON mode, nested",
+        "expect": "Always parses, but only 86% match the schema."
+      },
+      {
+        "k": "strict",
+        "name": "Strict, nested, no reasoning",
+        "expect": "100% match the schema, but values are right only 86% of the time."
+      },
+      {
+        "k": "best",
+        "name": "Strict, nested, reasoning first",
+        "expect": "100% match, 91% correct values, 250 more output tokens."
+      }
+    ],
+    "missions": [
+      {
+        "k": "valid",
+        "text": "Make every output match the schema.",
+        "hint": "Only one mode constrains the decoder to the schema."
+      },
+      {
+        "k": "both",
+        "text": "With the nested schema, reach 100% schema matches and at least 90% correct values.",
+        "hint": "Give the model room to work out totals before writing them."
+      },
+      {
+        "k": "trap",
+        "text": "Find a setting where every output matches the schema but fewer than 90% of values are correct.",
+        "hint": "Strict mode on a nested schema, with no reasoning field."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic structured outputs",
+        "type": "Model API",
+        "start": 3,
+        "prod": 3,
+        "best": "output_config.format with a JSON schema, messages.parse with Pydantic, strict tool use.",
+        "ex": "Parse invoices straight into a Pydantic Invoice model.",
+        "pros": [
+          "Schema guaranteed",
+          "SDK helpers for Pydantic"
+        ],
+        "cons": [
+          "Some keywords unsupported",
+          "Limits on optional and union fields"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+      },
+      {
+        "n": "OpenAI Structured Outputs",
+        "type": "Model API",
+        "start": 3,
+        "prod": 3,
+        "best": "Strict json_schema in Responses and Chat Completions, with parse helpers.",
+        "ex": "responses.parse with text_format=Invoice.",
+        "pros": [
+          "Mature and widely used",
+          "Explicit refusal field"
+        ],
+        "cons": [
+          "All fields required; optional means nullable",
+          "Schema subset only"
+        ],
+        "url": "https://developers.openai.com/api/docs/guides/structured-outputs"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Define schemas as Python classes and validate data.",
+        "ex": "Invoice and LineItem models shared by extraction and validation.",
+        "pros": [
+          "One definition for schema and checks",
+          "Clear error messages"
+        ],
+        "cons": [
+          "Python only",
+          "Complex validators need care"
+        ],
+        "url": "https://docs.pydantic.dev"
+      },
+      {
+        "n": "Outlines",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Constrained generation for local models with JSON Schema or regex.",
+        "ex": "Force a self-hosted model to emit valid invoice JSON.",
+        "pros": [
+          "Works with open models",
+          "Regex and grammar support"
+        ],
+        "cons": [
+          "Self-hosting required",
+          "Slower first use while compiling"
+        ],
+        "url": "https://github.com/dottxt-ai/outlines"
+      },
+      {
+        "n": "vLLM structured outputs",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Schema-constrained decoding when serving your own models.",
+        "ex": "Pass a JSON schema through the OpenAI-compatible response_format.",
+        "pros": [
+          "High throughput",
+          "OpenAI-compatible API"
+        ],
+        "cons": [
+          "You run the servers",
+          "Older guided_json parameters retired"
+        ],
+        "url": "https://docs.vllm.ai/en/latest/features/structured_outputs/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I call Claude or GPT APIs",
+        "tool": "Their strict structured-output modes with Pydantic models"
+      },
+      {
+        "need": "I self-host open models",
+        "tool": "vLLM structured outputs or Outlines"
+      },
+      {
+        "need": "I only need JSON, no fixed fields",
+        "tool": "JSON mode may be enough"
+      }
+    ],
+    "goals": [
+      "Tell JSON mode from strict schemas",
+      "See that valid shape is not correct content",
+      "Leave room to reason inside a schema"
+    ]
+  },
+  "practice": {
+    "scenario": "An NBFC extracts vendor invoices into its ledger: GSTIN, invoice number, date, line items and total. With “return JSON only” in the prompt, 6% of outputs failed to parse. Switching to strict structured outputs from a Pydantic model made every output match the schema; rules the schema cannot express are checked separately.",
+    "industries": [
+      {
+        "industry": "Lending (NBFC)",
+        "use": "Extract vendor invoices and bank statements into ledger entries"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Turn discharge summaries into structured fields for claims"
+      },
+      {
+        "industry": "Logistics",
+        "use": "Parse shipping documents into consignments with typed fields"
+      }
+    ],
+    "analogy": "A paper form with printed boxes instead of a blank sheet. Whatever the clerk writes, it lands in the right box.",
+    "library": {
+      "name": "Anthropic SDK structured outputs",
+      "what": "messages.parse takes a Pydantic model, sends it as a JSON schema through output_config.format, and returns a validated object.",
+      "install": "pip install anthropic pydantic"
+    },
+    "note": "Constraints such as lengths and numeric ranges may be moved into descriptions rather than enforced; validate them in code, as in the repair technique.",
+    "samples": [
+      {
+        "file": "extract_invoice.py",
+        "language": "python",
+        "code": "from anthropic import Anthropic\nfrom pydantic import BaseModel, Field\n\nclass LineItem(BaseModel):\n    description: str\n    amount_inr: float\n\nclass Invoice(BaseModel):\n    gstin: str = Field(description=\"15-character GSTIN of the vendor\")\n    invoice_no: str\n    invoice_date: str = Field(description=\"ISO date, YYYY-MM-DD\")\n    items: list[LineItem]\n    total_inr: float\n\nclient = Anthropic()\n\ndef extract(invoice_text: str) -> Invoice:\n    r = client.messages.parse(\n        model=\"claude-sonnet-4-5-20250929\", max_tokens=1024,\n        messages=[{\"role\": \"user\",\n                   \"content\": f\"Extract the invoice.\\n<invoice>{invoice_text}</invoice>\"}],\n        output_format=Invoice,              # strict JSON schema from the model\n    )\n    return r.parsed_output                  # an Invoice instance"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An extractor processes 50,000 invoices a month. With “JSON only” in the prompt, 6% fail to parse and each is retried once at ₹0.40. How much a month do those retries cost?",
+    "answer": "6% of 50,000 is 3,000 retries × ₹0.40 = ₹1,200 a month, plus the delay and the retries that fail again. Strict structured outputs remove parse failures entirely, though value checks still apply.",
+    "expected": {
+      "value": 1200,
+      "tolerance": 1,
+      "label": "₹ per month ="
+    },
+    "interview": [
+      {
+        "question": "What is the difference between JSON mode and strict structured outputs?",
+        "answer": "JSON mode guarantees syntactically valid JSON but not which fields appear or their types. Strict structured outputs constrain decoding to your JSON Schema, so every required field is present with the right type, within the schema features the provider supports."
+      },
+      {
+        "question": "If the output matches the schema, why validate it again?",
+        "answer": "A schema guarantees the shape, not the correctness of values. An invoice can have a well-formed total that does not match its items, or a GSTIN that is a string but not a valid one. Some constraints, such as ranges and patterns, may not be enforced by the provider at all, so business rules must be checked in code."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Asking for JSON in the prompt and parsing with try/except",
+        "fix": "Use the provider’s strict structured-output mode"
+      },
+      {
+        "mistake": "Putting the answer before any reasoning in a tight schema",
+        "fix": "Add a reasoning field first when the task needs thought"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sc01",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "An extractor’s prompt says “return JSON only”. What can still go wrong?",
+      "options": [
+        "Nothing",
+        "Outputs may include extra text, miss fields or fail to parse",
+        "The API refuses the prompt",
+        "Tokens double"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Prompt-only JSON is not guaranteed."
+    },
+    {
+      "id": "sc02",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "What does JSON mode guarantee?",
+      "options": [
+        "Every schema field is present",
+        "Syntactically valid JSON, but not your fields or types",
+        "Correct values",
+        "Short outputs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "JSON mode enforces syntax, not a schema."
+    },
+    {
+      "id": "sc03",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What do strict structured outputs guarantee?",
+      "options": [
+        "Correct values",
+        "Output that matches your JSON Schema, within supported features",
+        "Faster responses",
+        "No refusals"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The shape is guaranteed; the truth is not."
+    },
+    {
+      "id": "sc04",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "50,000 invoices a month; 6% fail to parse and each is retried once at ₹0.40. What do the retries cost per month?",
+      "options": [
+        "₹120",
+        "₹1,200",
+        "₹3,000",
+        "₹12,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 × ₹0.40 = ₹1,200."
+    },
+    {
+      "id": "sc05",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which are requirements of OpenAI’s strict JSON-schema mode? Select all that apply.",
+      "options": [
+        "additionalProperties set to false",
+        "Every property listed as required, with optional ones allowing null",
+        "Every string must have a regex",
+        "Numbers must be integers"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Strict mode requires closed objects and all fields required."
+    },
+    {
+      "id": "sc06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "In Anthropic’s structured outputs, which parameter carries the JSON schema?",
+      "options": [
+        "output_config.format",
+        "temperature",
+        "stop_sequences",
+        "metadata"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "output_config.format with type json_schema."
+    },
+    {
+      "id": "sc07",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "Every output matches the schema, but 14% of totals are wrong. What does this show?",
+      "options": [
+        "The schema is broken",
+        "A valid shape does not mean correct values",
+        "Strict mode is off",
+        "The model is too small"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Validate values and business rules separately."
+    },
+    {
+      "id": "sc08",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Why add a reasoning field before the answer fields?",
+      "options": [
+        "It is required",
+        "It gives the model room to work things out before committing to values",
+        "It reduces tokens",
+        "It disables validation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Very tight formats can cost accuracy; reasoning first helps."
+    },
+    {
+      "id": "sc09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which constraints might a provider not enforce in strict mode, so they must be checked in code? Select all that apply.",
+      "options": [
+        "Numeric minimum and maximum",
+        "String lengths and most regex patterns",
+        "The presence of required fields",
+        "The type of each field"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Types and required fields are enforced; ranges and many patterns may not be."
+    },
+    {
+      "id": "sc10",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "You self-host an open model. How can you constrain its output to a schema?",
+      "options": [
+        "It is impossible",
+        "Use constrained decoding such as vLLM structured outputs, Outlines or XGrammar",
+        "Ask politely",
+        "Use a larger batch size"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Constrained decoding works with open models too."
+    },
+    {
+      "id": "sc11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A strict-mode response stopped because it hit max_tokens. What should you do?",
+      "options": [
+        "Use the object as is",
+        "Treat it as incomplete: raise the limit and retry",
+        "Assume the missing fields are zero",
+        "Switch to JSON mode"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Truncated responses may be incomplete."
+    },
+    {
+      "id": "sc12",
+      "kind": "multi",
+      "industry": "Lending (NBFC)",
+      "question": "Which are benefits of defining outputs as Pydantic models? Select all that apply.",
+      "options": [
+        "The same model gives the schema and validation",
+        "Typed objects plug directly into code",
+        "It guarantees correct values",
+        "It removes the need for tests"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "One definition drives schema and checks; correctness still needs validation."
+    },
+    {
+      "id": "sc13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A model refuses to extract data for safety reasons in OpenAI strict mode. How can code detect it?",
+      "options": [
+        "The refusal field on the message",
+        "A parse error",
+        "The JSON is empty",
+        "It cannot be detected"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Refusals are exposed separately from the parsed object."
+    },
+    {
+      "id": "sc14",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Which is the best use of JSON mode rather than strict schemas?",
+      "options": [
+        "When any valid JSON will do and no fixed fields are needed",
+        "When a ledger needs exact fields",
+        "When types must be enforced",
+        "When fields are optional but typed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "JSON mode suits free-form JSON only."
+    },
+    {
+      "id": "sc15",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "Which tools can produce schema-constrained outputs? Select all that apply.",
+      "options": [
+        "OpenAI Structured Outputs",
+        "Anthropic structured outputs",
+        "Jinja2",
+        "pytest"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Both APIs support strict schemas; the others do not generate outputs."
+    },
+    {
+      "id": "sc16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Where should “date in YYYY-MM-DD format” be expressed if the provider may not enforce patterns?",
+      "options": [
+        "Only in a regex pattern keyword",
+        "In the field description, and validated in code",
+        "Nowhere",
+        "In the system prompt’s role section only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Describe it and validate it."
+    },
+    {
+      "id": "sc17",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "Prompt-only extraction: 93% parse and 85% match the schema. Strict mode: 100% match. What else is still needed?",
+      "options": [
+        "Nothing",
+        "Validation of values and business rules",
+        "A larger model",
+        "JSON mode as well"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Shape is solved; values still need checks."
+    },
+    {
+      "id": "sc18",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Why can very rigid output formats reduce accuracy? Select all that apply.",
+      "options": [
+        "The model has no room to reason before committing",
+        "Constrained tokens can steer it away from its best answer",
+        "The API charges more",
+        "Schemas slow the network"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Research such as Tam et al. (2024) found format restrictions can hurt reasoning."
+    },
+    {
+      "id": "sc19",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Anthropic’s Python SDK helper for Pydantic outputs is which method?",
+      "options": [
+        "client.messages.parse",
+        "client.embed",
+        "client.batch",
+        "client.tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "messages.parse returns a validated parsed_output."
+    },
+    {
+      "id": "sc20",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which are true of strict tool use? Select all that apply.",
+      "options": [
+        "Tool arguments are guaranteed to match the input schema",
+        "It helps agents call tools with valid arguments",
+        "It guarantees the tool succeeds",
+        "It removes the need for idempotency"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Valid arguments, not guaranteed outcomes."
+    }
+  ]
+}

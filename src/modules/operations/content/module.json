@@ -1,0 +1,275 @@
+{
+  "slug": "operations",
+  "number": 11,
+  "techniqueOrder": [
+    "tracing",
+    "versioning",
+    "canary",
+    "onlineeval",
+    "durable",
+    "resilience",
+    "incident",
+    "feedback"
+  ],
+  "glossary": [
+    {
+      "term": "span",
+      "definition": "One timed operation inside a trace, such as a model call or a tool call, with attributes and a status."
+    },
+    {
+      "term": "trace",
+      "definition": "The tree of spans for one request, from the agent invocation down to each model and tool call."
+    },
+    {
+      "term": "GenAI semantic conventions",
+      "definition": "OpenTelemetry’s standard names for generative-AI spans, attributes and metrics, such as gen_ai.request.model; still in Development status."
+    },
+    {
+      "term": "model snapshot",
+      "definition": "A dated, fixed version of a hosted model. An alias points to a snapshot and can be moved by the provider."
+    },
+    {
+      "term": "prompt registry",
+      "definition": "A store of numbered prompt versions with labels such as production, loaded by label from code."
+    },
+    {
+      "term": "canary release",
+      "definition": "Sending a change to a small share of live traffic and comparing it with a control group before widening."
+    },
+    {
+      "term": "feature flag",
+      "definition": "A runtime switch that decides per user or request which variant of code, prompt or model runs."
+    },
+    {
+      "term": "online eval",
+      "definition": "Scoring live production traffic continuously, with cheap checks and a sampled judge."
+    },
+    {
+      "term": "drift",
+      "definition": "A change over time in inputs, outputs or quality compared with a reference period."
+    },
+    {
+      "term": "PSI",
+      "definition": "Population stability index: a measure of how far a distribution has shifted from a reference."
+    },
+    {
+      "term": "durable execution",
+      "definition": "Running a workflow so that each step’s result is recorded and the workflow resumes after crashes without redoing completed steps."
+    },
+    {
+      "term": "activity",
+      "definition": "In Temporal, a unit of work with I/O, such as a model or API call, run with timeouts and retries and recorded in history."
+    },
+    {
+      "term": "circuit breaker",
+      "definition": "A guard that stops calling a failing dependency for a while, then probes it before resuming."
+    },
+    {
+      "term": "MTTR",
+      "definition": "Mean time to recovery: how long it takes from the start of an incident until service is restored."
+    },
+    {
+      "term": "deterministic replay",
+      "definition": "Re-running a recorded agent trace offline with the same input, release and parameters, serving the recorded tool responses instead of calling live systems, to reproduce a failure safely."
+    },
+    {
+      "term": "blameless post-mortem",
+      "definition": "A written review after an incident that records the timeline, impact, causes and owned actions, and looks for system fixes rather than people to blame."
+    },
+    {
+      "term": "incident severity",
+      "definition": "An agreed scale, such as SEV1 to SEV3, that sets how fast people are paged and who is involved, based on the harm happening now."
+    },
+    {
+      "term": "implicit feedback",
+      "definition": "Signals from user behaviour, such as retries, rephrasing, copying, abandoning or asking for a human."
+    },
+    {
+      "term": "data flywheel",
+      "definition": "A loop where product use produces data that improves the product, which brings more use."
+    },
+    {
+      "term": "failure pattern",
+      "definition": "A named, counted cluster of similar failures found during triage."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "OpenTelemetry semantic conventions for generative AI (repository)",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai"
+    },
+    {
+      "id": "S2",
+      "title": "OpenTelemetry GenAI agent and framework spans",
+      "url": "https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-agent-spans.md"
+    },
+    {
+      "id": "S3",
+      "title": "OpenTelemetry blog: Inside the LLM call, GenAI observability with OpenTelemetry (2026)",
+      "url": "https://opentelemetry.io/blog/2026/genai-observability/"
+    },
+    {
+      "id": "S4",
+      "title": "OpenTelemetry Python documentation",
+      "url": "https://opentelemetry.io/docs/languages/python/"
+    },
+    {
+      "id": "S5",
+      "title": "MLflow Prompt Registry",
+      "url": "https://mlflow.org/docs/latest/genai/prompt-registry/"
+    },
+    {
+      "id": "S6",
+      "title": "Anthropic: models overview (aliases and snapshots)",
+      "url": "https://docs.claude.com/en/docs/about-claude/models/overview"
+    },
+    {
+      "id": "S7",
+      "title": "Anthropic: model deprecations",
+      "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations"
+    },
+    {
+      "id": "S8",
+      "title": "Google SRE workbook: Canarying releases",
+      "url": "https://sre.google/workbook/canarying-releases/"
+    },
+    {
+      "id": "S9",
+      "title": "Martin Fowler: CircuitBreaker",
+      "url": "https://martinfowler.com/bliki/CircuitBreaker.html"
+    },
+    {
+      "id": "S10",
+      "title": "Google SRE book: Addressing cascading failures",
+      "url": "https://sre.google/sre-book/addressing-cascading-failures/"
+    },
+    {
+      "id": "S11",
+      "title": "Temporal documentation",
+      "url": "https://docs.temporal.io"
+    },
+    {
+      "id": "S12",
+      "title": "Temporal Python SDK developer guide",
+      "url": "https://docs.temporal.io/develop/python"
+    },
+    {
+      "id": "S13",
+      "title": "LangGraph: persistence and checkpointers",
+      "url": "https://langchain-ai.github.io/langgraph/concepts/persistence/"
+    },
+    {
+      "id": "S14",
+      "title": "Anthropic Python SDK (timeouts and retries)",
+      "url": "https://github.com/anthropics/anthropic-sdk-python"
+    },
+    {
+      "id": "S15",
+      "title": "OpenAI Python SDK (timeouts and retries)",
+      "url": "https://github.com/openai/openai-python"
+    },
+    {
+      "id": "S16",
+      "title": "LiteLLM: routing, fallbacks and cooldowns",
+      "url": "https://docs.litellm.ai/docs/routing"
+    },
+    {
+      "id": "S17",
+      "title": "Langfuse: evaluation overview",
+      "url": "https://langfuse.com/docs/evaluation/overview"
+    },
+    {
+      "id": "S18",
+      "title": "Evidently documentation (data drift)",
+      "url": "https://docs.evidentlyai.com"
+    },
+    {
+      "id": "S19",
+      "title": "OpenFeature documentation",
+      "url": "https://openfeature.dev/docs"
+    },
+    {
+      "id": "S20",
+      "title": "statsmodels: proportions_ztest",
+      "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.proportion.proportions_ztest.html"
+    },
+    {
+      "id": "S21",
+      "title": "Google SRE book: Managing incidents",
+      "url": "https://sre.google/sre-book/managing-incidents/"
+    },
+    {
+      "id": "S22",
+      "title": "Google SRE book: Postmortem culture, learning from failure",
+      "url": "https://sre.google/sre-book/postmortem-culture/"
+    },
+    {
+      "id": "S23",
+      "title": "CERT-In directions under section 70B(6) of the IT Act, 28 April 2022",
+      "url": "https://www.cert-in.org.in/PDF/CERT-In_Directions_70B_28.04.2022.pdf"
+    },
+    {
+      "id": "S24",
+      "title": "PagerDuty incident response documentation",
+      "url": "https://response.pagerduty.com/"
+    },
+    {
+      "id": "S25",
+      "title": "Hamel Husain: Your AI product needs evals",
+      "url": "https://hamel.dev/blog/posts/evals/"
+    },
+    {
+      "id": "S26",
+      "title": "Who validates the validators? Aligning LLM-assisted evaluation with human preferences (Shankar et al., 2024)",
+      "url": "https://arxiv.org/abs/2404.12272"
+    },
+    {
+      "id": "S27",
+      "title": "Argilla documentation",
+      "url": "https://docs.argilla.io"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Quality dropped and we cannot tell why",
+      "techniqueId": "tracing",
+      "advice": "Trace every run with GenAI spans, then group failures by attribute; record the response model, not just the requested one."
+    },
+    {
+      "symptom": "We do not know which prompt or model produced an answer",
+      "techniqueId": "versioning",
+      "advice": "Version the release: prompt from a registry, a pinned snapshot, and the release id on every trace."
+    },
+    {
+      "symptom": "Every change goes to all users at once",
+      "techniqueId": "canary",
+      "advice": "Ship behind a flag to a small slice, compare with control on live metrics, and widen in steps."
+    },
+    {
+      "symptom": "Offline evals pass, but users say it got worse",
+      "techniqueId": "onlineeval",
+      "advice": "Score live traffic: cheap checks on everything, a judge on a sample, and alerts on windows."
+    },
+    {
+      "symptom": "A crash or redeploy restarts long jobs or repeats refunds",
+      "techniqueId": "durable",
+      "advice": "Use durable execution: record each step, resume from history, and key every side effect."
+    },
+    {
+      "symptom": "A provider slowdown takes the whole service down",
+      "techniqueId": "resilience",
+      "advice": "Add short timeouts, a circuit breaker and a tested fallback for every critical dependency."
+    },
+    {
+      "symptom": "The agent is doing damage in production right now",
+      "techniqueId": "incident",
+      "advice": "Contain first: flag off the tool or roll back to the last good release. Then replay the exact trace with its recorded tool responses, and add the case to your evals."
+    },
+    {
+      "symptom": "Users are unhappy but the eval scores look fine",
+      "techniqueId": "feedback",
+      "advice": "Capture explicit and implicit feedback on traces, triage weekly into failure patterns, and turn them into eval cases and fixes."
+    }
+  ]
+}

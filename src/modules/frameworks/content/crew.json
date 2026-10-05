@@ -1,0 +1,834 @@
+{
+  "id": "crew",
+  "moduleSlug": "frameworks",
+  "name": "CrewAI, AutoGen and Microsoft Agent Framework",
+  "shortName": "CrewAI, AutoGen",
+  "question": "When do I want a team of role-based agents?",
+  "summary": "CrewAI defines agents by role, goal and backstory, assigns them tasks and runs them as a crew, sequentially or under a manager agent, with Flows for event-driven control. AutoGen pioneered conversational multi-agent systems; Microsoft moved it to maintenance in October 2025, and its successor, Microsoft Agent Framework 1.0 (April 2026), merges AutoGen and Semantic Kernel for .NET and Python. AG2 continues AutoGen as a community project. Teams of agents fit genuinely parallel, separable work, and cost several times the tokens (Panel 10).",
+  "useCases": [
+    "Research and content pipelines with separable roles",
+    ".NET and Azure shops (Microsoft Agent Framework)",
+    "Prototyping multi-agent designs quickly"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "Agent",
+        "detail": "role, goal, backstory, tools"
+      },
+      {
+        "term": "Task",
+        "detail": "description, expected output, agent"
+      },
+      {
+        "term": "Crew",
+        "detail": "sequential or hierarchical process"
+      },
+      {
+        "term": "Flows",
+        "detail": "state and control around crews"
+      },
+      {
+        "term": "MS Agent Framework",
+        "detail": "agents and workflows, .NET and Python"
+      },
+      {
+        "term": "AG2",
+        "detail": "community continuation of AutoGen"
+      }
+    ]
+  },
+  "steps": [
+    "Check that the work really splits into roles (Panel 10)",
+    "Define agents and tasks with expected outputs",
+    "Start sequential; add a manager only if needed",
+    "Measure tokens and consistency against one agent"
+  ],
+  "pitfalls": [
+    "Role-play prompts instead of clear tasks",
+    "Starting new work on AutoGen",
+    "Multi-agent cost for single-agent problems"
+  ],
+  "tools": [
+    "CrewAI (open source, AMP for enterprise)",
+    "Microsoft Agent Framework",
+    "AG2",
+    "Azure AI Foundry"
+  ],
+  "remember": "Teams only for work that truly divides; mind the token bill.",
+  "caption": "Microsoft Agent Framework for .NET; CrewAI for Python.",
+  "comparison": {
+    "scope": "Role-based agent teams",
+    "cost": 2,
+    "needs": "Python; .NET via Microsoft",
+    "best": "Token cost and inconsistency"
+  },
+  "diagram": {
+    "file": "diagrams/crew.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_crew.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "investigator = Agent(role=\"Payments investigator\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                     goal=\"Find out what happened to the UPI debit\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                     backstory=\"You check records and never guess.\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                     tools=[get_transaction])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "writer = Agent(role=\"Support writer\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "               goal=\"Explain the outcome clearly\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "               backstory=\"You write short, plain replies.\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "investigate = Task(description=\"Investigate UTR {utr}: {question}\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                   expected_output=\"Status, with evidence\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                   agent=investigator)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "reply = Task(description=\"Write the reply\", agent=writer,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "             expected_output=\"At most four sentences\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "             human_input=True)                     # a person reviews",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "crew = Crew(agents=[investigator, writer], tasks=[investigate, reply],",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            process=Process.sequential)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "result = crew.kickoff(inputs={\"utr\": UTR, \"question\": QUESTION})",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# measure against one agent: tokens, accuracy, consistency",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# .NET or Azure: Microsoft Agent Framework; AutoGen is in maintenance",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Agents as roles",
+        "text": "Each agent has a role, a goal and a backstory, and only the tools its role needs."
+      },
+      {
+        "title": "Tasks with expected outputs",
+        "text": "Clear tasks with expected outputs matter more than colourful backstories."
+      },
+      {
+        "title": "A human reviews",
+        "text": "human_input=True asks a person to review the task’s result before it is final."
+      },
+      {
+        "title": "Run the crew",
+        "text": "A sequential process runs the tasks in order, passing results along. A hierarchical process adds a manager agent."
+      },
+      {
+        "title": "Measure against one agent",
+        "text": "For this support case the crew used 3.6 times the tokens of a single agent with no accuracy gain."
+      },
+      {
+        "title": "Choose a maintained option",
+        "text": "Microsoft Agent Framework, 1.0 since April 2026, is the successor to AutoGen for .NET and Python."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"168\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"92\" y=\"21\">Investigator</text><text class=\"sb\" x=\"92\" y=\"36\">role · goal</text></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"6\" width=\"168\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"268\" y=\"21\">Writer</text><text class=\"sb\" x=\"268\" y=\"36\">role · goal</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"52\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"67\" text-anchor=\"middle\">Task: investigate</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"184\" y=\"52\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"67\" text-anchor=\"middle\">Task: reply · human</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"84\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"99\" text-anchor=\"middle\">Crew(process=sequential).kickoff()</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"129\" style=\"text-anchor:end;--d:0s\">one agent</text><rect x=\"118\" y=\"119\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"119\" width=\"41.66666666666667\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"129\" style=\"text-anchor:start;--d:0.2s\">10k tokens</text><text class=\"tl a\" x=\"112\" y=\"151\" style=\"text-anchor:end;--d:0.1s\">two-agent crew</text><rect x=\"118\" y=\"141\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"141\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"151\" style=\"text-anchor:start;--d:0.30000000000000004s\">36k tokens</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"172\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"187\" text-anchor=\"middle\">AutoGen: maintenance</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"172\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"187\" text-anchor=\"middle\">MS Agent Fw 1.0</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--ink-2)\">teams only for work that truly divides</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Readable role-based designs",
+      "Quick multi-agent prototypes",
+      "Flows add state and control (CrewAI)",
+      "Microsoft Agent Framework for .NET and Azure"
+    ],
+    "cons": [
+      "Several times the tokens of one agent",
+      "Role prompts can hide unclear tasks",
+      "Consistency is harder to guarantee",
+      "AutoGen itself is in maintenance mode"
+    ],
+    "avoidWhen": [
+      "Single-agent problems",
+      "New projects on AutoGen"
+    ],
+    "tools": [
+      {
+        "name": "CrewAI",
+        "type": "Open source, commercial",
+        "what": "Agents, tasks, crews, flows",
+        "url": "https://docs.crewai.com"
+      },
+      {
+        "name": "Microsoft Agent Framework",
+        "type": "Open source",
+        "what": ".NET and Python agents and workflows",
+        "url": "https://learn.microsoft.com/agent-framework/"
+      },
+      {
+        "name": "AG2",
+        "type": "Open source",
+        "what": "Community continuation of AutoGen",
+        "url": "https://ag2.ai"
+      },
+      {
+        "name": "AutoGen",
+        "type": "Open source",
+        "what": "Maintenance mode since Oct 2025",
+        "url": "https://github.com/microsoft/autogen"
+      },
+      {
+        "name": "Azure AI Foundry",
+        "type": "Managed service",
+        "what": "Hosting for Microsoft agents",
+        "url": "https://ai.azure.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional equity-research desk splits reports into roles, while its support team wonders whether a crew would help too. Set the needs and see when a role-based team framework wins and when one agent is enough.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. CrewAI / MS Agent Framework ranks 4 of 7."
+      },
+      {
+        "k": "dotnet",
+        "name": ".NET shop on Azure",
+        "expect": "Top pick: CrewAI / MS Agent Framework."
+      },
+      {
+        "k": "typed",
+        "name": "Typed outputs, quickly",
+        "expect": "Top pick: Pydantic AI. CrewAI / MS Agent Framework ranks 4 of 7."
+      },
+      {
+        "k": "java",
+        "name": "Java team on Google Cloud",
+        "expect": "Top pick: Google ADK. CrewAI / MS Agent Framework is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make CrewAI or Microsoft Agent Framework the top pick.",
+        "hint": "Several agents, speed, or a .NET shop."
+      },
+      {
+        "k": "dotnet",
+        "text": "Make it top for a .NET team.",
+        "hint": "Microsoft Agent Framework covers .NET."
+      },
+      {
+        "k": "single",
+        "text": "Show that needing several agents is not enough: with durability and control also essential, something else wins.",
+        "hint": "Which option combines durability and control?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "CrewAI",
+        "type": "Open source · commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Role-based crews and event-driven flows.",
+        "ex": "An analyst, investigator and writer crew.",
+        "pros": [
+          "Readable",
+          "Fast to prototype"
+        ],
+        "cons": [
+          "Token cost",
+          "Consistency"
+        ],
+        "url": "https://docs.crewai.com"
+      },
+      {
+        "n": "Microsoft Agent Framework",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": ".NET and Python agents and workflows, successor to AutoGen.",
+        "ex": "Agents in a .NET bank on Azure.",
+        "pros": [
+          "Stable 1.0 APIs",
+          "MCP and A2A"
+        ],
+        "cons": [
+          "Azure-leaning",
+          "New"
+        ],
+        "url": "https://learn.microsoft.com/agent-framework/"
+      },
+      {
+        "n": "AG2",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Community continuation of AutoGen.",
+        "ex": "Maintain an existing AutoGen system.",
+        "pros": [
+          "Familiar API",
+          "Community"
+        ],
+        "cons": [
+          "Smaller backing",
+          "Diverging from Microsoft"
+        ],
+        "url": "https://ag2.ai"
+      },
+      {
+        "n": "Azure AI Foundry",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 3,
+        "best": "Host and govern Microsoft agents.",
+        "ex": "Deploy the bank’s agents with Entra ID.",
+        "pros": [
+          "Enterprise controls",
+          "Integrated"
+        ],
+        "cons": [
+          "Azure only",
+          "Cost"
+        ],
+        "url": "https://ai.azure.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "The work splits into roles",
+        "tool": "CrewAI"
+      },
+      {
+        "need": "We are a .NET shop",
+        "tool": "Microsoft Agent Framework"
+      },
+      {
+        "need": "We have an AutoGen system",
+        "tool": "Plan a move to Microsoft Agent Framework or AG2"
+      }
+    ],
+    "goals": [
+      "See when agent teams pay off",
+      "Know the status of AutoGen and its successor",
+      "Weigh token cost against separable work"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional equity-research desk split a sector report into roles: a data analyst pulling results, an investigator reading filings, and a writer. CrewAI ran them as a crew, which worked because the parts were genuinely separable. For its UPI support agent the same team measured a two-agent crew against one agent: the crew used 3.6 times the tokens for no gain in accuracy, so support stayed a single agent.",
+    "industries": [
+      {
+        "industry": "Equity research",
+        "use": "Separable analyst, investigator and writer roles"
+      },
+      {
+        "industry": "Marketing and content",
+        "use": "Research, draft and review pipelines"
+      },
+      {
+        "industry": ".NET enterprises",
+        "use": "Microsoft Agent Framework on Azure"
+      }
+    ],
+    "analogy": "A film crew: worth it when there really are separate jobs for a camera operator, a sound engineer and an editor, and expensive overhead for a short phone video.",
+    "library": {
+      "name": "CrewAI",
+      "what": "Role-based agents, tasks, crews and flows in Python; Microsoft Agent Framework is the .NET and Azure-native alternative.",
+      "install": "pip install crewai"
+    },
+    "note": "Here the dispute itself is raised by a person after review. For new .NET or Azure work use Microsoft Agent Framework; AutoGen is in maintenance mode.",
+    "samples": [
+      {
+        "file": "upi_agent_crew.py",
+        "language": "python",
+        "code": "from crewai import Agent, Crew, Process, Task\nfrom crewai.tools import tool\n\n@tool(\"Get transaction\")\ndef get_transaction(utr: str) -> str:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return str(bank.transactions.get(utr))\n\ninvestigator = Agent(\n    role=\"Payments investigator\",\n    goal=\"Find out what happened to the customer's UPI debit\",\n    backstory=\"You check transaction records and never guess.\",\n    tools=[get_transaction], llm=\"anthropic/claude-sonnet-4-5\")\n\nwriter = Agent(\n    role=\"Support writer\",\n    goal=\"Explain the outcome clearly and say what happens next\",\n    backstory=\"You write short, plain replies for customers.\",\n    llm=\"anthropic/claude-sonnet-4-5\")\n\ninvestigate = Task(description=\"Investigate UTR {utr}. Customer says: {question}\",\n                   expected_output=\"Status of the payment, with evidence\", agent=investigator)\nreply = Task(description=\"Write the reply. If a dispute is needed, say it is sent for approval.\",\n             expected_output=\"A reply of at most four sentences\", agent=writer,\n             human_input=True)                                 # a person reviews\n\ncrew = Crew(agents=[investigator, writer], tasks=[investigate, reply],\n            process=Process.sequential)\nresult = crew.kickoff(inputs={\"utr\": \"412345678901\", \"question\": QUESTION})"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A single agent handles a support case with about 10,000 tokens. A two-agent crew uses 4 exchanges of about 9,000 tokens each. How many times the tokens does the crew use?",
+    "answer": "4 × 9,000 = 36,000 tokens against 10,000: 3.6 times. If accuracy does not improve, the crew is pure overhead. Multi-agent designs pay off only when work is genuinely separable or parallel (Panel 10).",
+    "expected": {
+      "value": 3.6,
+      "tolerance": 0.05,
+      "label": "times ="
+    },
+    "interview": [
+      {
+        "question": "What happened to AutoGen?",
+        "answer": "Microsoft moved AutoGen to maintenance mode in October 2025, with only critical fixes. Its successor, Microsoft Agent Framework, reached 1.0 in April 2026 and merges AutoGen’s agent abstractions with Semantic Kernel’s enterprise features for .NET and Python. AG2 continues AutoGen as a community project. New work should not start on AutoGen."
+      },
+      {
+        "question": "When would you pick CrewAI?",
+        "answer": "When the work divides naturally into roles with clear hand-offs, such as research, analysis and writing, and you want a quick, readable way to express that in Python. Use Flows for state and control around crews, start with a sequential process, and compare cost and consistency against a single agent."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Starting new projects on AutoGen",
+        "fix": "Use Microsoft Agent Framework or another maintained option"
+      },
+      {
+        "mistake": "A crew for a single-agent task",
+        "fix": "Measure against one agent first"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cr01",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "How does CrewAI define an agent?",
+      "options": [
+        "Role, goal and backstory, with tools",
+        "A graph node",
+        "A checkpointer",
+        "A hook"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Role-based design."
+    },
+    {
+      "id": "cr02",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "What happened to AutoGen in October 2025?",
+      "options": [
+        "It moved to maintenance mode",
+        "It became 2.0 with new features",
+        "It was renamed CrewAI",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Critical fixes only."
+    },
+    {
+      "id": "cr03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is AutoGen’s successor from Microsoft?",
+      "options": [
+        "Microsoft Agent Framework",
+        "Semantic Kernel 3",
+        "Copilot Studio only",
+        "Azure Functions"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1.0 in April 2026."
+    },
+    {
+      "id": "cr04",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "What does a hierarchical process add?",
+      "options": [
+        "A manager agent that delegates",
+        "More tools",
+        "A database",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Versus sequential."
+    },
+    {
+      "id": "cr05",
+      "kind": "multi",
+      "industry": "Marketing",
+      "question": "When does a crew make sense? Select all that apply.",
+      "options": [
+        "Work divides into roles with clear hand-offs",
+        "Parts can run in parallel",
+        "A single short support answer",
+        "Any task, always"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Separable work."
+    },
+    {
+      "id": "cr06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "One agent uses 10k tokens; a crew uses 4 × 9k. How many times more?",
+      "options": [
+        "2×",
+        "3.6×",
+        "4×",
+        "9×"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "36k ÷ 10k."
+    },
+    {
+      "id": "cr07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which languages does Microsoft Agent Framework target?",
+      "options": [
+        ".NET and Python",
+        "Only Java",
+        "Only Go",
+        "Only Rust"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Go in preview per reports."
+    },
+    {
+      "id": "cr08",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "What do CrewAI Flows add?",
+      "options": [
+        "Event-driven state and control around crews",
+        "A new model",
+        "A vector database",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Production control."
+    },
+    {
+      "id": "cr09",
+      "kind": "single",
+      "industry": "Marketing",
+      "question": "What is AG2?",
+      "options": [
+        "A community continuation of AutoGen",
+        "A Google product",
+        "An EU regulation",
+        "A LangGraph module"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Community-led."
+    },
+    {
+      "id": "cr10",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which are risks of multi-agent crews? Select all that apply.",
+      "options": [
+        "Several times the tokens",
+        "Harder consistency",
+        "Guaranteed higher accuracy",
+        "No human review possible"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Measure against one agent."
+    },
+    {
+      "id": "cr11",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "What does human_input=True on a task do?",
+      "options": [
+        "A person reviews the task’s output",
+        "The human writes the code",
+        "It disables tools",
+        "It speeds up the crew"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Review before final."
+    },
+    {
+      "id": "cr12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A .NET bank on Azure needs agents. Likely choice?",
+      "options": [
+        "Microsoft Agent Framework",
+        "Pydantic AI",
+        "ADK for Python only",
+        "A LangGraph Python service"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": ".NET and Azure alignment."
+    },
+    {
+      "id": "cr13",
+      "kind": "single",
+      "industry": "Marketing",
+      "question": "What matters more than colourful backstories?",
+      "options": [
+        "Clear tasks with expected outputs",
+        "Longer prompts",
+        "More agents",
+        "Higher temperature"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Clarity beats role-play."
+    },
+    {
+      "id": "cr14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Should a new project start on AutoGen?",
+      "options": [
+        "No: it is in maintenance mode",
+        "Yes",
+        "Only in .NET",
+        "Only for voice"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Choose a maintained option."
+    },
+    {
+      "id": "cr15",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "Does CrewAI depend on LangChain?",
+      "options": [
+        "No, it is standalone",
+        "Yes, entirely",
+        "Only for tools",
+        "Only for flows"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its own primitives."
+    },
+    {
+      "id": "cr16",
+      "kind": "single",
+      "industry": "Marketing",
+      "question": "What is the default process to start with?",
+      "options": [
+        "Sequential",
+        "Hierarchical with many managers",
+        "Random",
+        "Parallel with no coordination"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Add a manager only if needed."
+    },
+    {
+      "id": "cr17",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What does Microsoft Agent Framework combine? Select all that apply.",
+      "options": [
+        "AutoGen’s agent abstractions",
+        "Semantic Kernel’s enterprise features",
+        "LangGraph checkpointers",
+        "Claude Code’s harness"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The merger."
+    },
+    {
+      "id": "cr18",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "CrewAI’s enterprise offering is called…",
+      "options": [
+        "AMP",
+        "LangSmith",
+        "Logfire",
+        "Vertex"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Managed deployment and governance."
+    },
+    {
+      "id": "cr19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "With several agents, durability and control all essential in Python, which tends to win in the chooser?",
+      "options": [
+        "LangGraph",
+        "CrewAI",
+        "AG2",
+        "Claude Agent SDK"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Durability and control dominate."
+    },
+    {
+      "id": "cr20",
+      "kind": "single",
+      "industry": "Marketing",
+      "question": "What should you measure before committing to a crew?",
+      "options": [
+        "Accuracy, cost and consistency against one agent",
+        "Number of agents",
+        "Length of backstories",
+        "GitHub stars"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Evidence over enthusiasm."
+    }
+  ]
+}

@@ -1,0 +1,858 @@
+{
+  "id": "pruning",
+  "moduleSlug": "cost-optimisation",
+  "name": "Context Pruning",
+  "shortName": "Context pruning",
+  "question": "Does the model need everything in the context window?",
+  "summary": "Long-running agents pile up history, tool output and retrieved documents, and every token is paid for again on every turn. Pruning keeps the context small: summarize old turns, drop tool results once they have been used, retrieve fewer and better chunks, and compress prompts.",
+  "useCases": [
+    "Long conversations and multi-hour agent sessions",
+    "Agents that read large files, logs or web pages",
+    "RAG pipelines that stuff many chunks into every prompt"
+  ],
+  "keyFacts": {
+    "label": "Methods",
+    "items": [
+      {
+        "term": "Sliding window",
+        "detail": "keep the last N turns word for word"
+      },
+      {
+        "term": "Summarize & replace",
+        "detail": "older turns become a running summary"
+      },
+      {
+        "term": "Tool-result clearing",
+        "detail": "drop raw outputs once they have been used"
+      },
+      {
+        "term": "Tighter retrieval",
+        "detail": "fewer, re-ranked chunks instead of the top 20"
+      },
+      {
+        "term": "Prompt compression",
+        "detail": "remove low-information tokens (e.g. LLMLingua)"
+      },
+      {
+        "term": "External memory",
+        "detail": "store facts outside the context and retrieve on demand"
+      }
+    ]
+  },
+  "steps": [
+    "Plot context size per turn for your longest sessions",
+    "Summarize when context crosses a threshold, keeping decisions and open tasks",
+    "Clear bulky tool outputs after extracting what matters",
+    "Re-run long-task evals to confirm nothing important was lost"
+  ],
+  "pitfalls": [
+    "Summaries drop details the agent needs later",
+    "Aggressive pruning breaks references to earlier turns",
+    "Pruning changes the prompt prefix, which can cancel prompt-cache savings"
+  ],
+  "tools": [
+    "LLMLingua",
+    "LangChain memory",
+    "LlamaIndex",
+    "Mem0",
+    "Letta"
+  ],
+  "remember": "Every token is paid for on every turn.",
+  "caption": "Totals are the sum of context size over 21 turns in this example. Summarizing at 16k keeps each turn cheap.",
+  "comparison": {
+    "scope": "Input tokens",
+    "cost": 3,
+    "needs": "Medium",
+    "best": "Can drop details the agent needs"
+  },
+  "diagram": {
+    "file": "diagrams/pruning.svg"
+  },
+  "lesson": {
+    "file": "prune.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import tiktoken",
+        "steps": []
+      },
+      {
+        "text": "enc = tiktoken.get_encoding(\"o200k_base\")",
+        "steps": []
+      },
+      {
+        "text": "LIMIT, KEEP_RECENT = 16_000, 4",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def tokens(msgs: list) -> int:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return sum(len(enc.encode(m[\"content\"])) for m in msgs)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def clear_used_tool_results(msgs: list) -> list:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    for m in msgs[:-1]:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        if m.get(\"is_tool_result\") and m.get(\"values_recorded\"):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            m[\"content\"] = \"[tool output cleared; key values recorded]\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return msgs",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def prune(history: list) -> list:",
+        "steps": []
+      },
+      {
+        "text": "    history = clear_used_tool_results(history)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if tokens(history) <= LIMIT:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return history",
+        "steps": []
+      },
+      {
+        "text": "    old, recent = history[:-KEEP_RECENT], history[-KEEP_RECENT:]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    note = llm(\"Summarize decisions, client facts, figures and open tasks:\\n\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "               + \"\\n\".join(m[\"content\"] for m in old))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return [{\"role\": \"user\", \"content\": \"Summary so far: \" + note}] + recent",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Eval: replay 30 day-long sessions; check answers that need early facts",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Plot context per turn",
+        "text": "Every turn resends the whole history. Context here grows by about 1.9k tokens a turn and reaches 40k by turn 20."
+      },
+      {
+        "title": "Set a threshold",
+        "text": "Decide when to act: once context passes 16k tokens, prune before the next call."
+      },
+      {
+        "title": "Keep recent turns word for word",
+        "text": "The last 4 turns stay verbatim, because the next reply usually depends on them."
+      },
+      {
+        "title": "Summarize the older turns",
+        "text": "Everything older becomes a short note that keeps decisions, client facts, figures and open tasks. Context drops back and grows again."
+      },
+      {
+        "title": "Clear used tool output",
+        "text": "Raw statement extracts are replaced by a placeholder once their key figures have been recorded in a reply."
+      },
+      {
+        "title": "Check nothing was lost",
+        "text": "Replay long sessions and test questions that need early facts. Input paid over turns 0–20 falls from 441k to 190k tokens."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"40\" y=\"14\" style=\"--d:0s\">Context sent per turn (k tokens)</text><line class=\"grid-l\" x1=\"40\" x2=\"342\" y1=\"150\" y2=\"150\"/><text class=\"sb\" x=\"32\" y=\"154\" style=\"text-anchor:end\">0k</text><line class=\"grid-l\" x1=\"40\" x2=\"342\" y1=\"90\" y2=\"90\"/><text class=\"sb\" x=\"32\" y=\"94\" style=\"text-anchor:end\">20k</text><line class=\"grid-l\" x1=\"40\" x2=\"342\" y1=\"30\" y2=\"30\"/><text class=\"sb\" x=\"32\" y=\"34\" style=\"text-anchor:end\">40k</text><text class=\"sb\" x=\"40\" y=\"164\">turn 0</text><text class=\"sb\" x=\"190\" y=\"164\">turn 10</text><text class=\"sb\" x=\"340\" y=\"164\">turn 20</text><path class=\"ln draw fail\" pathLength=\"1\" d=\"M40.0 144.0 L55.0 138.3 L70.0 132.6 L85.0 126.9 L100.0 121.2 L115.0 115.5 L130.0 109.8 L145.0 104.1 L160.0 98.4 L175.0 92.7 L190.0 87.0 L205.0 81.3 L220.0 75.6 L235.0 69.9 L250.0 64.2 L265.0 58.5 L280.0 52.8 L295.0 47.1 L310.0 41.4 L325.0 35.7 L340.0 30.0\" style=\"--d:0.1s\"/><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"340\" y=\"24\" style=\"text-anchor:end;fill:var(--fail)\">no pruning</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><line x1=\"40\" x2=\"342\" y1=\"102\" y2=\"102\" class=\"ln dash\" style=\"stroke:var(--warn)\"/></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"342\" y=\"97\" style=\"text-anchor:end;fill:var(--warn)\">threshold 16k</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"188\" style=\"--d:0s\">turns</text><rect class=\"bx soft a\" x=\"49\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.1s\"/><rect class=\"bx soft a\" x=\"64\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.12000000000000001s\"/><rect class=\"bx soft a\" x=\"79\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.14s\"/><rect class=\"bx soft a\" x=\"94\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.16s\"/><rect class=\"bx soft a\" x=\"109\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.18s\"/><rect class=\"bx soft a\" x=\"124\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.2s\"/><rect class=\"bx soft a\" x=\"139\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.22s\"/><rect class=\"bx soft a\" x=\"154\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.24000000000000002s\"/><rect class=\"bx soft a\" x=\"169\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.26s\"/><rect class=\"bx soft a\" x=\"184\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.28s\"/><rect class=\"bx soft a\" x=\"199\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.30000000000000004s\"/><rect class=\"bx soft a\" x=\"214\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.32s\"/><rect class=\"bx soft a\" x=\"229\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.33999999999999997s\"/><rect class=\"bx soft a\" x=\"244\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.36s\"/><rect class=\"bx soft a\" x=\"259\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.38s\"/><rect class=\"bx soft a\" x=\"274\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.4s\"/><rect class=\"bx acc a\" x=\"289\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.42000000000000004s\"/><rect class=\"bx acc a\" x=\"304\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.44000000000000006s\"/><rect class=\"bx acc a\" x=\"319\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.45999999999999996s\"/><rect class=\"bx acc a\" x=\"334\" y=\"176\" width=\"12\" height=\"14\" rx=\"3\" style=\"--d:0.48s\"/><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t\" x=\"352\" y=\"204\" style=\"text-anchor:end;fill:var(--accent)\">last 4 verbatim</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw pass\" pathLength=\"1\" d=\"M40.0 144.0 L55.0 138.3 L70.0 132.6 L85.0 126.9 L100.0 121.2 L115.0 115.5 L130.0 109.8 L145.0 104.1 L160.0 138.0 L175.0 132.3 L190.0 126.6 L205.0 120.9 L220.0 115.2 L235.0 109.5 L250.0 103.8 L265.0 138.0 L280.0 132.3 L295.0 126.6 L310.0 120.9 L325.0 115.2 L340.0 109.5\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t\" x=\"162\" y=\"152\" style=\"text-anchor:start;fill:var(--pass)\">summarized</text></g><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"167.5\" y=\"204\" style=\"text-anchor:middle;fill:var(--pass)\">older turns → one summary</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"212\" width=\"344\" height=\"16\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"224\" text-anchor=\"middle\">tool output cleared once its figures are recorded</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"232\" width=\"344\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"245\" text-anchor=\"middle\">input paid, turns 0–20: 441k → 190k · eval passes</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Stops cost from compounding with every turn",
+      "Keeps long sessions under the context limit",
+      "Smaller contexts are faster and often more focused",
+      "Tool-result clearing is almost free to implement"
+    ],
+    "cons": [
+      "Summaries can drop details the agent needs later",
+      "Summary calls cost tokens too",
+      "Rewriting history breaks prompt-cache reuse after the change point",
+      "Needs long-session evals to prove nothing was lost"
+    ],
+    "avoidWhen": [
+      "Sessions are short and never approach the threshold",
+      "Every earlier detail must be kept word for word (store it externally and retrieve it)"
+    ],
+    "tools": [
+      {
+        "name": "LLMLingua",
+        "type": "Open source (Microsoft)",
+        "what": "Prompt compression by removing low-information tokens",
+        "url": "https://github.com/microsoft/LLMLingua"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Message trimming and summarization in agent state",
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "Memory buffers and summary memory for chat engines",
+        "url": "https://github.com/run-llama/llama_index"
+      },
+      {
+        "name": "Mem0",
+        "type": "Open source, hosted option",
+        "what": "External long-term memory retrieved on demand",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "name": "Letta",
+        "type": "Open source",
+        "what": "Agents that manage their own memory (from MemGPT)",
+        "url": "https://github.com/letta-ai/letta"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A relationship-manager copilot stays open all day with one client. Each turn adds conversation and a statement extract. At turn 20 the client asks a question that needs two early facts: their preference for debt funds (turn 2) and their FD balance of INR 4.2 lakh (turn 5). You choose how to keep the context small without losing them.",
+    "controls": [
+      "Pick a strategy: no pruning, a sliding window, or summaries above a threshold.",
+      "Drag the window size or threshold, and choose a brief or detailed summary.",
+      "Tick the box to clear statement extracts once their figures are recorded."
+    ],
+    "outputs": [
+      {
+        "name": "Input tokens vs no pruning",
+        "meaning": "Total input tokens paid over turns 0–20, including tokens read by summary calls, against 441k with no pruning."
+      },
+      {
+        "name": "Peak context",
+        "meaning": "The largest context sent on any turn."
+      },
+      {
+        "name": "Summaries written",
+        "meaning": "How many times older turns were condensed."
+      },
+      {
+        "name": "Turn 2 and turn 5 facts",
+        "meaning": "Whether each fact is still in the context or the summary when the final question arrives."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No pruning",
+        "expect": "Context grows to 40k tokens and the session pays for 441k input tokens. Both facts survive."
+      },
+      {
+        "k": "brief",
+        "name": "Brief summaries at 16k",
+        "expect": "Input falls 40% to 263.4k, but the brief summary drops the FD balance, so the final answer is wrong."
+      },
+      {
+        "k": "clear",
+        "name": "Clear extracts only",
+        "expect": "Clearing used statement extracts alone saves 43% (251k) and peaks at 21k. Both facts survive."
+      }
+    ],
+    "missions": [
+      {
+        "k": "half",
+        "text": "Cut input tokens by at least 50% and keep the final answer correct.",
+        "hint": "Combine detailed summaries at a 16k threshold with clearing used extracts."
+      },
+      {
+        "k": "forget",
+        "text": "Make the final answer wrong with a sliding window.",
+        "hint": "A window shorter than 19 turns drops the turn-2 preference."
+      },
+      {
+        "k": "lean",
+        "text": "Keep the peak context at or below 10k tokens with a correct answer.",
+        "hint": "Summarize in detail at a 10k threshold and clear used extracts."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LLMLingua",
+        "type": "Open source · Microsoft",
+        "start": 2,
+        "prod": 2,
+        "best": "Compressing long prompts and retrieved documents by removing low-information tokens.",
+        "ex": "Compress 20 retrieved policy chunks to a third of their size before a RAG answer, then check accuracy on your eval set.",
+        "pros": [
+          "Large compression ratios reported in its papers",
+          "Works with any downstream model"
+        ],
+        "cons": [
+          "Adds a compression model to the pipeline",
+          "Compressed text can lose details some tasks need"
+        ],
+        "url": "https://github.com/microsoft/LLMLingua"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 3,
+        "prod": 3,
+        "best": "Agent state with message trimming and summarization nodes you control.",
+        "ex": "A graph node that summarizes messages older than the last 4 when the state exceeds 16k tokens.",
+        "pros": [
+          "Explicit, testable pruning logic in the graph",
+          "Persistence for long-running threads"
+        ],
+        "cons": [
+          "You design the summary prompt",
+          "Learning curve for graph concepts"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "n": "LlamaIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Chat memory buffers with token limits and summary memory for chat engines.",
+        "ex": "A chat engine with a 12k-token memory buffer that summarizes older turns automatically.",
+        "pros": [
+          "Ready-made memory classes",
+          "Integrates with its retrieval stack"
+        ],
+        "cons": [
+          "Defaults may not keep the facts you care about",
+          "Less control than hand-written pruning"
+        ],
+        "url": "https://github.com/run-llama/llama_index"
+      },
+      {
+        "n": "Mem0",
+        "type": "Open source · hosted option",
+        "start": 3,
+        "prod": 2,
+        "best": "Long-term memory stored outside the context and retrieved when relevant.",
+        "ex": "Store “prefers debt funds” as a memory for the client and retrieve it months later, without carrying old chats.",
+        "pros": [
+          "Keeps durable facts without long contexts",
+          "Simple add and search API"
+        ],
+        "cons": [
+          "Retrieval can miss or surface stale memories",
+          "Another data store holding personal data"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "n": "Letta",
+        "type": "Open source · from MemGPT",
+        "start": 2,
+        "prod": 2,
+        "best": "Agents that manage their own memory tiers, paging information in and out of context.",
+        "ex": "A research agent that moves finished sub-tasks to archival memory and recalls them on demand.",
+        "pros": [
+          "Principled memory hierarchy",
+          "Agents can edit their own memory"
+        ],
+        "cons": [
+          "A full agent framework, not a drop-in helper",
+          "More moving parts to debug"
+        ],
+        "url": "https://github.com/letta-ai/letta"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Trim and summarize agent state",
+        "tool": "LangGraph"
+      },
+      {
+        "need": "Compress long retrieved context",
+        "tool": "LLMLingua"
+      },
+      {
+        "need": "Keep facts across sessions",
+        "tool": "Mem0"
+      }
+    ],
+    "goals": [
+      "Explain why every token in the context is paid for on every turn",
+      "Compare sliding windows, summaries and tool-result clearing",
+      "Design a pruning policy and a test that proves nothing important was lost"
+    ]
+  },
+  "practice": {
+    "scenario": "A relationship-manager copilot stays open all day with one client. Once the context passes 16k tokens, older turns are summarized into a short note such as “prefers debt funds; SIP review on the 15th”. Raw statement extracts are dropped once their figures have been recorded.",
+    "industries": [
+      {
+        "industry": "Wealth & banking",
+        "use": "Long-running advisor copilots keep a running client summary"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Multi-day tickets carry a summary, not the full thread"
+      },
+      {
+        "industry": "Software",
+        "use": "Coding agents clear old test logs after reading them"
+      }
+    ],
+    "analogy": "Meeting minutes. Nobody replays the whole recording; the next meeting starts from the one-page summary.",
+    "library": {
+      "name": "tiktoken + your LLM",
+      "what": "Count tokens precisely, then summarize with any model. For compression without summaries, LLMLingua is the common choice.",
+      "install": "pip install tiktoken"
+    },
+    "samples": [
+      {
+        "file": "prune.py",
+        "language": "python",
+        "code": "import tiktoken\nenc = tiktoken.get_encoding(\"o200k_base\")\nLIMIT, KEEP_RECENT = 16_000, 6\n\ndef count(msgs):\n    return sum(len(enc.encode(m[\"content\"])) for m in msgs)\n\ndef prune(history: list) -> list:\n    if count(history) <= LIMIT:\n        return history\n    old, recent = history[:-KEEP_RECENT], history[-KEEP_RECENT:]\n    summary = llm(\"Summarize the decisions, facts and open tasks. Be brief.\\n\\n\"\n                  + \"\\n\".join(f'{m[\"role\"]}: {m[\"content\"]}' for m in old))\n    return [{\"role\": \"user\", \"content\": f\"Summary of earlier conversation: {summary}\"},\n            {\"role\": \"assistant\", \"content\": \"Noted.\"}] + recent"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Context starts at 2k tokens and grows by 2k per turn, so turns 1–5 send 2k, 4k, 6k, 8k and 10k. If pruning caps every turn at 6k, what is the new total input, in thousands?",
+    "answer": "Before: 30k. After: 2 + 4 + 6 + 6 + 6 = 24k. The saving grows with every extra turn.",
+    "expected": {
+      "value": 24,
+      "tolerance": 0.2,
+      "label": "k tokens ="
+    },
+    "interview": [
+      {
+        "question": "How do you prune without losing important information?",
+        "answer": "Keep recent turns word for word, summarize older ones into decisions, facts and open tasks, clear tool outputs once their key values are recorded, and keep durable facts in external memory the agent can query. Validate on long-task evals."
+      },
+      {
+        "question": "How does pruning interact with prompt caching?",
+        "answer": "Caching rewards a stable prefix, and pruning rewrites history, invalidating the cache after the change point. Prune in larger, less frequent steps and keep the system prompt and tools above the pruned region."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Cutting from the start and losing the system prompt",
+        "fix": "Keep system prompt and tools; prune the middle"
+      },
+      {
+        "mistake": "Summaries that drop open tasks",
+        "fix": "Keep decisions, facts and pending actions in every summary"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cp01",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Context starts at 3k tokens and grows by 3k a turn, so turns 1–6 send 3k, 6k, 9k, 12k, 15k and 18k. If pruning caps every turn at 9k, what is the total input?",
+      "options": [
+        "54k",
+        "63k",
+        "45k",
+        "36k"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Before: 63k. After: 3 + 6 + 9 + 9 + 9 + 9 = 45k."
+    },
+    {
+      "id": "cp02",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Why does each turn of a long advisor chat cost more than the one before?",
+      "options": [
+        "Providers raise prices after 10 turns",
+        "Output tokens compound each turn",
+        "The cache expires every turn",
+        "The whole history is resent and paid for on every turn"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Models keep no state between calls, so every turn resends the growing context."
+    },
+    {
+      "id": "cp03",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "What should a running summary of a multi-day support ticket keep? Select all that apply.",
+      "options": [
+        "Decisions already made",
+        "Open tasks and promised follow-ups",
+        "Key figures such as amounts and dates",
+        "Greetings and small talk"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A summary must keep what later turns depend on. Pleasantries only cost tokens."
+    },
+    {
+      "id": "cp04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A sliding window keeps the last 6 turns. The plan the customer chose at turn 2 is forgotten by turn 12. What is the fix?",
+      "options": [
+        "Shrink the window to 3 turns",
+        "Summarize older turns, keeping key facts, instead of dropping them",
+        "Raise max_tokens",
+        "Batch the conversation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Windows drop everything outside them. A summary keeps the facts while still shrinking the context."
+    },
+    {
+      "id": "cp05",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A coding agent reads an 8,000-token test log once to find two failing tests. What should happen to the log?",
+      "options": [
+        "Keep it for context",
+        "Summarize the system prompt instead",
+        "Clear the raw log once the failing tests are recorded",
+        "Move it to the top of the prompt"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Tool output that has been used only costs tokens on every later step. Record what matters, then clear it."
+    },
+    {
+      "id": "cp06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Each of 10 turns adds a 2,000-token tool output that is only needed on the turn it arrives. How many input tokens does clearing earlier outputs save across the session?",
+      "options": [
+        "100,000",
+        "90,000",
+        "20,000",
+        "110,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without clearing, turn t carries (t − 1) old outputs: 2,000 × (0 + 1 + … + 9) = 2,000 × 45 = 90,000 tokens."
+    },
+    {
+      "id": "cp07",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "A contract Q&A pipeline puts the top 20 retrieved chunks in every prompt. Which changes cut retrieved context sensibly? Select all that apply.",
+      "options": [
+        "Retrieve fewer chunks and re-rank them",
+        "Compress chunks with a tool such as LLMLingua",
+        "Retrieve the top 50 instead",
+        "Remove overlapping duplicate chunks"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Fewer, better and de-duplicated chunks, or compressed ones, shrink input. Retrieving more does the opposite."
+    },
+    {
+      "id": "cp08",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Pruning on every turn broke prompt caching for a tutor bot. Which design keeps both?",
+      "options": [
+        "Put the summary before the system prompt",
+        "Keep the system prompt and tools above the pruned region and prune less often",
+        "Prune on every turn but smaller amounts",
+        "Turn off caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A stable top section keeps cache hits; infrequent pruning lets the rewritten history be reused for many turns."
+    },
+    {
+      "id": "cp09",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinical assistant’s summary dropped a patient’s allergy. What is the best safeguard?",
+      "options": [
+        "Shorter summaries",
+        "Summarize more often",
+        "Pin critical facts outside the summarized region and test long sessions",
+        "Raise the temperature"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Facts that must never be lost belong in a pinned section or external store, with evals that check them."
+    },
+    {
+      "id": "cp10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An agent must remember each policyholder’s preferences across sessions months apart. Which tool fits?",
+      "options": [
+        "OpenAI Batch API",
+        "Mem0",
+        "Celery",
+        "tiktoken"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Mem0 stores memories outside the context and retrieves them when relevant."
+    },
+    {
+      "id": "cp11",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "You want to shrink long retrieved passages by removing low-information tokens before they reach the model. Which tool fits?",
+      "options": [
+        "LLMLingua",
+        "Mem0",
+        "LiteLLM",
+        "Temporal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "LLMLingua compresses prompts by dropping tokens that carry little information."
+    },
+    {
+      "id": "cp12",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A summary call reads 14k tokens once and replaces them with a 1k summary. Each of the next 10 turns then sends 13k fewer tokens. Ignoring output, what is the net input saving?",
+      "options": [
+        "130k",
+        "144k",
+        "14k",
+        "116k"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "10 × 13k = 130k saved, minus the 14k the summary call read: 116k."
+    },
+    {
+      "id": "cp13",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which symptoms show that context pruning is needed? Select all that apply.",
+      "options": [
+        "Cost per turn rises steadily in long sessions",
+        "Sessions hit the context window limit",
+        "Old tool outputs and retrieved chunks dominate input tokens",
+        "Most sessions last two turns"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Growing per-turn cost and bloated contexts are the signal. Two-turn sessions have little to prune."
+    },
+    {
+      "id": "cp14",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Besides cost, why can a smaller context improve answers?",
+      "options": [
+        "Models can miss information buried in the middle of long contexts",
+        "Long contexts are always rejected",
+        "Short contexts turn off caching",
+        "It only affects output length"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Studies such as “Lost in the middle” found models use information at the start and end of long contexts better than the middle."
+    },
+    {
+      "id": "cp15",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which parts of a shopping assistant’s context should normally survive pruning? Select all that apply.",
+      "options": [
+        "The system prompt",
+        "The most recent turns",
+        "Pinned critical facts",
+        "Raw tool outputs that have already been used"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Keep the instructions, the recent turns and pinned facts. Used tool output is the first thing to clear."
+    },
+    {
+      "id": "cp16",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Context is 4k at turn 1 and grows by 2k a turn. You summarize when context is more than 12k. On which turn does the first summary happen?",
+      "options": [
+        "Turn 5",
+        "Turn 4",
+        "Turn 7",
+        "Turn 6"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Context at turn t is 2t + 2 thousand: turn 5 is exactly 12k, turn 6 is 14k, the first above the threshold."
+    },
+    {
+      "id": "cp17",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A dispatch assistant needs shipment details from conversations up to three weeks old. What is the best approach?",
+      "options": [
+        "Keep all three weeks in the context",
+        "Store facts externally and retrieve them by shipment ID",
+        "Summarize everything into one sentence",
+        "Clear everything nightly"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "External memory keeps durable facts without carrying them in every prompt."
+    },
+    {
+      "id": "cp18",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "What are the costs or risks of summarization-based pruning? Select all that apply.",
+      "options": [
+        "Summary calls use tokens themselves",
+        "Details can be dropped",
+        "Rewritten history reduces prompt-cache reuse",
+        "It enlarges the context window"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Summaries cost a call, can lose information and change the prefix. They do not change the window size."
+    },
+    {
+      "id": "cp19",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "In a quote-lookup assistant, only the last three turns ever matter. What is enough?",
+      "options": [
+        "A sliding window over the recent turns",
+        "Detailed summaries on every turn",
+        "A knowledge graph of the whole conversation",
+        "No pruning"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "When older turns are never needed, a simple window is the cheapest correct choice."
+    },
+    {
+      "id": "cp20",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "After pruning, a copilot sends a 2k system prompt, a 1k summary and the last 4 turns of 1.5k each. What is the context size?",
+      "options": [
+        "7k",
+        "8.5k",
+        "10k",
+        "9k"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "2k + 1k + 4 × 1.5k = 9k tokens."
+    }
+  ]
+}

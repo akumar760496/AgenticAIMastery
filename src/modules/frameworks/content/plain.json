@@ -1,0 +1,830 @@
+{
+  "id": "plain",
+  "moduleSlug": "frameworks",
+  "name": "A Plain SDK Loop",
+  "shortName": "Plain loop",
+  "question": "Do I need a framework at all?",
+  "summary": "An agent is a loop: call the model with tools, run the tools it asks for, send back the results, stop when it answers. With a provider SDK that is about 45 lines, with nothing hidden and no framework to upgrade. You then own everything else: retries, saving state, pausing for approval and resuming, tracing, streaming and parallel tool calls. Many production agents stay this simple; start here and adopt a framework when a specific need appears.",
+  "useCases": [
+    "First agents, prototypes and learning",
+    "Simple agents with a few tools",
+    "Teams that want full control and few dependencies"
+  ],
+  "keyFacts": {
+    "label": "What you own",
+    "items": [
+      {
+        "term": "The loop",
+        "detail": "call, run tools, append results, repeat"
+      },
+      {
+        "term": "Budget",
+        "detail": "a step limit so it cannot loop forever"
+      },
+      {
+        "term": "Approval",
+        "detail": "a gate before risky tools"
+      },
+      {
+        "term": "State",
+        "detail": "saving and resuming, if runs are long"
+      },
+      {
+        "term": "Tracing",
+        "detail": "spans for each call (Panel 11)"
+      },
+      {
+        "term": "Model switch",
+        "detail": "your own adapter if you change provider"
+      }
+    ]
+  },
+  "steps": [
+    "Write the loop with a step budget",
+    "Add tools with clear schemas (Panel 8)",
+    "Gate risky tools behind approval",
+    "Add persistence and tracing only when needed"
+  ],
+  "pitfalls": [
+    "Rebuilding a framework badly, one feature at a time",
+    "No step budget",
+    "Blocking a web request while waiting for a human"
+  ],
+  "tools": [
+    "Anthropic, OpenAI or Google SDKs",
+    "LiteLLM to switch providers",
+    "OpenTelemetry for tracing",
+    "Temporal when you need durability"
+  ],
+  "remember": "Start with the loop; adopt a framework for a need, not a trend.",
+  "caption": "Line counts are for the examples on this page.",
+  "comparison": {
+    "scope": "Simple agents, full control",
+    "cost": 1,
+    "needs": "Any language with an SDK",
+    "best": "Re-implementing a framework"
+  },
+  "diagram": {
+    "file": "diagrams/plain.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_plain.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "TOOLS = [{\"name\": \"get_transaction\", ...},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "         {\"name\": \"raise_dispute\", ...}]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_tool(name, args):",
+        "steps": []
+      },
+      {
+        "text": "    if name == \"raise_dispute\" and not approvals.request(**args):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"Rejected by reviewer.\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return FUNCS[name](**args)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def agent(question, max_steps=8):",
+        "steps": []
+      },
+      {
+        "text": "    messages = [{\"role\": \"user\", \"content\": question}]",
+        "steps": []
+      },
+      {
+        "text": "    for _ in range(max_steps):                          # step budget",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        r = client.messages.create(model=MODEL, system=SYSTEM,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                   tools=TOOLS, messages=messages)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"assistant\", \"content\": r.content})",
+        "steps": []
+      },
+      {
+        "text": "        if r.stop_reason != \"tool_use\":",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            return text_of(r)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"user\", \"content\": [",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            tool_result(b.id, run_tool(b.name, b.input))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            for b in r.content if b.type == \"tool_use\"]})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    raise RuntimeError(\"step budget exhausted\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# persistence, resume, tracing, streaming: yours to add",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Describe the tools",
+        "text": "Two tools with JSON schemas: look up a transaction by UTR, and raise a dispute. Good descriptions matter more than any framework (Panel 8)."
+      },
+      {
+        "title": "Call the model inside a budget",
+        "text": "The loop sends the conversation and the tools. The step budget stops a confused agent from looping forever."
+      },
+      {
+        "title": "Run the tools it asks for",
+        "text": "If the model stopped to use tools, run them and send back the results; otherwise its text is the answer. That is the whole agent."
+      },
+      {
+        "title": "Gate the risky tool",
+        "text": "A person approves before a dispute is raised. In a plain loop this blocks; that is fine for minutes, not for days."
+      },
+      {
+        "title": "Fail loudly",
+        "text": "If the budget runs out, raise an error rather than returning half an answer."
+      },
+      {
+        "title": "Know what you now own",
+        "text": "About 30 lines, no framework to upgrade. Persistence, resume, tracing, streaming and parallel calls are yours to write if you need them."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"21\" text-anchor=\"middle\">get_transaction</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"184\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"21\" text-anchor=\"middle\">raise_dispute</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"38\" width=\"150\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"53\">call model</text><text class=\"sb\" x=\"83\" y=\"68\">step ≤ 8</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M160 56L190 56\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx \" x=\"192\" y=\"38\" width=\"160\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"272\" y=\"53\">run tools</text><text class=\"sb\" x=\"272\" y=\"68\">send results back</text></g><path class=\"ln a\" d=\"M272 76 V90 H84 V76\" style=\"--d:0.2s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"100\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"115\" text-anchor=\"middle\">approval before raise_dispute (blocks the loop)</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"130\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"145\" text-anchor=\"middle\">budget exhausted → error, not a half answer</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"175\" style=\"text-anchor:end;--d:0s\">lines</text><rect x=\"118\" y=\"165\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"165\" width=\"145.16129032258064\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"175\" style=\"text-anchor:start;--d:0.2s\">30</text><text class=\"sb a\" x=\"8\" y=\"204\" style=\"text-anchor:start;--d:0.2s\">you own: persistence · resume · tracing · streaming</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Nothing hidden: the loop is yours to read",
+      "No framework upgrades or breaking changes",
+      "Works in any language with an SDK",
+      "Easiest to debug and to explain to reviewers"
+    ],
+    "cons": [
+      "You write persistence, resume and tracing yourself",
+      "Approvals that take hours need extra work",
+      "Multi-agent orchestration is manual",
+      "Provider switching needs your own adapter"
+    ],
+    "avoidWhen": [
+      "Long-running cases with human approvals and crash recovery",
+      "Teams that would rebuild a framework badly"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic SDK",
+        "type": "Official SDK",
+        "what": "Messages API with tool use",
+        "url": "https://docs.claude.com/en/api/client-sdks"
+      },
+      {
+        "name": "OpenAI SDK",
+        "type": "Official SDK",
+        "what": "Responses and Chat Completions with tools",
+        "url": "https://platform.openai.com/docs/libraries"
+      },
+      {
+        "name": "Google Gen AI SDK",
+        "type": "Official SDK",
+        "what": "Gemini API with function calling",
+        "url": "https://ai.google.dev/gemini-api/docs"
+      },
+      {
+        "name": "LiteLLM",
+        "type": "Open source",
+        "what": "One interface across providers",
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "name": "Anthropic: Building effective agents",
+        "type": "Guide",
+        "what": "Why simple, composable patterns often win",
+        "url": "https://www.anthropic.com/engineering/building-effective-agents"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kosha Pay, a fictional UPI app, is deciding whether its dispute agent needs a framework at all. Set the team’s needs and constraints and see where a plain SDK loop ranks against eight frameworks, and which needs push it down.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. Plain SDK loop ranks 7 of 7."
+      },
+      {
+        "k": "simple",
+        "name": "Small team, simple agent",
+        "expect": "Top pick: Plain SDK loop."
+      },
+      {
+        "k": "bank",
+        "name": "Bank case with approvals",
+        "expect": "Top pick: LangGraph. Plain SDK loop ranks 5 of 7."
+      },
+      {
+        "k": "dotnet",
+        "name": ".NET shop on Azure",
+        "expect": "Top pick: CrewAI / MS Agent Framework. Plain SDK loop ranks 2 of 2."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make the plain loop the top pick.",
+        "hint": "What does a loop give that frameworks don’t? Control and few dependencies."
+      },
+      {
+        "k": "lose",
+        "text": "Push the plain loop to fourth or lower with durable runs and several agents both essential.",
+        "hint": "These are the features you would have to build yourself."
+      },
+      {
+        "k": "lang",
+        "text": "Make the plain loop the top pick in a language other than Python.",
+        "hint": "Provider SDKs exist where frameworks don’t."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic SDK",
+        "type": "Official SDK",
+        "start": 3,
+        "prod": 3,
+        "best": "Messages with tool use and stop reasons.",
+        "ex": "Write the dispute agent as a 30-line loop.",
+        "pros": [
+          "Transparent",
+          "No framework to upgrade"
+        ],
+        "cons": [
+          "You own durability",
+          "Provider-specific"
+        ],
+        "url": "https://docs.claude.com/en/api/client-sdks"
+      },
+      {
+        "n": "OpenAI SDK",
+        "type": "Official SDK",
+        "start": 3,
+        "prod": 3,
+        "best": "Responses API with function calling.",
+        "ex": "The same loop against OpenAI models.",
+        "pros": [
+          "Mature",
+          "Many languages"
+        ],
+        "cons": [
+          "You own durability",
+          "Provider-specific"
+        ],
+        "url": "https://platform.openai.com/docs/libraries"
+      },
+      {
+        "n": "LiteLLM",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "One call signature across providers.",
+        "ex": "Keep the loop and switch providers.",
+        "pros": [
+          "Wide provider support",
+          "Proxy option"
+        ],
+        "cons": [
+          "Another layer",
+          "Feature gaps per provider"
+        ],
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Durable execution for code you already wrote.",
+        "ex": "Make the loop survive crashes and wait days for approval.",
+        "pros": [
+          "Battle-tested",
+          "Language SDKs"
+        ],
+        "cons": [
+          "Operational overhead",
+          "New concepts"
+        ],
+        "url": "https://temporal.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Our first agent",
+        "tool": "A plain loop on a provider SDK"
+      },
+      {
+        "need": "We need to switch providers",
+        "tool": "LiteLLM or Pydantic AI"
+      },
+      {
+        "need": "Runs now last days",
+        "tool": "Add durable execution or adopt LangGraph"
+      }
+    ],
+    "goals": [
+      "See what a plain loop gives and costs",
+      "Identify the need that justifies a framework",
+      "Compare the same agent across options"
+    ]
+  },
+  "practice": {
+    "scenario": "Kosha Pay, a fictional UPI app, built its first dispute agent as a 45-line loop on a provider SDK: look up the transaction, and if money was debited but the payment failed, raise a dispute after a human approves. It ran in production for six months with nothing but a step budget, an approval gate and tracing. When cases began needing multi-day approvals, the team moved that one workflow to a durable framework and kept the simple agents as plain loops.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Dispute and refund assistants with two or three tools"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "Order-status helpers that call one internal API"
+      },
+      {
+        "industry": "Internal tools",
+        "use": "Engineering and operations assistants"
+      }
+    ],
+    "analogy": "Cooking at home before buying a restaurant kitchen: you learn exactly what the dish needs, and you buy equipment only for the steps that hurt.",
+    "library": {
+      "name": "Anthropic Python SDK",
+      "what": "The provider SDK alone: messages, tools and stop reasons. Swap in the OpenAI or Google SDK the same way.",
+      "install": "pip install anthropic"
+    },
+    "note": "The approval here blocks the loop; for approvals that take hours, persist the state and resume later, or use a durable framework.",
+    "samples": [
+      {
+        "file": "upi_agent_plain.py",
+        "language": "python",
+        "code": "import anthropic\n\nclient = anthropic.Anthropic()\nMODEL = \"claude-sonnet-4-5\"\nTOOLS = [\n    {\"name\": \"get_transaction\", \"description\": \"Look up a UPI transaction by its 12-digit UTR.\",\n     \"input_schema\": {\"type\": \"object\", \"properties\": {\"utr\": {\"type\": \"string\"}}, \"required\": [\"utr\"]}},\n    {\"name\": \"raise_dispute\", \"description\": \"Raise a dispute for a failed UPI debit. Needs human approval.\",\n     \"input_schema\": {\"type\": \"object\", \"properties\": {\"utr\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\"}},\n                      \"required\": [\"utr\", \"reason\"]}},\n]\n\ndef run_tool(name, args):\n    if name == \"get_transaction\":\n        return bank.transactions.get(args[\"utr\"])\n    if name == \"raise_dispute\":\n        if not approvals.request(args[\"utr\"], args[\"reason\"]):     # a person decides\n            return \"Rejected by reviewer.\"\n        return bank.disputes.create(args[\"utr\"], args[\"reason\"])\n    return f\"Unknown tool {name}\"\n\ndef agent(question: str, max_steps: int = 8) -> str:\n    messages = [{\"role\": \"user\", \"content\": question}]\n    for _ in range(max_steps):                                     # step budget\n        r = client.messages.create(model=MODEL, max_tokens=1024, system=SYSTEM,\n                                   tools=TOOLS, messages=messages)\n        messages.append({\"role\": \"assistant\", \"content\": r.content})\n        if r.stop_reason != \"tool_use\":\n            return \"\".join(b.text for b in r.content if b.type == \"text\")\n        messages.append({\"role\": \"user\", \"content\": [\n            {\"type\": \"tool_result\", \"tool_use_id\": b.id, \"content\": str(run_tool(b.name, b.input))}\n            for b in r.content if b.type == \"tool_use\"]})\n    raise RuntimeError(\"step budget exhausted\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A plain agent loop is 30 lines. Later you add retries (about 40 lines), saving and restoring state (about 150), pausing for approval and resuming (about 120) and tracing (about 60). How many lines do you now maintain?",
+    "answer": "30 + 40 + 150 + 120 + 60 = 400 lines, most of them the durability features a framework such as LangGraph or Pydantic AI with Temporal provides. That is the signal to adopt one for this agent, not before.",
+    "expected": {
+      "value": 400,
+      "tolerance": 1,
+      "label": "lines ="
+    },
+    "interview": [
+      {
+        "question": "When would you not use an agent framework?",
+        "answer": "When the agent is a simple tool loop with a few tools, short runs and no need to pause and resume. A provider SDK loop is small, transparent and has no framework upgrades to track. Adopt a framework when a concrete need appears, such as durable state, human approvals that take hours, or multi-agent orchestration."
+      },
+      {
+        "question": "What must a hand-written loop always have?",
+        "answer": "A step budget so it cannot run forever, clear tool schemas, error handling that returns failures to the model rather than crashing, an approval gate before risky actions, and tracing so you can see what happened."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Adopting a framework for a two-tool agent",
+        "fix": "Start with the loop; add a framework for a real need"
+      },
+      {
+        "mistake": "Re-implementing durability by hand",
+        "fix": "Adopt durable execution when runs get long"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pl01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What is the core of every agent, whatever the framework?",
+      "options": [
+        "A vector database",
+        "A loop: call the model with tools, run the tools, return results, repeat",
+        "A multi-agent crew",
+        "A fine-tuned model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Frameworks wrap the same loop."
+    },
+    {
+      "id": "pl02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Why add a step budget to a hand-written loop?",
+      "options": [
+        "To shorten answers",
+        "So a confused agent cannot loop forever",
+        "To enable streaming",
+        "It is required by the API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It bounds cost and time."
+    },
+    {
+      "id": "pl03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "When is a plain SDK loop usually enough?",
+      "options": [
+        "Multi-day cases with approvals",
+        "Simple agents with a few tools and short runs",
+        "Six collaborating agents",
+        "Crash-proof workflows"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Adopt a framework for a real need."
+    },
+    {
+      "id": "pl04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What must you build yourself with a plain loop? Select all that apply.",
+      "options": [
+        "Saving and resuming state",
+        "Tracing",
+        "Calling the model",
+        "Defining the tools"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Durability and observability are yours."
+    },
+    {
+      "id": "pl05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The model’s stop reason is not tool_use. What should the loop do?",
+      "options": [
+        "Return its text as the answer",
+        "Call every tool",
+        "Restart",
+        "Raise an error"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No tool request means it has answered."
+    },
+    {
+      "id": "pl06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An approval takes two days. What is the problem with blocking inside a plain loop?",
+      "options": [
+        "None",
+        "The process must stay alive and nothing survives a restart",
+        "It is too fast",
+        "Tools stop working"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Long waits need persisted state."
+    },
+    {
+      "id": "pl07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which guide argues that simple, composable patterns often beat complex frameworks?",
+      "options": [
+        "Anthropic’s Building effective agents",
+        "The EU AI Act",
+        "ISO 42001",
+        "The OpenAPI spec"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Published in December 2024."
+    },
+    {
+      "id": "pl08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A loop grows from 30 to about 400 lines as you add durability, approvals and tracing. What does that suggest?",
+      "options": [
+        "Keep adding features by hand",
+        "It may be time to adopt a framework for those features",
+        "Delete the tracing",
+        "Switch languages"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Don’t rebuild a framework badly."
+    },
+    {
+      "id": "pl09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How do you switch providers in a plain loop?",
+      "options": [
+        "It is impossible",
+        "Write an adapter or use a library such as LiteLLM",
+        "Retrain the model",
+        "Change the tool schemas only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Or keep a thin interface."
+    },
+    {
+      "id": "pl10",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which are advantages of a plain loop? Select all that apply.",
+      "options": [
+        "Nothing hidden",
+        "No framework upgrades to track",
+        "Built-in checkpointing",
+        "Built-in multi-agent teams"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Transparency and few dependencies."
+    },
+    {
+      "id": "pl11",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A tool fails. What should the loop usually do?",
+      "options": [
+        "Crash",
+        "Return the error to the model as a tool result",
+        "Silently skip it",
+        "Restart the process"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Let the model recover or report."
+    },
+    {
+      "id": "pl12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Where should an approval gate sit?",
+      "options": [
+        "Before a risky tool runs",
+        "After the answer is sent",
+        "In the system prompt only",
+        "Nowhere"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Gate the action, not the text."
+    },
+    {
+      "id": "pl13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which protocol lets tools written once be used from a plain loop or any framework?",
+      "options": [
+        "MCP",
+        "SMTP",
+        "FTP",
+        "SOAP"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Model Context Protocol reduces lock-in."
+    },
+    {
+      "id": "pl14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The budget runs out. What is best?",
+      "options": [
+        "Raise an error",
+        "Return partial text as if complete",
+        "Loop again",
+        "Ignore it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fail loudly."
+    },
+    {
+      "id": "pl15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "In how many languages can you write a plain loop?",
+      "options": [
+        "Only Python",
+        "Any language with a provider SDK or HTTP client",
+        "Only TypeScript",
+        "Only Java"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "No framework needed."
+    },
+    {
+      "id": "pl16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "About how many lines was the plain UPI agent on this page?",
+      "options": [
+        "About 30",
+        "About 300",
+        "About 3,000",
+        "About 3"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Similar to the frameworks’ versions."
+    },
+    {
+      "id": "pl17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Why does line count barely differ between options for the same agent?",
+      "options": [
+        "Frameworks differ in what they provide beyond the basic loop",
+        "All frameworks are identical",
+        "Line counts are random",
+        "Python is verbose"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Value is in durability, control and tools."
+    },
+    {
+      "id": "pl18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which needs are signals to adopt a framework? Select all that apply.",
+      "options": [
+        "Runs that must survive crashes and resume",
+        "Several collaborating agents",
+        "A two-tool chat agent",
+        "A single short lookup"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Concrete needs, not trends."
+    },
+    {
+      "id": "pl19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What keeps business logic portable across frameworks?",
+      "options": [
+        "Keeping it outside framework-specific code behind a thin interface",
+        "Putting it all in prompts",
+        "Copying it into every agent",
+        "Using globals"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A thin boundary eases switching."
+    },
+    {
+      "id": "pl20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What lets you compare a replacement framework objectively?",
+      "options": [
+        "An eval suite on real cases",
+        "Popularity on social media",
+        "Line counts",
+        "Documentation length"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Measure, don’t guess."
+    }
+  ]
+}

@@ -1,0 +1,939 @@
+{
+  "id": "qoa",
+  "moduleSlug": "rag",
+  "name": "Agentic and Corrective RAG",
+  "shortName": "Agentic RAG",
+  "question": "Should the agent plan, check and retry its own retrieval?",
+  "summary": "An agent plans retrieval instead of running one fixed search. It pulls structured filters out of the question, chooses the collection or tool, and checks what came back. Corrective RAG (CRAG) adds a grader that scores the retrieved passages: weak results trigger a rewritten query, a different source such as web search, or an honest “not found”. Self-querying retrieval is the filter-extraction part of this pattern.",
+  "useCases": [
+    "Questions with implicit filters: dates, prices, categories, owners",
+    "Several collections or data sources to choose between",
+    "Hard questions where a first search often misses"
+  ],
+  "keyFacts": {
+    "label": "What the agent decides",
+    "items": [
+      {
+        "term": "Filter extraction",
+        "detail": "“laptops under ₹60k from 2024” → price and year filters"
+      },
+      {
+        "term": "Source selection",
+        "detail": "which collection, index or tool to query"
+      },
+      {
+        "term": "Strategy",
+        "detail": "vector, keyword, hybrid or SQL"
+      },
+      {
+        "term": "Relevance grading",
+        "detail": "a small model scores each passage: relevant, ambiguous or wrong"
+      },
+      {
+        "term": "Corrective action",
+        "detail": "rewrite, switch source or abstain when grades are low"
+      },
+      {
+        "term": "Parameters",
+        "detail": "top-k, filters and a cap on retries"
+      }
+    ]
+  },
+  "steps": [
+    "Have the agent output a structured query plan that code validates",
+    "Grade the retrieved passages before generating",
+    "Rewrite, switch source or abstain when grades are low, with a hard cap on retries",
+    "Log every plan and grade, and compare against a fixed pipeline on your eval set"
+  ],
+  "pitfalls": [
+    "Adds LLM calls and latency before every answer",
+    "A wrong filter silently excludes the right results",
+    "Unbounded retry loops; always cap them"
+  ],
+  "tools": [
+    "LangGraph",
+    "LangChain SelfQueryRetriever",
+    "LlamaIndex auto-retrieval",
+    "Weaviate Query Agent"
+  ],
+  "remember": "Plan the query, grade the results, retry or admit defeat.",
+  "caption": "The plan is plain JSON, so code can validate filters before anything runs.",
+  "comparison": {
+    "scope": "Around the whole pipeline",
+    "cost": 4,
+    "needs": "Implicit filters, many sources, hard questions",
+    "best": "Latency; silent wrong filters"
+  },
+  "diagram": {
+    "file": "diagrams/qoa.svg"
+  },
+  "lesson": {
+    "file": "query_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from typing import Literal",
+        "steps": []
+      },
+      {
+        "text": "from pydantic import BaseModel, Field, field_validator",
+        "steps": []
+      },
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "client = OpenAI()",
+        "steps": []
+      },
+      {
+        "text": "BRANDS = {\"Acer\", \"Apple\", \"Asus\", \"Dell\", \"HP\", \"Lenovo\"}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Plan(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    query: str                               # the semantic part",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    max_price_inr: int | None = Field(None, ge=10_000)",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "    year: int | None = Field(None, ge=2018, le=2026)",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "    brand: str | None = None",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    mode: Literal[\"hybrid\", \"vector\", \"keyword\"] = \"hybrid\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    k: int = Field(10, le=50)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    @field_validator(\"brand\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    @classmethod",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    def known_brand(cls, v):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if v is not None and v not in BRANDS:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            raise ValueError(f\"unknown brand: {v}\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return v",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def make_plan(request, note=\"\"):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    msgs = [{\"role\": \"system\", \"content\": f\"Fill the search plan. Today is 2026-09-25. {note}\"},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            {\"role\": \"user\", \"content\": request}]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return client.beta.chat.completions.parse(model=\"gpt-4o-mini\", messages=msgs,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                              response_format=Plan).choices[0].message.parsed",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "request = \"2024 laptops under 60k with long battery life\"",
+        "steps": []
+      },
+      {
+        "text": "plan = make_plan(request)             # an invalid plan raises ValidationError: ask again",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "for attempt in range(2):              # hard cap on retries",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    hits = db.search(plan.query, mode=plan.mode, k=plan.k,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                     where={\"price_inr\": (\"<\", plan.max_price_inr), \"year\": (\"=\", plan.year)})",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    log.info({\"request\": request, \"plan\": plan.model_dump(), \"hits\": len(hits)})",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if len(hits) >= 3: break",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    plan = make_plan(request, note=f\"Only {len(hits)} results. Relax the least important filter.\")",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Describe the plan schema",
+        "text": "A typed plan lists the fields the database can filter on, with ranges and allowed values. The model can only fill these fields."
+      },
+      {
+        "title": "Let the model fill the plan",
+        "text": "The request becomes a semantic query plus structured filters: year 2024 and a price ceiling. Here the model slips and writes 60."
+      },
+      {
+        "title": "Validate the plan in code",
+        "text": "ge=10_000 rejects a price of 60 before any search runs. The error goes back to the model, which returns 60,000."
+      },
+      {
+        "title": "Run the structured search",
+        "text": "Filters are applied exactly by the database; only the “long battery life” part is matched by meaning."
+      },
+      {
+        "title": "Check the results, retry once",
+        "text": "Fewer than 3 hits triggers one re-plan with feedback. The loop is capped so a bad request can't spin forever."
+      },
+      {
+        "title": "Log every plan",
+        "text": "Store the request, the plan and the hit count. Silent wrong filters only show up when someone reads these logs or an eval set catches them."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"6\" width=\"166\" height=\"48\" rx=\"7\"/><text class=\"lb\" x=\"89\" y=\"27\">Plan schema</text><text class=\"sb\" x=\"89\" y=\"42\">query · price · year · brand</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"182\" y=\"6\" width=\"172\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"23\" text-anchor=\"middle\">“2024 laptops under 60k…”</text></g><g class=\"a dark-t\" style=\"--d:0.15s\"><rect class=\"bx dark\" x=\"182\" y=\"40\" width=\"172\" height=\"28\" rx=\"7\"/><text class=\"lb\" x=\"268\" y=\"58.5\">LLM fills the plan</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M182 54L174 72\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx\" x=\"6\" y=\"64\" width=\"166\" height=\"92\" rx=\"7\"/></g><text class=\"mono a\" x=\"14\" y=\"84\" style=\"font-size:9.5px;--d:0.45s\">query: \"long battery life\"</text><text class=\"mono a\" x=\"14\" y=\"104\" style=\"font-size:9.5px;--d:0.5700000000000001s\">year: 2024</text><text class=\"mono a\" x=\"14\" y=\"124\" style=\"font-size:9.5px;--d:0.69s\">max_price: 60</text><text class=\"mono a\" x=\"14\" y=\"144\" style=\"font-size:9.5px;--d:0.81s\">mode: hybrid · k: 10</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"160\" cy=\"120\" r=\"9\" class=\"bd-fail\"/><path d=\"M156.5 116.5l7 7M163.5 116.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"182\" y=\"80\" width=\"172\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"96\" text-anchor=\"middle\">60 < 10,000 → rejected</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"182\" y=\"110\" width=\"172\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"126\" text-anchor=\"middle\">re-ask → max_price: 60000</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M172 150L182 160\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"182\" y=\"142\" width=\"172\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"268\" y=\"157\">Vector DB</text><text class=\"sb\" x=\"268\" y=\"172\">filters applied exactly</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"182\" y=\"186\" width=\"172\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"202\" text-anchor=\"middle\">10 hits ≥ 3 → accept</text></g><g class=\"a\" style=\"--d:0.2s\"><path d=\"M182 198 H90 V160\" class=\"ln dash\" marker-end=\"url(#arr)\" style=\"stroke-dasharray:4 3\"/><text class=\"sb\" x=\"120\" y=\"192\">else re-plan once</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"222\" width=\"348\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"237\" text-anchor=\"middle\">log: request · plan · hits, for every call</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Turns implicit constraints into exact filters",
+      "Grading lets the pipeline retry or say “not found” instead of guessing",
+      "A corrective step can switch source when the first search is weak",
+      "Plans and grades are plain data you can validate, log and replay"
+    ],
+    "cons": [
+      "Adds LLM latency and cost to every query",
+      "A wrong but valid filter silently hides correct results",
+      "Harder to test than a fixed pipeline",
+      "Retry loops multiply cost unless capped"
+    ],
+    "avoidWhen": [
+      "Queries carry no structured constraints (a fixed pipeline is cheaper)",
+      "Hard latency limits well under a second leave no room for an LLM call"
+    ],
+    "tools": [
+      {
+        "name": "LangChain",
+        "type": "Open source",
+        "what": "SelfQueryRetriever: query plus metadata filters",
+        "url": "https://github.com/langchain-ai/langchain"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "Auto-retrieval over vector stores with metadata",
+        "url": "https://github.com/run-llama/llama_index"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Plan, search, grade and retry as an explicit graph (corrective RAG)",
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "name": "Weaviate Query Agent",
+        "type": "Commercial · Weaviate Cloud",
+        "what": "Natural language to filtered searches across collections",
+        "url": "https://docs.weaviate.io/query-agent"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Typed plan schemas and validation",
+        "url": "https://docs.pydantic.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An electronics marketplace lets shoppers type requests in plain language. A query agent turns each one into a search plan with filters. This planner is scripted to make two classic mistakes, so you can see which safeguard catches which. Three requests share the same 96-laptop catalogue.",
+    "controls": [
+      "Choose one of three shopper requests.",
+      "Toggle filter extraction; without it, the request goes straight to vector search.",
+      "Toggle validation, the current date and a one-retry self-check."
+    ],
+    "outputs": [
+      {
+        "name": "Plan",
+        "meaning": "The structured query the agent sends to the database."
+      },
+      {
+        "name": "Results returned",
+        "meaning": "How many laptops come back (up to 10)."
+      },
+      {
+        "name": "Precision",
+        "meaning": "Results meeting every stated constraint ÷ results returned."
+      },
+      {
+        "name": "LLM calls · searches",
+        "meaning": "How many model calls and database searches this request took."
+      },
+      {
+        "name": "Added latency",
+        "meaning": "About 700 ms per LLM call and 40 ms per search."
+      },
+      {
+        "name": "All three requests fully correct",
+        "meaning": "Whether this configuration handles every request."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Plain vector search",
+        "expect": "Request 1 without a plan: only 1 of 10 results is a 2024 laptop under INR 60,000."
+      },
+      {
+        "k": "agent",
+        "name": "Plan, no checks",
+        "expect": "The planner writes max_price = 60, so the search returns 0 results after 1 LLM call."
+      },
+      {
+        "k": "guarded",
+        "name": "Checks, no date",
+        "expect": "Request 2 with validation and self-check: 10 results, all from 2024, so 0 of 10 are correct. Silently wrong."
+      },
+      {
+        "k": "full",
+        "name": "Full agent",
+        "expect": "Validation catches the unit slip before searching: 10 of 10 correct, 2 LLM calls, 1 search, 1,440 ms."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fix1",
+        "text": "For request 1, get 10 correct results with only one database search.",
+        "hint": "Validation catches the bad price before any search runs; a self-check only catches it after one."
+      },
+      {
+        "k": "silent",
+        "text": "For request 2, get every result right.",
+        "hint": "No check can see a valid but wrong year. The agent needs the date."
+      },
+      {
+        "k": "all",
+        "text": "Find one configuration that gets all three requests fully correct.",
+        "hint": "Extraction, a check for the unit slip, and the date."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangChain",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "SelfQueryRetriever turns a question into a query string plus metadata filters for many vector stores.",
+        "ex": "Describe fields brand, year and price_inr; the retriever builds the filter for Chroma or Qdrant.",
+        "pros": [
+          "Quick to set up",
+          "Many vector-store translators"
+        ],
+        "cons": [
+          "Less control over validation",
+          "APIs change often"
+        ],
+        "url": "https://github.com/langchain-ai/langchain"
+      },
+      {
+        "n": "LlamaIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Auto-retrieval: the model infers metadata filters from the vector store’s schema.",
+        "ex": "VectorIndexAutoRetriever over a product index with brand and year metadata.",
+        "pros": [
+          "Good for document-heavy RAG",
+          "Composable query engines"
+        ],
+        "cons": [
+          "Abstractions hide the plan",
+          "Debugging needs tracing"
+        ],
+        "url": "https://github.com/run-llama/llama_index"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Plan, search, grade and retry as an explicit, inspectable graph with state.",
+        "ex": "A graph with plan → validate → search → grade nodes and a retry edge capped at one.",
+        "pros": [
+          "Every step visible and testable",
+          "Durable state and human review"
+        ],
+        "cons": [
+          "More code than a one-call retriever",
+          "You design the grading"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "n": "Weaviate Query Agent",
+        "type": "Commercial · Weaviate Cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "A managed agent that turns natural language into filtered searches across your collections.",
+        "ex": "Ask “2024 laptops under 60k” and get search results with the filters it chose.",
+        "pros": [
+          "No agent code to write",
+          "Reads your collection schemas"
+        ],
+        "cons": [
+          "Only for Weaviate Cloud",
+          "Less control over the plan"
+        ],
+        "url": "https://docs.weaviate.io/query-agent"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Typed plan schemas that reject invalid fields and values before a search runs.",
+        "ex": "Field(ge=10_000) on max_price_inr catches a model that writes 60 for “60k”.",
+        "pros": [
+          "Validation errors are explicit",
+          "Works with structured outputs"
+        ],
+        "cons": [
+          "Cannot catch valid but wrong values",
+          "Schemas need maintaining"
+        ],
+        "url": "https://docs.pydantic.dev"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Quick self-querying retriever",
+        "tool": "LangChain or LlamaIndex"
+      },
+      {
+        "need": "Production agent with retries",
+        "tool": "LangGraph + Pydantic"
+      },
+      {
+        "need": "Managed, on Weaviate",
+        "tool": "Weaviate Query Agent"
+      }
+    ],
+    "goals": [
+      "Design a typed search plan with validation rules",
+      "Explain why a valid but wrong filter is the most dangerous failure",
+      "Cap retries and log plans so agentic retrieval is debuggable"
+    ]
+  },
+  "practice": {
+    "scenario": "On a laptop marketplace, “gaming laptop under 80k with RTX, launched this year” becomes a plan: price below 80,000, GPU contains RTX, launch year 2026, and a semantic query for “gaming”. Code validates the plan before any search runs.",
+    "industries": [
+      {
+        "industry": "E-commerce & real estate",
+        "use": "Price, location and date filters from plain language"
+      },
+      {
+        "industry": "Fintech",
+        "use": "“large-cap funds with a low expense ratio” → a structured screener query"
+      },
+      {
+        "industry": "Enterprise",
+        "use": "Choose between HR, IT and finance knowledge bases"
+      }
+    ],
+    "analogy": "A travel agent who turns “somewhere warm in December under 50k” into dates, destinations and a budget before searching.",
+    "library": {
+      "name": "Pydantic + structured outputs",
+      "what": "The model fills a typed plan; Pydantic rejects anything invalid before it reaches the database.",
+      "install": "pip install openai pydantic"
+    },
+    "samples": [
+      {
+        "file": "plan.py",
+        "language": "python",
+        "code": "from typing import Literal\nfrom pydantic import BaseModel, Field\nfrom openai import OpenAI\nclient = OpenAI()\n\nclass SearchPlan(BaseModel):\n    query: str\n    max_price: int | None\n    launch_year: int | None\n    must_have: list[str]\n    mode: Literal[\"hybrid\", \"vector\", \"keyword\"]\n    k: int = Field(le=50)\n\nplan = client.beta.chat.completions.parse(\n    model=\"gpt-4o-mini\",\n    messages=[{\"role\": \"system\", \"content\": \"Turn the request into a search plan. Current year: 2026.\"},\n              {\"role\": \"user\", \"content\": \"gaming laptop under 80k with RTX, launched this year\"}],\n    response_format=SearchPlan,\n).choices[0].message.parsed\n\nprint(plan)   # query='gaming laptop' max_price=80000 launch_year=2026 must_have=['RTX'] ...\nresults = search(plan)                   # your DB call, filters applied as structured fields"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Turn “2 BHK flats in Pune under 60 lakh, ready to move” into a search plan.",
+    "answer": "query: “2 BHK flat”; filters: city = Pune, bedrooms = 2, price < 6,000,000, status = ready_to_move; mode: hybrid; k: 10–20. Code checks the city against known values and the price as a number before running.",
+    "interview": [
+      {
+        "question": "What is self-querying retrieval?",
+        "answer": "An LLM turns a natural-language request into a semantic query plus structured metadata filters that the database applies exactly. It fixes requests with implicit constraints that pure vector search ignores."
+      },
+      {
+        "question": "How do you make agentic retrieval safe and debuggable?",
+        "answer": "Constrain the plan to a typed schema, validate fields and values in code, cap retries, log every plan with its results, and compare against a fixed pipeline on an eval set."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Letting the model write raw SQL or filters unchecked",
+        "fix": "Use a structured plan validated in code"
+      },
+      {
+        "mistake": "Unlimited retry loops",
+        "fix": "Cap retries and fall back to a fixed pipeline"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "qa01",
+      "kind": "single",
+      "industry": "Real estate",
+      "question": "A buyer asks for “2 BHK flats in Pune under 60 lakh”. What max_price_inr should the plan contain?",
+      "options": [
+        "600,000",
+        "6,000,000",
+        "60,000,000",
+        "60"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1 lakh = 100,000, so 60 lakh = 6,000,000."
+    },
+    {
+      "id": "qa02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The planner writes max_price_inr = 60 for “under 60k”. What catches it before any search runs?",
+      "options": [
+        "A range check such as ge=10,000 in the schema",
+        "A larger top-k",
+        "Hybrid search",
+        "A longer prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Validation in code rejects impossible values and sends the error back to the model."
+    },
+    {
+      "id": "qa03",
+      "kind": "multi",
+      "industry": "Enterprise",
+      "question": "Which of these should a query optimization agent decide? Select all that apply.",
+      "options": [
+        "Structured filters",
+        "Which collection to query",
+        "Retrieval mode and top-k",
+        "The embedding model’s weights"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The agent plans the query. The embedding model is fixed when the index is built."
+    },
+    {
+      "id": "qa04",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A request needs 2 LLM calls at about 700 ms and 2 searches at about 40 ms. How much latency does the agent add?",
+      "options": [
+        "1,400 ms",
+        "780 ms",
+        "1,480 ms",
+        "740 ms"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2 × 700 + 2 × 40 = 1,400 + 80 = 1,480 ms."
+    },
+    {
+      "id": "qa05",
+      "kind": "single",
+      "industry": "Mutual funds",
+      "question": "An investor asks for “large-cap funds with an expense ratio under 1%”. What should the plan contain?",
+      "options": [
+        "The whole sentence embedded as one query",
+        "Filters category = large cap and expense_ratio < 1.0, with little left for the semantic part",
+        "BM25 over the fund names only",
+        "A higher ef_search"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Both constraints are structured fields; embeddings would only nudge similarity."
+    },
+    {
+      "id": "qa06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "“Laptops launched this year” comes back as year = 2024 when it is 2026. What fixes it?",
+      "options": [
+        "A larger top-k",
+        "A tighter year range in the schema",
+        "More retries",
+        "Putting today’s date in the system prompt"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "The model cannot know the current date. A range check passes 2024, so the date must come from the prompt."
+    },
+    {
+      "id": "qa07",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which practices make agentic retrieval safe? Select all that apply.",
+      "options": [
+        "A typed plan schema validated in code",
+        "A hard cap on retries",
+        "Logging every plan with its results",
+        "Letting the model write raw SQL that runs directly"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Structured, validated plans with capped retries and logs are safe. Unchecked raw SQL is not."
+    },
+    {
+      "id": "qa08",
+      "kind": "single",
+      "industry": "Enterprise",
+      "question": "An assistant must choose between HR, IT and finance knowledge bases. Which agent decision is this?",
+      "options": [
+        "Hybrid fusion",
+        "Quantization",
+        "Source selection: routing to the right collection",
+        "Graph tuning"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Choosing which collection or tool to query is source selection."
+    },
+    {
+      "id": "qa09",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An agent may try up to 3 plans, each with a 700 ms LLM call and a 40 ms search. What is the worst-case added latency?",
+      "options": [
+        "740 ms",
+        "2,100 ms",
+        "1,480 ms",
+        "2,220 ms"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "3 × (700 + 40) = 2,220 ms."
+    },
+    {
+      "id": "qa10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which agent failure is hardest to notice?",
+      "options": [
+        "A schema validation error",
+        "A valid filter with a wrong value that still returns plenty of results",
+        "A timeout",
+        "Zero results"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Nothing fires for a plausible wrong filter. Only logs and an evaluation set reveal it."
+    },
+    {
+      "id": "qa11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "On 300 labelled queries, the agent gets 252 right and the fixed pipeline 219. What are their accuracies?",
+      "options": [
+        "84% vs 73%, an 11-point gain",
+        "84% vs 73%, a 15-point gain",
+        "75% vs 65%, a 10-point gain",
+        "252 vs 219, a 33% gain"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "252 ÷ 300 = 0.84 and 219 ÷ 300 = 0.73, a gain of 11 percentage points."
+    },
+    {
+      "id": "qa12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Queries are purely semantic, with no filters, and the latency budget is 150 ms. What do you choose?",
+      "options": [
+        "An agent with three retries",
+        "Two agents in sequence",
+        "A fixed pipeline, because an LLM call would break the budget",
+        "An agent without logs"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "With no structured constraints and a tight budget, planning adds cost with no benefit."
+    },
+    {
+      "id": "qa13",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "What belongs in the agent’s description of each collection? Select all that apply.",
+      "options": [
+        "Filterable fields and their types",
+        "Allowed values, such as practice areas",
+        "What the collection contains",
+        "The raw vectors"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The agent needs fields, values and contents to plan well. Vectors are useless to it."
+    },
+    {
+      "id": "qa14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which LangChain component turns a request into a query plus metadata filters?",
+      "options": [
+        "RecursiveCharacterTextSplitter",
+        "SelfQueryRetriever",
+        "BM25Okapi",
+        "IndexRefineFlat"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "SelfQueryRetriever asks an LLM for a semantic query and structured filters for the vector store."
+    },
+    {
+      "id": "qa15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does the Weaviate Query Agent do?",
+      "options": [
+        "Builds HNSW graphs faster",
+        "Quantizes vectors",
+        "Runs BM25 only",
+        "Turns natural-language questions into filtered searches across collections"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "It chooses collections, filters and search methods from a plain-language question, on Weaviate Cloud."
+    },
+    {
+      "id": "qa16",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A plan filters department = “Cardio”, but the stored value is “Cardiology”. Which measures prevent this kind of error? Select all that apply.",
+      "options": [
+        "List allowed values in the schema, for example as an enum",
+        "Validate values in code before searching",
+        "Log plans and review filters that return few results",
+        "Raise top-k to 50"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Constrained values, validation and logs catch wrong values. A larger k cannot fix a filter that matches nothing."
+    },
+    {
+      "id": "qa17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which self-check design is sound?",
+      "options": [
+        "Re-plan once with feedback when results are too few, then fall back",
+        "Retry until results look good",
+        "Never check results",
+        "Always drop every filter on retry"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One capped retry with feedback recovers weak searches without runaway cost."
+    },
+    {
+      "id": "qa18",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What does adding a query optimization agent cost? Select all that apply.",
+      "options": [
+        "LLM latency on every query",
+        "Token cost on every query",
+        "More cost when retries run, unless they are capped",
+        "A larger vector index on disk"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The agent adds LLM calls. The index itself is unchanged."
+    },
+    {
+      "id": "qa19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A handler asks for “claims above INR 2 lakh”. What value should the amount filter use?",
+      "options": [
+        "20,000",
+        "2,000,000",
+        "200,000",
+        "20,000,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2 lakh = 2 × 100,000 = 200,000, written 2,00,000 in Indian notation."
+    },
+    {
+      "id": "qa20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The plan asks for k = 500, but the schema allows at most 50. What should happen?",
+      "options": [
+        "The search runs with k = 500",
+        "Validation fails, and the model is asked again or k is clamped to 50",
+        "The database crashes",
+        "k is silently ignored"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The schema is the contract: invalid plans are rejected or corrected before any search."
+    }
+  ]
+}

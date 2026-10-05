@@ -1,0 +1,916 @@
+{
+  "id": "stm",
+  "moduleSlug": "memory",
+  "name": "Short-Term Memory and Compaction",
+  "shortName": "Short-term memory",
+  "question": "How does the agent keep the thread?",
+  "summary": "Short-term memory is the working state of one session: messages, tool results and plans. When it outgrows the window, the agent clears stale tool results, compacts old turns into a summary, or writes progress notes, while keeping identifiers, amounts, decisions and open tasks intact.",
+  "useCases": [
+    "Sessions that run for dozens or hundreds of turns",
+    "Agents whose tool results (search pages, statements, logs) are large",
+    "Tasks that must survive a restart or a context limit"
+  ],
+  "keyFacts": {
+    "label": "Techniques",
+    "items": [
+      {
+        "term": "Tool-result clearing",
+        "detail": "drop old tool outputs, keep the last few (Claude: keep 3 by default)"
+      },
+      {
+        "term": "Compaction",
+        "detail": "summarize old turns into one block (Claude: triggers at 150k by default)"
+      },
+      {
+        "term": "Summary instructions",
+        "detail": "say what must survive: IDs, amounts, dates, decisions, open tasks"
+      },
+      {
+        "term": "Progress notes",
+        "detail": "a file or row the agent re-reads after each compaction"
+      },
+      {
+        "term": "Checkpointers",
+        "detail": "persist thread state by session ID (LangGraph, Agents SDK Sessions)"
+      },
+      {
+        "term": "Cache cost",
+        "detail": "each clear rewrites the prefix; clear fewer, larger chunks"
+      }
+    ]
+  },
+  "steps": [
+    "Persist the thread by session ID and log input tokens per turn",
+    "Clear stale tool results past a trigger, keeping the last few and protecting still-needed tools",
+    "Compact old turns with instructions that keep IDs, amounts, decisions and open tasks",
+    "Quiz the agent on early-session facts after each compaction"
+  ],
+  "pitfalls": [
+    "A summary that paraphrases account numbers or amounts",
+    "Dropping the first message, which holds the task and constraints",
+    "Clearing a little on every turn, which invalidates the prompt cache each time"
+  ],
+  "tools": [
+    "Claude context editing",
+    "Claude compaction",
+    "LangGraph checkpointers",
+    "OpenAI Agents SDK Sessions",
+    "LangMem"
+  ],
+  "remember": "Clear the bulk, summarize the rest, keep the IDs.",
+  "caption": "Illustrative session: 4.5k tokens a turn. Clearing at 60k plus compaction keeps context under 70k for 120 turns.",
+  "comparison": {
+    "scope": "One session’s working state",
+    "cost": 2,
+    "needs": "Session store and a summary prompt",
+    "best": "Summaries that lose exact values"
+  },
+  "diagram": {
+    "file": "diagrams/stm.svg"
+  },
+  "lesson": {
+    "file": "long_session.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "store = SessionStore(\"redis://localhost:6379\")        # your own store",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "EDITS = [",
+        "steps": []
+      },
+      {
+        "text": "  {\"type\": \"clear_tool_uses_20250919\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "   \"trigger\": {\"type\": \"input_tokens\", \"value\": 60_000},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "   \"keep\": {\"type\": \"tool_uses\", \"value\": 3},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "   \"clear_at_least\": {\"type\": \"input_tokens\", \"value\": 20_000},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "   \"exclude_tools\": [\"get_loan_summary\"]},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  {\"type\": \"compact_20260112\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "   \"trigger\": {\"type\": \"input_tokens\", \"value\": 120_000},",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "   \"instructions\": \"Summarize the call. Copy verbatim: loan account, \"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "       \"agreed EMI, NEFT mandate status, decisions and open tasks.\"}]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def turn(session_id, user_text):",
+        "steps": []
+      },
+      {
+        "text": "    msgs = store.get(session_id) or [TASK_MESSAGE]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    msgs.append({\"role\": \"user\", \"content\": user_text})",
+        "steps": []
+      },
+      {
+        "text": "    r = client.beta.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=MODEL, max_tokens=2048, tools=TOOLS, messages=msgs,",
+        "steps": []
+      },
+      {
+        "text": "        betas=[\"context-management-2025-06-27\", \"compact-2026-01-12\"],",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "        context_management={\"edits\": EDITS})",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    metrics.log(session_id, input_tokens=r.usage.input_tokens)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    msgs.append({\"role\": \"assistant\", \"content\": r.content})  # keeps compaction",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    if any(b.type == \"compaction\" for b in r.content):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        msgs.append({\"role\": \"user\", \"content\": read_note(session_id)})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    store.set(session_id, msgs)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return r",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "PROBES = {\"Loan account?\": \"HL-4471093\", \"Agreed EMI?\": \"18,400\"}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "def survived(session_id):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {q: a in ask(session_id, q) for q, a in PROBES.items()}",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Persist the thread",
+        "text": "Store the messages by session ID so a two-hour call survives restarts. The first message holds the task and constraints; it stays pinned."
+      },
+      {
+        "title": "Measure growth",
+        "text": "Log input tokens every turn. Each turn adds about 1k of talk and a 3.5k statement or schedule, so the context passes 150k by turn 33."
+      },
+      {
+        "title": "Clear stale tool results",
+        "text": "Past the trigger, old tool results are replaced by placeholders; the last 3 stay, and get_loan_summary is excluded because the agent still refers to it."
+      },
+      {
+        "title": "Compact with instructions",
+        "text": "When the conversation itself grows too long, older turns become one summary. The instructions say what must be copied exactly."
+      },
+      {
+        "title": "Keep a progress note",
+        "text": "After a compaction the agent re-reads a short note of decisions and open tasks, so work carries on from the right place."
+      },
+      {
+        "title": "Check what survived",
+        "text": "Probe the agent with questions about early turns. If the loan account or EMI is wrong, fix the instructions before shipping."
+      }
+    ],
+    "sceneHeight": 278,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"6\" y=\"8\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"66\" y=\"24\" text-anchor=\"middle\">task + constraints</text></g><g class=\"a\" style=\"--d:0.1s\"><text class=\"tag-t\" x=\"66\" y=\"46\" style=\"fill:var(--accent)\">pinned</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"134\" y=\"8\" width=\"220\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"244\" y=\"24\" text-anchor=\"middle\">session HL-call-0912 · stored</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"66\" style=\"--d:0s\">Context per turn</text><rect class=\"bar grow \" x=\"108\" y=\"120\" width=\"14\" height=\"6\" rx=\"2\" style=\"--d:0.1s\"/><rect class=\"bar grow \" x=\"128\" y=\"114.8\" width=\"14\" height=\"11.2\" rx=\"2\" style=\"--d:0.15000000000000002s\"/><rect class=\"bar grow \" x=\"148\" y=\"109.6\" width=\"14\" height=\"16.4\" rx=\"2\" style=\"--d:0.2s\"/><rect class=\"bar grow \" x=\"168\" y=\"104.4\" width=\"14\" height=\"21.6\" rx=\"2\" style=\"--d:0.25s\"/><rect class=\"bar grow \" x=\"188\" y=\"99.2\" width=\"14\" height=\"26.8\" rx=\"2\" style=\"--d:0.30000000000000004s\"/><rect class=\"bar grow \" x=\"208\" y=\"94\" width=\"14\" height=\"32\" rx=\"2\" style=\"--d:0.35s\"/><rect class=\"bar grow \" x=\"228\" y=\"88.8\" width=\"14\" height=\"37.2\" rx=\"2\" style=\"--d:0.4s\"/><rect class=\"bar grow \" x=\"248\" y=\"83.6\" width=\"14\" height=\"42.4\" rx=\"2\" style=\"--d:0.45000000000000007s\"/><rect class=\"bar grow \" x=\"268\" y=\"78.4\" width=\"14\" height=\"47.6\" rx=\"2\" style=\"--d:0.5s\"/><rect class=\"bar grow fail\" x=\"288\" y=\"73.19999999999999\" width=\"14\" height=\"52.800000000000004\" rx=\"2\" style=\"--d:0.55s\"/><rect class=\"bar grow fail\" x=\"308\" y=\"68\" width=\"14\" height=\"58\" rx=\"2\" style=\"--d:0.6s\"/><rect class=\"bar grow fail\" x=\"328\" y=\"62.8\" width=\"14\" height=\"63.2\" rx=\"2\" style=\"--d:0.65s\"/><g class=\"a\" style=\"--d:0.8s\"><line x1=\"100\" x2=\"354\" y1=\"72\" y2=\"72\" class=\"ln\" style=\"stroke:var(--fail);stroke-dasharray:4 3\"/><text class=\"tag-t fail\" x=\"100\" y=\"84\" style=\"text-anchor:start\">150k</text></g><text class=\"mono a\" x=\"6\" y=\"120\" style=\"--d:0.6s\">+4.5k a turn</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"150\" style=\"--d:0s\">Tool results</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"86\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx soft\" x=\"116\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.22s\"><rect class=\"bx soft\" x=\"146\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.28s\"><rect class=\"bx soft\" x=\"176\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx soft\" x=\"206\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"236\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"stroke-dasharray:3 2\"/></g><g class=\"a\" style=\"--d:0.45999999999999996s\"><rect class=\"bx warn\" x=\"266\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"\"/></g><g class=\"a\" style=\"--d:0.52s\"><rect class=\"bx warn\" x=\"296\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"\"/></g><g class=\"a\" style=\"--d:0.58s\"><rect class=\"bx warn\" x=\"326\" y=\"138\" width=\"26\" height=\"18\" rx=\"3\" style=\"\"/></g><g class=\"a\" style=\"--d:0.7s\"><text class=\"tag-t\" x=\"176\" y=\"170\" style=\"fill:var(--ink-2)\">cleared → placeholders</text><text class=\"tag-t warn\" x=\"310\" y=\"170\">keep 3</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"180\" width=\"348\" height=\"30\" rx=\"7\"/><text class=\"mono\" x=\"16\" y=\"199\">summary: HL-4471093 · EMI ₹18,400 · NEFT pending</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"6\" y=\"218\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"234\" text-anchor=\"middle\">progress: 3 open tasks</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln \" d=\"M178 230L196 230\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"198\" y=\"218\" width=\"156\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"276\" y=\"234\" text-anchor=\"middle\">read after compaction</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"250\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"86\" y=\"265\" text-anchor=\"middle\">account: HL-4471093</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"178\" cy=\"261\" r=\"9\" class=\"bd-pass\"/><path d=\"M174 261l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"196\" y=\"250\" width=\"136\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"265\" text-anchor=\"middle\">EMI: ₹18,400</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"344\" cy=\"261\" r=\"9\" class=\"bd-pass\"/><path d=\"M340 261l3 3 5-6\" class=\"bd-mark\"/></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Lets sessions run far beyond the context window",
+      "Tool-result clearing is low risk: results can be fetched again",
+      "Compaction instructions let you name what must survive",
+      "Lower tokens per turn means lower cost and latency"
+    ],
+    "cons": [
+      "Summaries can paraphrase or drop exact values",
+      "Every clear or compaction rewrites the prefix and invalidates the prompt cache",
+      "Repeated compaction can drift from the original",
+      "Needs probes to prove early facts survived"
+    ],
+    "avoidWhen": [
+      "Short, single-task sessions that never approach the limit",
+      "Facts that must persist across sessions (use semantic memory)"
+    ],
+    "tools": [
+      {
+        "name": "Claude context editing",
+        "type": "Anthropic API (beta)",
+        "what": "Server-side clearing of old tool results with keep and exclude rules",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+      },
+      {
+        "name": "Claude compaction",
+        "type": "Anthropic API (beta)",
+        "what": "Server-side summarization at a token threshold with custom instructions",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/compaction-threshold"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Thread state persisted by checkpointers, plus message trimming",
+        "url": "https://docs.langchain.com/oss/python/langgraph/memory"
+      },
+      {
+        "name": "OpenAI Agents SDK Sessions",
+        "type": "Open source",
+        "what": "Session memory for agent runs, including compaction sessions",
+        "url": "https://openai.github.io/openai-agents-python/sessions/"
+      },
+      {
+        "name": "LangMem",
+        "type": "Open source",
+        "what": "Summarization and memory utilities for LangGraph agents",
+        "url": "https://langchain-ai.github.io/langmem/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A housing-finance restructuring call runs 120 turns. Each turn adds about 1k tokens of conversation and one tool result: a statement, an EMI schedule or a bureau pull. The window is 200k. Five early facts must survive: loan account, agreed EMI, NEFT mandate, restructuring date and co-borrower name.",
+    "controls": [
+      "Set the number of turns and how large each tool result is.",
+      "Choose when old tool results are cleared and how many recent ones are kept.",
+      "Choose compaction at 80k: off, a generic summary, or a summary told to keep IDs and amounts verbatim."
+    ],
+    "outputs": [
+      {
+        "name": "Context size per turn",
+        "meaning": "The input sent on every turn, against the 200k window and a 100k guide line."
+      },
+      {
+        "name": "Peak context",
+        "meaning": "The largest input sent in the session."
+      },
+      {
+        "name": "Session total input",
+        "meaning": "All input tokens across turns, compared with the unmanaged session at 120 turns."
+      },
+      {
+        "name": "Early facts still answerable",
+        "meaning": "How many of the 5 early facts the agent can still state exactly."
+      },
+      {
+        "name": "Clears · compactions",
+        "meaning": "How often history was rewritten; each rewrite invalidates the prompt cache."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No management",
+        "expect": "Context grows 4.5k a turn and hits the 200k window at turn 44. The oldest messages are cut: 19.83M tokens sent and 0 of 5 early facts left."
+      },
+      {
+        "k": "clear",
+        "name": "Clear at 60k, keep 3",
+        "expect": "No facts lost and 9.37M tokens, but the talk keeps growing: peak 134.5k, and 85 clears rewrite the cache."
+      },
+      {
+        "k": "generic",
+        "name": "Generic compaction",
+        "expect": "7 compactions keep the peak at 77.5k and total at 5.43M, but paraphrased summaries leave 0 of 5 facts."
+      },
+      {
+        "k": "ids",
+        "name": "Keep-IDs compaction only",
+        "expect": "Same 7 compactions; the summary keeps IDs, but after 3 rounds it drifts: 1 of 5 facts."
+      }
+    ],
+    "missions": [
+      {
+        "k": "peak",
+        "text": "Keep peak context under 100k over 120 turns.",
+        "hint": "Clearing alone cannot stop the conversation growing. Turn on compaction."
+      },
+      {
+        "k": "total",
+        "text": "Cut the session’s total input tokens by at least 60% over 120 turns.",
+        "hint": "The unmanaged session sends 19.83M; you need 7.93M or less."
+      },
+      {
+        "k": "both",
+        "text": "Do both, with all 5 early facts still answerable.",
+        "hint": "Clear tool results first so compaction runs rarely, and tell the summary to keep IDs and amounts."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude context editing",
+        "type": "Anthropic API · beta",
+        "start": 3,
+        "prod": 3,
+        "best": "Server-side clearing of old tool results with a trigger, a keep count, clear_at_least and excluded tools.",
+        "ex": "Clear old statement pulls past 60k input tokens, keep the last 3 and never clear get_loan_summary.",
+        "pros": [
+          "No client-side bookkeeping",
+          "clear_at_least limits cache rewrites"
+        ],
+        "cons": [
+          "Beta API, names may change",
+          "Clearing invalidates the cached prefix"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+      },
+      {
+        "n": "Claude compaction",
+        "type": "Anthropic API · beta",
+        "start": 3,
+        "prod": 3,
+        "best": "Server-side summarization when input passes a token threshold, with instructions you write.",
+        "ex": "Compact at 120k with instructions to copy loan account, EMI and mandate status verbatim.",
+        "pros": [
+          "Custom instructions replace the default summary prompt",
+          "Works with long agent loops"
+        ],
+        "cons": [
+          "Beta API with a 50k minimum trigger",
+          "You must pass the compaction block back"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/compaction-threshold"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Persisting thread state with checkpointers and trimming or summarizing messages in your graph.",
+        "ex": "A Postgres checkpointer keeps each call’s thread; a summarization node runs when messages pass a limit.",
+        "pros": [
+          "Durable threads you can resume and inspect",
+          "Any model provider"
+        ],
+        "cons": [
+          "You design the trimming and summary logic",
+          "More concepts to learn"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/memory"
+      },
+      {
+        "n": "OpenAI Agents SDK Sessions",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "Automatic conversation history for agent runs, with session backends and a compaction session.",
+        "ex": "Use a SQLite session in development and a hosted session store in production for each customer call.",
+        "pros": [
+          "Minimal code to keep history",
+          "Several backends"
+        ],
+        "cons": [
+          "Tied to the Agents SDK",
+          "Less control over what the summary keeps"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/sessions/"
+      },
+      {
+        "n": "LangMem",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "Summarization and memory utilities for LangGraph agents.",
+        "ex": "Summarize older messages into a running summary node that the agent reads each turn.",
+        "pros": [
+          "Ready-made summarization helpers",
+          "Fits LangGraph stores"
+        ],
+        "cons": [
+          "Best inside the LangChain ecosystem",
+          "Younger library"
+        ],
+        "url": "https://langchain-ai.github.io/langmem/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "On Claude, least code",
+        "tool": "Claude context editing plus compaction"
+      },
+      {
+        "need": "Provider-neutral durable threads",
+        "tool": "LangGraph checkpointers"
+      },
+      {
+        "need": "Already on the OpenAI Agents SDK",
+        "tool": "Agents SDK Sessions"
+      }
+    ],
+    "goals": [
+      "Tell tool-result clearing from compaction and say why clearing is the safer first step",
+      "Write compaction instructions that keep identifiers, amounts, decisions and open tasks",
+      "Explain why fewer, larger clears protect the prompt cache"
+    ]
+  },
+  "practice": {
+    "scenario": "A housing-finance company’s restructuring assistant handles two-hour calls: statements, EMI schedules and bureau pulls arrive as large tool results. Old results are cleared once context passes a trigger, keeping the last three, and older turns are compacted with instructions to keep the loan account number, the agreed EMI and the pending NEFT mandate verbatim. After each compaction a check asks the agent for those three values.",
+    "industries": [
+      {
+        "industry": "Housing finance",
+        "use": "Keep loan account, agreed EMI and mandate status through long calls"
+      },
+      {
+        "industry": "IT help desk",
+        "use": "Clear bulky log dumps once the root cause is recorded"
+      },
+      {
+        "industry": "Travel booking",
+        "use": "Compact a long itinerary chat but keep PNRs and fares exactly"
+      }
+    ],
+    "analogy": "A court stenographer’s minutes. The full transcript goes to the archive; the judge works from minutes that keep every case number, amount and order word for word.",
+    "library": {
+      "name": "Anthropic SDK (context editing, compaction)",
+      "what": "Server-side tool-result clearing (clear_tool_uses_20250919) and compaction (compact_20260112) configured per request.",
+      "install": "pip install anthropic"
+    },
+    "note": "Both features are in beta; check the current beta header names in the docs. Persist messages by session ID in your own store.",
+    "samples": [
+      {
+        "file": "session.py",
+        "language": "python",
+        "code": "import anthropic\nclient = anthropic.Anthropic()\n\nKEEP = (\"Summarize the conversation so far. Copy verbatim: loan account numbers, \"\n        \"amounts, dates, EMI and mandate details, decisions made and open tasks.\")\n\ndef turn(messages, tools):\n    r = client.beta.messages.create(\n        model=\"claude-sonnet-4-5\",               # use your current model\n        max_tokens=2048,\n        betas=[\"context-management-2025-06-27\", \"compact-2026-01-12\"],\n        messages=messages, tools=tools,\n        context_management={\"edits\": [\n            {\"type\": \"clear_tool_uses_20250919\",\n             \"trigger\": {\"type\": \"input_tokens\", \"value\": 100_000},\n             \"keep\": {\"type\": \"tool_uses\", \"value\": 3},\n             \"clear_at_least\": {\"type\": \"input_tokens\", \"value\": 20_000},\n             \"exclude_tools\": [\"get_loan_summary\"]},\n            {\"type\": \"compact_20260112\",\n             \"trigger\": {\"type\": \"input_tokens\", \"value\": 150_000},\n             \"instructions\": KEEP},\n        ]},\n    )\n    messages.append({\"role\": \"assistant\", \"content\": r.content})  # keeps the compaction block\n    return r\n"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A session has 40 tool results of 3,500 tokens each. Clearing keeps the last 3 results. How many tokens of tool results are cleared?",
+    "answer": "Cleared results: 40 − 3 = 37. Tokens cleared: 37 × 3,500 = 129,500.",
+    "expected": {
+      "value": 129500,
+      "tolerance": 1,
+      "label": "tokens cleared ="
+    },
+    "interview": [
+      {
+        "question": "What is the difference between clearing tool results and compaction?",
+        "answer": "Clearing removes old tool outputs, which can be re-fetched, and keeps the call record; it is one of the safest reductions. Compaction summarizes the conversation itself, so it needs instructions that keep IDs, amounts, decisions and open tasks."
+      },
+      {
+        "question": "Why clear in large steps rather than a little every turn?",
+        "answer": "Every change to earlier content invalidates the prompt cache from that point. Clearing at least a large amount at a time (clear_at_least) means fewer cache rewrites for the same saving."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Letting the summary paraphrase account numbers and amounts",
+        "fix": "Instruct the summary to copy identifiers, amounts and open tasks verbatim"
+      },
+      {
+        "mistake": "Dropping the oldest message first",
+        "fix": "Pin the task and constraints; compact the middle"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "st01",
+      "kind": "single",
+      "industry": "Housing finance",
+      "question": "A loan-restructuring call adds about 4.5k tokens a turn, starting from 4k. At which turn does the context first exceed 150k?",
+      "options": [
+        "Turn 32",
+        "Turn 33",
+        "Turn 34",
+        "Turn 40"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "4 + 4.5 × 32 = 148k; 4 + 4.5 × 33 = 152.5k, so turn 33."
+    },
+    {
+      "id": "st02",
+      "kind": "single",
+      "industry": "IT help desk",
+      "question": "A troubleshooting session carries 40 log dumps of 3,500 tokens each. Clearing keeps the last 3. How many tokens are cleared?",
+      "options": [
+        "129,500",
+        "140,000",
+        "10,500",
+        "136,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "37 results × 3,500 = 129,500 tokens."
+    },
+    {
+      "id": "st03",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which should a compaction summary for a two-hour loan call copy verbatim? Select all that apply.",
+      "options": [
+        "The loan account number",
+        "The agreed EMI amount",
+        "The customer’s greeting",
+        "Small talk about the weather"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Identifiers and amounts must survive exactly; greetings and small talk can go."
+    },
+    {
+      "id": "st04",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Why is clearing old tool results considered one of the safest context reductions?",
+      "options": [
+        "The model never needs old results",
+        "The call stays recorded and the data can be fetched again",
+        "It never affects the prompt cache",
+        "It removes the system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Clearing replaces results with placeholders while the call remains, so nothing is irrecoverable."
+    },
+    {
+      "id": "st05",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A trimming function uses messages.pop(0) whenever the history is too long. What goes wrong?",
+      "options": [
+        "It drops the newest turn",
+        "It drops the first message, which holds the task and constraints",
+        "It keeps too many tool results",
+        "It breaks prompt caching only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The first message usually holds the task; it must be pinned or carried into the summary."
+    },
+    {
+      "id": "st06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Claude’s tool-result clearing (clear_tool_uses_20250919) keeps how many recent tool uses by default?",
+      "options": [
+        "1",
+        "3",
+        "5",
+        "10"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The default keep value is 3 tool uses."
+    },
+    {
+      "id": "st07",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "A claims agent clears a little context on every turn and its prompt-cache hit rate collapses. Which fixes help? Select all that apply.",
+      "options": [
+        "Clear in fewer, larger steps using clear_at_least",
+        "Raise the clearing trigger so it runs less often",
+        "Clear one tool result on every turn",
+        "Move the system prompt to the end of the prompt"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Every clear rewrites the prefix. Fewer, larger clears protect the cache; the other two make it worse."
+    },
+    {
+      "id": "st08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Claude’s compaction strategy (compact_20260112) triggers at what input size by default?",
+      "options": [
+        "50,000 tokens",
+        "100,000 tokens",
+        "150,000 tokens",
+        "200,000 tokens"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The default trigger is 150,000 input tokens, with a minimum of 50,000."
+    },
+    {
+      "id": "st09",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "After compaction, a clinic assistant answers “Your appointment is next week” instead of “Tuesday 14:30 with Dr Rao”. What is the most likely cause?",
+      "options": [
+        "The window was too small",
+        "The summary instructions did not require exact values",
+        "Tool results were cleared",
+        "The model temperature was 0"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Generic summaries paraphrase. Instructions must name the values to copy verbatim."
+    },
+    {
+      "id": "st10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A session sends 20 turns of 10k, 20k … 200k input tokens (growing 10k a turn). What is the total input?",
+      "options": [
+        "2.0M tokens",
+        "2.1M tokens",
+        "4.2M tokens",
+        "200k tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "10k × (1 + 2 + … + 20) = 10k × 210 = 2.1M tokens."
+    },
+    {
+      "id": "st11",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which are valid ways to keep thread state for a long-running delivery agent? Select all that apply.",
+      "options": [
+        "A LangGraph checkpointer keyed by thread ID",
+        "OpenAI Agents SDK Sessions",
+        "Relying on the model to remember previous API calls",
+        "Storing nothing and resending only the last message"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Checkpointers and Sessions persist state; models are stateless between calls."
+    },
+    {
+      "id": "st12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "When you pass Claude’s compaction response back, what must happen to the compaction block?",
+      "options": [
+        "Drop it and keep the original messages",
+        "Append the response content, including the compaction block, to the messages",
+        "Convert it to a system prompt",
+        "Send it only once per day"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Append the full response content; the API uses the compaction block in place of earlier content."
+    },
+    {
+      "id": "st13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A 120-turn session sends 19.8M input tokens unmanaged and 6.4M with clearing and compaction. About what percentage is saved?",
+      "options": [
+        "32%",
+        "68%",
+        "76%",
+        "3.1%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(19.8 − 6.4) ÷ 19.8 = 13.4 ÷ 19.8 ≈ 0.677, so about 68%."
+    },
+    {
+      "id": "st14",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A tutoring agent keeps a “progress note” file. When should it re-read it?",
+      "options": [
+        "Never; the summary is enough",
+        "After each compaction",
+        "Only at the start of the course",
+        "Only when the user asks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Re-reading the note after compaction restores decisions and open tasks the summary may compress."
+    },
+    {
+      "id": "st15",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Anthropic lists techniques for long-horizon tasks. Which are among them? Select all that apply.",
+      "options": [
+        "Compaction",
+        "Structured note-taking",
+        "Sub-agent architectures",
+        "Raising temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Compaction, notes and sub-agents are the named techniques; temperature does not manage context."
+    },
+    {
+      "id": "st16",
+      "kind": "single",
+      "industry": "Housing finance",
+      "question": "Which tool should be listed in exclude_tools when clearing results in a loan call?",
+      "options": [
+        "A search tool whose old results are no longer used",
+        "get_loan_summary, which the agent keeps referring to",
+        "Every tool, to be safe",
+        "None: exclusions are not supported"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Exclude tools whose results are still referenced; clear the rest."
+    },
+    {
+      "id": "st17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Anthropic reported that context editing cut token use in a 100-turn web-search evaluation by about how much?",
+      "options": [
+        "8%",
+        "29%",
+        "84%",
+        "100%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Anthropic reported an 84% reduction in token consumption for that evaluation."
+    },
+    {
+      "id": "st18",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking chat is compacted 7 times in one session and fare details start to drift. What is the best structural fix?",
+      "options": [
+        "Compact more often",
+        "Clear bulky tool results first so compaction runs less often",
+        "Remove the compaction instructions",
+        "Switch off the progress note"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Clearing the bulk reduces how often history must be summarized, and each summary-of-a-summary risks drift."
+    },
+    {
+      "id": "st19",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which checks show that a compaction policy is safe to ship? Select all that apply.",
+      "options": [
+        "Probing early-session facts after compaction",
+        "Comparing answers with an uncompacted baseline",
+        "Checking only that the summary is shorter",
+        "Counting how many summaries were written"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Probes and baseline comparison test what survived; length and counts do not."
+    },
+    {
+      "id": "st20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A session’s context grows 1k of talk plus a 3k tool result per turn. Clearing keeps only the last 2 results. After 50 turns, with no compaction and a 4k pinned start, what is the context?",
+      "options": [
+        "60k",
+        "204k",
+        "54k",
+        "64k"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pinned 4k + 50 turns of talk (50k) + 2 results × 3k (6k) = 60k."
+    }
+  ]
+}

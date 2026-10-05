@@ -1,0 +1,897 @@
+{
+  "id": "reflect",
+  "moduleSlug": "architectures",
+  "name": "Reflection and Evaluator–Optimizer",
+  "shortName": "Reflection",
+  "question": "Is this draft good enough, or should it go round again?",
+  "summary": "A generator drafts, an evaluator critiques the draft against clear criteria, and the generator revises until the draft passes or a round limit is hit. Self-Refine uses one model for every role; Reflexion keeps written lessons from failed attempts for the next try. The gains depend on feedback grounded in something outside the model: tests, rules or a checklist.",
+  "useCases": [
+    "There is a clear standard to check against: tests, a rulebook, a schema",
+    "Drafts improve measurably with specific feedback",
+    "One or two extra rounds of latency are acceptable"
+  ],
+  "keyFacts": {
+    "label": "Forms",
+    "items": [
+      {
+        "term": "Evaluator–optimizer",
+        "detail": "one call drafts, another evaluates and gives feedback, in a loop"
+      },
+      {
+        "term": "Self-Refine",
+        "detail": "the same model drafts, critiques and revises"
+      },
+      {
+        "term": "Reflexion",
+        "detail": "written lessons from failures are stored and reused on the next attempt"
+      },
+      {
+        "term": "External feedback",
+        "detail": "tests, validators, rule tables: the most reliable signal"
+      },
+      {
+        "term": "Stopping rule",
+        "detail": "pass, or a round cap; always keep the best draft"
+      }
+    ]
+  },
+  "steps": [
+    "Write the evaluation criteria first: tests, rules or a checklist",
+    "Turn each failure into a specific written critique",
+    "Revise with the critique, then evaluate again",
+    "Cap the rounds and return the best-scoring draft, not the last one"
+  ],
+  "pitfalls": [
+    "Self-critique with no external signal can make answers worse",
+    "Unbounded loops burn tokens on marginal gains",
+    "Returning the last draft instead of the best one ships regressions"
+  ],
+  "tools": [
+    "Reflexion (code)",
+    "Self-Refine (paper)",
+    "LangGraph",
+    "OpenAI Agents SDK",
+    "pytest"
+  ],
+  "remember": "Critique against something real. Keep the best draft.",
+  "caption": "Illustrative: a draft checked against 10 rules; each critique lists only the rules that failed.",
+  "comparison": {
+    "scope": "A critic, after each draft",
+    "cost": 2,
+    "needs": "Clear, checkable criteria",
+    "best": "Self-critique drifts without ground truth"
+  },
+  "diagram": {
+    "file": "diagrams/reflect.svg"
+  },
+  "lesson": {
+    "file": "refine_with_tests.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import subprocess, anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(prompt):",
+        "steps": []
+      },
+      {
+        "text": "    r = client.messages.create(model=\"claude-sonnet-4-5\", max_tokens=2000,",
+        "steps": []
+      },
+      {
+        "text": "                               messages=[{\"role\": \"user\", \"content\": prompt}])",
+        "steps": []
+      },
+      {
+        "text": "    return r.content[0].text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_tests(code):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    open(\"emi.py\", \"w\").write(code)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    p = subprocess.run([\"pytest\", \"-q\", \"test_emi.py\"],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                       capture_output=True, text=True)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    failed = [l for l in p.stdout.splitlines() if l.startswith(\"FAILED\")]",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "    return p.returncode == 0, failed",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "lessons = []                            # kept across tasks (Reflexion)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def solve(spec, max_rounds=4):",
+        "steps": []
+      },
+      {
+        "text": "    code = ask(spec + \"\\nLessons from earlier tasks: \" + \"; \".join(lessons))",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "    best, best_fails = code, None",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    for r in range(max_rounds):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        ok, failed = run_tests(code)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        if best_fails is None or len(failed) < best_fails:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            best, best_fails = code, len(failed)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        if ok:",
+        "steps": []
+      },
+      {
+        "text": "            return code",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        critique = \"These tests fail:\\n\" + \"\\n\".join(failed)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if r < max_rounds - 1:",
+        "steps": []
+      },
+      {
+        "text": "            code = ask(f\"{spec}\\n\\nCode:\\n{code}\\n\\n{critique}\\nFix the code.\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    lessons.append(ask(\"One-line lesson from these failures:\\n\" + critique))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return best",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Generate a first draft",
+        "text": "The model writes an EMI calculator from the spec. Nothing is checked yet, so this is only a candidate."
+      },
+      {
+        "title": "Evaluate against something real",
+        "text": "pytest runs 10 tests on the draft. 6 pass and 4 fail. The feedback comes from outside the model, which is what makes the loop reliable."
+      },
+      {
+        "title": "Turn failures into a critique",
+        "text": "The failing test names and messages become a short, specific critique, such as test_zero_rate: ZeroDivisionError, instead of “please improve”."
+      },
+      {
+        "title": "Revise with the critique",
+        "text": "The model rewrites the code with the critique in view. Version 2 passes 9 of 10, and the loop goes round again."
+      },
+      {
+        "title": "Remember lessons across tasks",
+        "text": "When a task ends with failures, a one-line lesson is saved and added to the next task's prompt. That is Reflexion's idea: learn from the attempt, not just revise within it."
+      },
+      {
+        "title": "Cap the rounds and keep the best",
+        "text": "Version 3 passes all 10 tests, so the loop stops at round 3 of 4. Had it hit the cap, it would return the best-scoring version, not the last one."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"110\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"63\" y=\"26\">Generator</text><text class=\"sb\" x=\"63\" y=\"41\">writes, revises</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M120 29L136 29\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"138\" y=\"17\" width=\"82\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"33\" text-anchor=\"middle\">emi.py v1</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M222 29L238 29\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"240\" y=\"8\" width=\"112\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"296\" y=\"26\">pytest</text><text class=\"sb\" x=\"296\" y=\"41\">10 tests</text></g><text class=\"tl a\" x=\"34\" y=\"76\" style=\"text-anchor:end;--d:0.2s\">v1</text><g class=\"a\" style=\"--d:0.25s\"><circle cx=\"48\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M44 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.28s\"><circle cx=\"68\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M64 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.31s\"><circle cx=\"88\" cy=\"72\" r=\"9\" class=\"bd-fail\"/><path d=\"M84.5 68.5l7 7M91.5 68.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><circle cx=\"108\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M104 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.37s\"><circle cx=\"128\" cy=\"72\" r=\"9\" class=\"bd-fail\"/><path d=\"M124.5 68.5l7 7M131.5 68.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"148\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M144 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.43s\"><circle cx=\"168\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M164 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.45999999999999996s\"><circle cx=\"188\" cy=\"72\" r=\"9\" class=\"bd-fail\"/><path d=\"M184.5 68.5l7 7M191.5 68.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.49s\"><circle cx=\"208\" cy=\"72\" r=\"9\" class=\"bd-pass\"/><path d=\"M204 72l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.52s\"><circle cx=\"228\" cy=\"72\" r=\"9\" class=\"bd-fail\"/><path d=\"M224.5 68.5l7 7M231.5 68.5l-7 7\" class=\"bd-mark\"/></g><text class=\"mono a\" x=\"252\" y=\"76\" style=\"--d:0.6s\">6 / 10</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"92\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"107\" text-anchor=\"middle\">critique: 4 failing, e.g. test_zero_rate: ZeroDivisionError</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln a\" d=\"M8 103 C0 103,0 58,10 50\" style=\"stroke-dasharray:4 3;--d:0s\" marker-end=\"url(#arr)\"/><text class=\"tl a\" x=\"34\" y=\"138\" style=\"text-anchor:end;--d:0.1s\">v2</text><g class=\"a\" style=\"--d:0.15s\"><circle cx=\"48\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M44 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.18s\"><circle cx=\"68\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M64 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.21s\"><circle cx=\"88\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M84 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.24s\"><circle cx=\"108\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M104 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.27s\"><circle cx=\"128\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M124 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"148\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M144 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.32999999999999996s\"><circle cx=\"168\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M164 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.36s\"><circle cx=\"188\" cy=\"134\" r=\"9\" class=\"bd-fail\"/><path d=\"M184.5 130.5l7 7M191.5 130.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.39s\"><circle cx=\"208\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M204 134l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.42000000000000004s\"><circle cx=\"228\" cy=\"134\" r=\"9\" class=\"bd-pass\"/><path d=\"M224 134l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono a\" x=\"252\" y=\"138\" style=\"--d:0.5s\">9 / 10</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"156\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"171\" text-anchor=\"middle\">lesson saved: check for a 0% rate before dividing</text></g><text class=\"sb a\" x=\"180\" y=\"194\" style=\"text-anchor:middle;--d:0.2s\">added to the next task’s prompt</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"34\" y=\"214\" style=\"text-anchor:end;--d:0s\">v3</text><g class=\"a\" style=\"--d:0.05s\"><circle cx=\"48\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M44 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.08s\"><circle cx=\"68\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M64 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.11s\"><circle cx=\"88\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M84 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.14s\"><circle cx=\"108\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M104 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.16999999999999998s\"><circle cx=\"128\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M124 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"148\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M144 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.22999999999999998s\"><circle cx=\"168\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M164 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.26s\"><circle cx=\"188\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M184 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.29s\"><circle cx=\"208\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M204 210l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.32s\"><circle cx=\"228\" cy=\"210\" r=\"9\" class=\"bd-pass\"/><path d=\"M224 210l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono a\" x=\"252\" y=\"214\" style=\"--d:0.4s\">10 / 10</text><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx pass\" x=\"8\" y=\"228\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"243\" text-anchor=\"middle\">all pass at round 3 of 4 → stop, return the best</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Large gains when feedback is external: tests, rules, schemas",
+      "No training; works with any model",
+      "Critiques are readable, so failures are easy to debug",
+      "Reflexion lessons carry improvements to later tasks"
+    ],
+    "cons": [
+      "Each round adds cost and latency",
+      "Self-critique without ground truth can make answers worse",
+      "Needs clear, checkable criteria written first",
+      "Easy to ship a regression by returning the last draft"
+    ],
+    "avoidWhen": [
+      "There is no reliable way to check a draft (fix the evaluator first)",
+      "Latency budgets allow only one pass"
+    ],
+    "tools": [
+      {
+        "name": "Reflexion (code)",
+        "type": "Open source (research code)",
+        "what": "Verbal lessons stored across attempts",
+        "url": "https://github.com/noahshinn/reflexion"
+      },
+      {
+        "name": "Self-Refine",
+        "type": "Research paper",
+        "what": "Draft, critique and revise with one model",
+        "url": "https://arxiv.org/abs/2303.17651"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Generator and evaluator nodes with a loop edge",
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Output guardrails and judge agents in the loop",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "pytest",
+        "type": "Open source",
+        "what": "Test results as exact feedback for code drafts",
+        "url": "https://docs.pytest.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A lending team drafts loan-sanction letters that must contain every mandatory disclosure: rate, tenure, EMI, fees, grievance contact and more. A generator drafts and an evaluator scores the letter, then the generator revises. You choose where the feedback comes from, how many rounds are allowed and whether lessons from earlier letters are remembered.",
+    "controls": [
+      "Click No evaluator, Self-critique or Checklist + rules to choose the feedback source.",
+      "Drag the slider to set the maximum number of rounds.",
+      "Tick memory to start from lessons learnt on earlier letters, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Score per round",
+        "meaning": "Each draft's score out of 100; red means worse than the draft before it."
+      },
+      {
+        "name": "Returned score",
+        "meaning": "The best draft's score, which is what the loop returns."
+      },
+      {
+        "name": "Rounds · cost per letter",
+        "meaning": "Rounds run and total cost: ₹1.50 per draft plus evaluation."
+      },
+      {
+        "name": "A revision got worse",
+        "meaning": "Whether any revision scored lower than the one before it."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Self-critique, 3 rounds",
+        "expect": "Scores 62 → 70 → 74: best 74 at ₹5.70 per letter. The critic cannot see what is missing."
+      },
+      {
+        "k": "rules",
+        "name": "Checklist + rules, 3 rounds",
+        "expect": "Scores 62 → 81 → 92: best 92 at ₹4.80 per letter."
+      },
+      {
+        "k": "long",
+        "name": "Self-critique, 5 rounds",
+        "expect": "Scores 62 → 70 → 74 → 71 → 66: later revisions regress; the best (74) is returned for ₹9.50."
+      },
+      {
+        "k": "none",
+        "name": "No evaluator",
+        "expect": "One draft, no feedback: 62 at ₹1.50."
+      }
+    ],
+    "missions": [
+      {
+        "k": "three",
+        "text": "Reach a score of 90 or more within 3 rounds.",
+        "hint": "Use the checklist and rules as feedback; self-critique never gets there."
+      },
+      {
+        "k": "regress",
+        "text": "Produce a regression using self-critique only.",
+        "hint": "Give self-critique 4 or 5 rounds and watch the later scores fall."
+      },
+      {
+        "k": "cheap",
+        "text": "Reach 90 or more at the lowest possible cost per letter.",
+        "hint": "Memory raises the first draft, so rules feedback reaches 90 in round 2. Cap the rounds at 2 so it stops there: ₹3.25."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Reflexion (code)",
+        "type": "Open source · research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Agents that write verbal lessons after failed attempts and reuse them on the next try.",
+        "ex": "A coding agent that stores “check the empty-list case” after failing a test and passes on the next attempt.",
+        "pros": [
+          "Reference implementation of the paper",
+          "Shows memory across attempts clearly"
+        ],
+        "cons": [
+          "Research code",
+          "Tied to the paper’s benchmarks"
+        ],
+        "url": "https://github.com/noahshinn/reflexion"
+      },
+      {
+        "n": "Self-Refine",
+        "type": "Research method",
+        "start": 3,
+        "prod": 2,
+        "best": "One model drafts, critiques and revises, with no training or extra models.",
+        "ex": "Rewrite a customer email three times with the model’s own feedback on tone and clarity.",
+        "pros": [
+          "Trivial to implement",
+          "Works with any model"
+        ],
+        "cons": [
+          "Weak without external feedback",
+          "Extra rounds cost tokens"
+        ],
+        "url": "https://arxiv.org/abs/2303.17651"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Generator and evaluator nodes with a loop edge, round counter and best-draft tracking in state.",
+        "ex": "An NDA drafting graph that loops until the rulebook node returns no failures or three rounds pass.",
+        "pros": [
+          "Loop limits and state are explicit",
+          "Human review can be added at any node"
+        ],
+        "cons": [
+          "Graph overhead for a short loop",
+          "You still write the evaluator"
+        ],
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "Output guardrails and judge agents that can reject a draft and trigger another attempt.",
+        "ex": "An output guardrail that checks a letter for the grievance contact and fails the run if it is missing.",
+        "pros": [
+          "Guardrails are built in",
+          "Easy judge agents"
+        ],
+        "cons": [
+          "Guardrails stop runs rather than revise by default",
+          "Loop logic is yours"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "pytest",
+        "type": "Open source · testing",
+        "start": 3,
+        "prod": 3,
+        "best": "Exact, external feedback for generated code: failing test names and messages become the critique.",
+        "ex": "Loop an EMI calculator until all 10 tests pass, feeding back only the failing lines.",
+        "pros": [
+          "Ground truth rather than opinion",
+          "Already in most codebases"
+        ],
+        "cons": [
+          "Only as good as the tests",
+          "Needs a sandbox to run generated code"
+        ],
+        "url": "https://docs.pytest.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Code drafts",
+        "tool": "Tests as feedback (pytest)"
+      },
+      {
+        "need": "Documents against a policy",
+        "tool": "Rules in code + a checklist"
+      },
+      {
+        "need": "Learning across attempts",
+        "tool": "Reflexion-style memory"
+      }
+    ],
+    "goals": [
+      "Explain why external feedback beats self-critique",
+      "Calculate the cost of a revision loop from pass rates per round",
+      "Explain why the loop must return the best draft, not the last"
+    ]
+  },
+  "practice": {
+    "scenario": "A legal-tech team drafts NDA clauses for Indian and UK clients. Each draft is checked against a jurisdiction rulebook written as code: governing law named, a confidentiality term stated, no non-compete for Indian employees, mutual obligations, and so on. Failed rules become a written critique, the model revises, and the loop stops when every rule passes or after three rounds, returning the best draft seen.",
+    "industries": [
+      {
+        "industry": "Legal",
+        "use": "Revise contract clauses until they pass a jurisdiction rulebook"
+      },
+      {
+        "industry": "Banking",
+        "use": "Revise loan-sanction letters against mandatory disclosure checklists"
+      },
+      {
+        "industry": "Software",
+        "use": "Revise generated code until the unit tests pass"
+      }
+    ],
+    "analogy": "A student and an examiner with a marking scheme. The examiner marks against the scheme and says what is missing; the student rewrites; the best copy is the one handed in.",
+    "library": {
+      "name": "Anthropic Python SDK (plain loop)",
+      "what": "Evaluator–optimizer is a short loop: generate, check with code, critique, revise. The checks are ordinary functions or tests.",
+      "install": "pip install anthropic"
+    },
+    "note": "RULES is a list of (name, check function) pairs written by your legal team. Keep the checks in code, not in the prompt.",
+    "samples": [
+      {
+        "file": "nda_refine.py",
+        "language": "python",
+        "code": "import anthropic\nclient = anthropic.Anthropic()\nMODEL = \"claude-sonnet-4-5\"            # use your current model\n\ndef ask(prompt):\n    r = client.messages.create(model=MODEL, max_tokens=1500,\n                               messages=[{\"role\": \"user\", \"content\": prompt}])\n    return r.content[0].text\n\ndef evaluate(clause):\n    failed = [name for name, check in RULES if not check(clause)]\n    return len(RULES) - len(failed), failed\n\ndef refine(brief, max_rounds=3):\n    draft = ask(\"Draft an NDA confidentiality clause.\\n\" + brief)\n    best, best_score = draft, -1\n    for _ in range(max_rounds):\n        score, failed = evaluate(draft)             # external feedback\n        if score > best_score:\n            best, best_score = draft, score\n        if not failed:\n            break                                   # every rule passes\n        critique = \"Fix these failed rules: \" + \"; \".join(failed)\n        draft = ask(f\"{brief}\\n\\nDraft:\\n{draft}\\n\\n{critique}\\nReturn only the revised clause.\")\n    else:\n        score, _ = evaluate(draft)                  # score the last revision too\n        if score > best_score:\n            best, best_score = draft, score\n    return best, best_score"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Each generation or revision call costs ₹1.50 and each evaluation by an LLM judge costs ₹0.40; every draft is evaluated. 50% of letters pass on the first draft, 30% after one revision and 20% after two. What is the average cost per letter, in ₹?",
+    "answer": "Pass on draft 1: 1.50 + 0.40 = ₹1.90. After one revision: 3.00 + 0.80 = ₹3.80. After two: 4.50 + 1.20 = ₹5.70. Average: 0.5 × 1.90 + 0.3 × 3.80 + 0.2 × 5.70 = 0.95 + 1.14 + 1.14 = ₹3.23.",
+    "expected": {
+      "value": 3.23,
+      "tolerance": 0.02,
+      "label": "₹ per letter ="
+    },
+    "interview": [
+      {
+        "question": "Why does self-critique sometimes make answers worse?",
+        "answer": "Without an external signal, the model judges its own work with the same blind spots that produced it, and research found models can change correct answers to wrong ones. Ground the evaluator in tests, rules, a schema or retrieved facts, and keep the best draft rather than the last."
+      },
+      {
+        "question": "How is Reflexion different from Self-Refine?",
+        "answer": "Self-Refine loops within one attempt: draft, critique, revise. Reflexion works across attempts: after a failed try, the agent writes a short lesson into memory and reads it on the next attempt, which helped most when the feedback came from tests or the environment."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Returning the final draft after the round cap",
+        "fix": "Track the best-scoring draft and return that"
+      },
+      {
+        "mistake": "Using a vague critique such as “improve this”",
+        "fix": "List the specific checks that failed and why"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rf01",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A coding agent’s generated functions fail tests about 30% of the time. The team has a full unit-test suite. Which loop fits best?",
+      "options": [
+        "Self-critique by the same model",
+        "Evaluator–optimizer with the test results as feedback",
+        "Voting on the first draft",
+        "Tree search over function names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tests are exact external feedback, which is what makes an evaluator–optimizer loop reliable."
+    },
+    {
+      "id": "rf02",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Asked to double-check its maths answers with no external tool, a model changes several correct answers to wrong ones. What does research suggest?",
+      "options": [
+        "Models reliably self-correct reasoning",
+        "Without external feedback, models struggle to self-correct and can get worse",
+        "More rounds always help",
+        "Self-critique only fails on long answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Studies found LLMs struggle to self-correct reasoning without external feedback, and performance can drop."
+    },
+    {
+      "id": "rf03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Generation costs ₹1.50 and evaluation ₹0.40, every draft is evaluated, and 50% pass on draft 1, 30% after one revision and 20% after two. What is the average cost per letter?",
+      "options": [
+        "₹3.23",
+        "₹2.90",
+        "₹3.80",
+        "₹3.50"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.5 × 1.90 + 0.3 × 3.80 + 0.2 × 5.70 = 0.95 + 1.14 + 1.14 = ₹3.23."
+    },
+    {
+      "id": "rf04",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A clause-revision loop tracks the best draft but ends with return draft. Round 4 scored lower than round 3. What is shipped?",
+      "options": [
+        "The round 3 draft",
+        "The round 4 draft",
+        "Both drafts",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Returning the last draft ships the regression. Return the best-scoring draft instead."
+    },
+    {
+      "id": "rf05",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which make a good evaluator for a policy-wording loop? Select all that apply.",
+      "options": [
+        "A rules table checked in code",
+        "A checklist of mandatory clauses",
+        "The instruction “make it better”",
+        "The generator’s own opinion with no criteria"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Checkable, external criteria give specific feedback. Vague instructions and unguided self-opinion do not."
+    },
+    {
+      "id": "rf06",
+      "kind": "single",
+      "industry": "Software",
+      "question": "What distinguishes Reflexion from Self-Refine?",
+      "options": [
+        "Reflexion stores written lessons from failed attempts and reuses them on later attempts",
+        "Reflexion uses a larger model",
+        "Self-Refine needs training",
+        "Reflexion never uses feedback"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Self-Refine revises within one attempt; Reflexion keeps verbal lessons in memory across attempts."
+    },
+    {
+      "id": "rf07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A product-description loop has no round cap, and some items go through 12 rounds for tiny gains. What is the fix?",
+      "options": [
+        "Remove the evaluator",
+        "Cap the rounds and stop when the criteria pass",
+        "Raise the temperature",
+        "Use voting instead"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cap rounds and stop on pass; unbounded loops burn tokens on marginal gains."
+    },
+    {
+      "id": "rf08",
+      "kind": "single",
+      "industry": "Software",
+      "question": "Reflexion reported what pass@1 on HumanEval, against 80% for GPT-4 at the time?",
+      "options": [
+        "91%",
+        "85%",
+        "95%",
+        "72%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reflexion reached 91% pass@1 on HumanEval using test feedback."
+    },
+    {
+      "id": "rf09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A loan-letter loop improves from 62 to 92 in three rounds with rules feedback. Which choices would lower cost without losing quality? Select all that apply.",
+      "options": [
+        "Store lessons from earlier letters so first drafts start higher",
+        "Stop as soon as every check passes",
+        "Switch to self-critique only",
+        "Remove the round cap"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Memory raises first drafts and early stopping avoids extra rounds. Self-critique lowers quality and removing the cap raises cost."
+    },
+    {
+      "id": "rf10",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A critique says “the clause could be clearer”. The revision barely changes. What would help most?",
+      "options": [
+        "A longer critique",
+        "A critique that lists the specific failed rules and why",
+        "More rounds",
+        "A different model for generation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Specific failures tell the generator exactly what to fix; vague critique produces vague revisions."
+    },
+    {
+      "id": "rf11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "When does Anthropic suggest the evaluator–optimizer workflow fits?",
+      "options": [
+        "When there are clear evaluation criteria and iterative refinement adds measurable value",
+        "Whenever latency must be minimal",
+        "Only for code",
+        "When no criteria exist"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Evaluator–optimizer suits tasks with clear criteria where feedback measurably improves the output."
+    },
+    {
+      "id": "rf12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Self-Refine reported roughly what average improvement across seven tasks, without training?",
+      "options": [
+        "About 20% absolute",
+        "About 2%",
+        "About 50%",
+        "No improvement"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Self-Refine reported about a 20% absolute average improvement across seven tasks."
+    },
+    {
+      "id": "rf13",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A dispute-reply loop scores drafts 70, 82, 79, 85 over four rounds. Which statements are true? Select all that apply.",
+      "options": [
+        "Round 3 was a regression",
+        "The loop should return the round 4 draft, the best",
+        "The loop should return the round 3 draft",
+        "Every revision improved the draft"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Round 3 fell from 82 to 79, a regression; the best overall is round 4 at 85, which is also the last here."
+    },
+    {
+      "id": "rf14",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A grading loop uses an LLM judge that has never been checked against human graders. What is the main risk?",
+      "options": [
+        "The loop optimises towards a miscalibrated judge",
+        "The loop runs too fast",
+        "The generator ignores the judge",
+        "There is no risk"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "An uncalibrated judge steers revisions in the wrong direction. Calibrate the evaluator before trusting it."
+    },
+    {
+      "id": "rf15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Each round costs ₹1.60 and memory adds a one-off ₹0.05. With memory, a letter reaches its target in 2 rounds; without, in 3. What is saved per 1,000 letters with memory?",
+      "options": [
+        "₹1,550",
+        "₹1,600",
+        "₹1,650",
+        "₹1,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Without memory: 3 × 1.60 = ₹4.80. With: 2 × 1.60 + 0.05 = ₹3.25. Saving ₹1.55 × 1,000 = ₹1,550."
+    },
+    {
+      "id": "rf16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which task gains least from a reflection loop?",
+      "options": [
+        "Code generation with unit tests",
+        "Policy letters checked against a rules table",
+        "A creative slogan with no agreed criteria",
+        "SQL queries checked by running them on a test database"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "With no clear criteria, the evaluator has nothing reliable to check, so revisions add cost without dependable gains."
+    },
+    {
+      "id": "rf17",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "A reflection loop for SQL generation should include which of these? Select all that apply.",
+      "options": [
+        "Running the query on a test database and returning errors as critique",
+        "A cap on rounds",
+        "Returning the best-scoring query seen",
+        "Raising the temperature on each round"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Execution feedback, a round cap and best-draft tracking are the core of a safe loop. Raising the temperature adds noise, not feedback."
+    },
+    {
+      "id": "rf18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "An NDA loop’s evaluator is a second model call that reviews the draft against a jurisdiction checklist. In Anthropic’s terms, this pattern is:",
+      "options": [
+        "Prompt chaining",
+        "Evaluator–optimizer",
+        "Routing",
+        "Orchestrator–workers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One call generates and another evaluates and gives feedback in a loop: evaluator–optimizer."
+    },
+    {
+      "id": "rf19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A letter passes 6 of 10 checks. Each round fixes 2 of the remaining failures. How many revision rounds until all 10 pass?",
+      "options": [
+        "2",
+        "3",
+        "4",
+        "1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "4 failures remain; fixing 2 per round needs 2 revision rounds."
+    },
+    {
+      "id": "rf20",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which feedback sources count as external for a discharge-summary loop? Select all that apply.",
+      "options": [
+        "A schema validator for required sections",
+        "A check of drug names against a formulary",
+        "The same model asked whether it is confident",
+        "A second draft by the same model"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Validators and reference checks are grounded outside the model. Self-reported confidence is not, and a second draft from the same model is not an independent check."
+    }
+  ]
+}

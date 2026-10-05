@@ -1,0 +1,878 @@
+{
+  "id": "reasonprompt",
+  "moduleSlug": "prompting",
+  "name": "Prompting Reasoning Models",
+  "shortName": "Reasoning models",
+  "question": "How should I prompt a model that thinks before it answers?",
+  "summary": "Reasoning models, such as Claude with extended thinking, OpenAI’s reasoning models and Gemini’s thinking models, already work through a problem in their own thinking tokens before they answer. Prompt them with the goal, the constraints and the checks a correct answer must pass, not a “think step by step” recipe; ask for the answer rather than the working; keep examples to a minimum; set the effort or thinking budget for each type of task; and send simple, latency-bound work to a non-reasoning model. How much thinking to buy is covered in Thinking budgets (Panel 7); this technique is about the prompt around it.",
+  "useCases": [
+    "Multi-step work such as reconciliations, dispute analysis or code review on a reasoning model",
+    "Migrating prompts written for chat models, full of scaffolds and worked examples",
+    "Mixed traffic where cheap lookups and hard cases share one endpoint"
+  ],
+  "keyFacts": {
+    "label": "Rules",
+    "items": [
+      {
+        "term": "Goals, not scaffolds",
+        "detail": "state the goal, the constraints and what “done” means; drop “think step by step”"
+      },
+      {
+        "term": "Answer only",
+        "detail": "ask for the final answer or JSON; the thinking already happens in its own tokens"
+      },
+      {
+        "term": "Self-checks",
+        "detail": "name the checks to run before answering, such as totals that must agree"
+      },
+      {
+        "term": "Few-shot, sparingly",
+        "detail": "start zero-shot; add one or two examples only when the format needs showing"
+      },
+      {
+        "term": "Effort per task",
+        "detail": "low effort or a small budget for routine tasks, high for multi-step ones"
+      },
+      {
+        "term": "Right model",
+        "detail": "simple, latency-bound tasks go to a non-reasoning model"
+      }
+    ]
+  },
+  "steps": [
+    "Rewrite the prompt as goal, constraints, checks and output format",
+    "Remove step-by-step scaffolds, “show your working” and most worked examples",
+    "Set the effort or thinking budget per task type, with room left for the answer",
+    "Route simple lookups to a non-reasoning model and compare accuracy, cost and p95 latency"
+  ],
+  "pitfalls": [
+    "A fixed step-by-step recipe that overrides a better path the model would find on its own",
+    "Asking for the reasoning in the answer, paying for it twice and slowing every reply",
+    "One high effort setting for every request, so a balance lookup waits 20 seconds"
+  ],
+  "tools": [
+    "Claude extended thinking",
+    "OpenAI reasoning effort",
+    "Gemini thinking config",
+    "promptfoo",
+    "Langfuse"
+  ],
+  "remember": "Say what and why, not how. Ask for the answer, and match the effort to the task.",
+  "caption": "Illustrative: 10,000 tasks a day at RupeeRail, a fictional payment aggregator: 70% lookups and 30% settlement reconciliations.",
+  "comparison": {
+    "scope": "Slow, costly or worse answers from a thinking model",
+    "cost": 1,
+    "needs": "Low: prompt edits and an effort setting per task",
+    "best": "Scaffolds that fight the model’s own reasoning"
+  },
+  "diagram": {
+    "file": "diagrams/reasonprompt.svg"
+  },
+  "lesson": {
+    "file": "reconcile_prompt.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "REASONING, FAST = \"claude-sonnet-4-5\", \"claude-haiku-4-5\"   # check current model ids",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "RECON = \"\"\"Goal: reconcile today's UPI settlement file with RupeeRail's ledger.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Constraints: amounts are in paise; a refund can settle up to T+2;",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "match a row only when both the UTR and the amount agree.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Before you answer, check that matched + mismatched equals the rows in the file.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "Reply with only this JSON: {\"matched\": int, \"mismatches\": [{\"utr\": str, \"cause\": str}]}\"\"\"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "BUDGET = {\"lookup\": None, \"recon\": 8_000}   # thinking tokens per task type",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run(task_type: str, prompt: str, data: str):",
+        "steps": []
+      },
+      {
+        "text": "    budget = BUDGET[task_type]",
+        "steps": []
+      },
+      {
+        "text": "    if budget is None:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        r = client.messages.create(model=FAST, max_tokens=300, system=prompt,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                                   messages=[{\"role\": \"user\", \"content\": data}])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return r.content[0].text, r.usage",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    r = client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=REASONING,",
+        "steps": []
+      },
+      {
+        "text": "        max_tokens=budget + 2_000,                 # room for the answer",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        thinking={\"type\": \"enabled\", \"budget_tokens\": budget},",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "        system=prompt,",
+        "steps": []
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": data}])",
+        "steps": []
+      },
+      {
+        "text": "    answer = next(b.text for b in r.content if b.type == \"text\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return answer, r.usage           # output_tokens includes the thinking",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Goal and constraints, not a recipe",
+        "text": "The prompt says what to achieve and which rules hold: paise, T+2 refunds, match only on UTR and amount. It does not say “think step by step” or number the steps. A reasoning model plans its own path, and a fixed recipe written for chat models often forces a worse one. There are no worked examples either: start zero-shot."
+      },
+      {
+        "title": "A check, and the answer only",
+        "text": "Instead of asking for the working, the prompt names a check the answer must pass: matched plus mismatched equals the rows in the file. It then asks for the JSON alone. The model already reasons in its thinking tokens, so asking it to write the reasoning out again costs about 900 extra output tokens per reconciliation and adds nothing."
+      },
+      {
+        "title": "Effort per task type",
+        "text": "Thinking is set per task type, not once for the whole service. A reconciliation gets 8,000 thinking tokens; a lookup such as “has UTR 4012… settled?” gets none. On Claude the budget is budget_tokens, at least 1,024; OpenAI uses reasoning.effort and Gemini a thinking budget or level."
+      },
+      {
+        "title": "Leave room for the answer",
+        "text": "Thinking counts towards max_tokens, and budget_tokens must be below it. Setting max_tokens to the budget plus 2,000 leaves room for the JSON. Too little room means a rejected request or an answer cut off mid-way."
+      },
+      {
+        "title": "Send lookups to a fast model",
+        "text": "Lookups need a record and one sentence, not a plan. They go to a fast model without thinking, answering in under a second at the 95th percentile instead of about 19 seconds, for about 2% of the cost, while accuracy drops only from 98.5% to 97.5%."
+      },
+      {
+        "title": "Read the answer, log the thinking",
+        "text": "With thinking on, the response starts with a thinking block, so take the text block rather than content[0]. usage.output_tokens includes the thinking tokens, which are billed as output even when the visible thinking is summarised. Log it per task type to see where the money goes."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"21\" text-anchor=\"middle\">goal · constraints · no recipe, no examples</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"8\" y=\"32\" width=\"168\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"46\" text-anchor=\"middle\">“think step by step”</text></g><text class=\"sb a\" x=\"184\" y=\"46\" style=\"text-anchor:start;--d:0.2s\">removed</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"60\" width=\"248\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"132\" y=\"75\" text-anchor=\"middle\">check: matched + mismatched = rows</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"262\" y=\"60\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"307\" y=\"75\" text-anchor=\"middle\">JSON only</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"92\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"107\" text-anchor=\"middle\">lookup → no thinking</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"92\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"107\" text-anchor=\"middle\">recon → 8,000 tokens</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"sb a\" x=\"8\" y=\"138\" style=\"text-anchor:start;--d:0s\">max_tokens 10,000</text><rect x=\"8\" y=\"144\" width=\"344\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"8\" y=\"144\" width=\"275.2\" height=\"14\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><rect class=\"a\" x=\"283.2\" y=\"144\" width=\"68.8\" height=\"14\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"sb a\" x=\"8\" y=\"172\" style=\"text-anchor:start;--d:0.25s\">thinking 8,000</text><text class=\"sb a\" x=\"352\" y=\"172\" style=\"text-anchor:end;--d:0.3s\">answer 2,000</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"182\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"197\" text-anchor=\"middle\">lookups → fast model · p95 0.7 s, not 19 s</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"212\" width=\"210\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"113\" y=\"227\" text-anchor=\"middle\">take the text block</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"224\" y=\"212\" width=\"128\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"288\" y=\"227\" text-anchor=\"middle\">log usage</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"8\" y=\"238\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"252\" text-anchor=\"middle\">thinking tokens are billed as output</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Shorter prompts that are easier to read, test and keep up to date",
+      "Better answers on hard, multi-step tasks than a rigid recipe gives",
+      "Lower cost and latency when the answer carries no written-out working",
+      "Effort per task keeps simple requests fast and cheap"
+    ],
+    "cons": [
+      "Thinking tokens are billed as output and add seconds or minutes to hard tasks",
+      "The model’s path is less visible: thinking may be hidden or summarised",
+      "Prompts tuned for a chat model need rewriting and a fresh eval",
+      "Effort values and parameters differ between providers and model versions"
+    ],
+    "avoidWhen": [
+      "Simple, latency-bound tasks such as lookups, classification or short replies (use a non-reasoning model)",
+      "Tasks where you must audit a fixed procedure step by step (run the steps in code as a workflow and log each one)"
+    ],
+    "tools": [
+      {
+        "name": "Claude extended thinking",
+        "type": "API (Anthropic)",
+        "what": "thinking with budget_tokens, or adaptive thinking with an effort setting on newer models",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking"
+      },
+      {
+        "name": "OpenAI reasoning models",
+        "type": "API (OpenAI)",
+        "what": "reasoning.effort in the Responses API; reasoning tokens reported in usage",
+        "url": "https://platform.openai.com/docs/guides/reasoning"
+      },
+      {
+        "name": "Gemini thinking",
+        "type": "API (Google)",
+        "what": "A thinking budget or thinking level in the generation config",
+        "url": "https://ai.google.dev/gemini-api/docs/thinking"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Compare prompt styles and effort settings on the same test cases",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source, commercial cloud",
+        "what": "Trace token usage and latency per task type in production",
+        "url": "https://langfuse.com/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "RupeeRail, a fictional payment aggregator, runs 10,000 tasks a day through a reasoning model: 7,000 customer-facing lookups such as “has this UTR settled?” and 3,000 background reconciliations of a UPI settlement file against the ledger. The prompt was written for a chat model. You choose the prompt style, the effort for reconciliations and where lookups go.",
+    "controls": [
+      "Set the reconciliation effort: low, medium or high, with about 1,200, 4,000 or 9,000 thinking tokens.",
+      "Choose the prompt style: a step-by-step scaffold with worked examples and shown working, or goals, constraints and a self-check with the answer only.",
+      "Choose where lookups go: the reasoning model at the same effort, the reasoning model at low effort, or a fast non-reasoning model, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Accuracy, all tasks",
+        "meaning": "Share of the 10,000 daily tasks answered correctly, with lookups and reconciliations shown separately."
+      },
+      {
+        "name": "Thinking tokens per task",
+        "meaning": "Average thinking tokens across the mix. They are billed as output tokens."
+      },
+      {
+        "name": "Cost a day",
+        "meaning": "Daily spend in rupees, with the month and the cost of one lookup and one reconciliation."
+      },
+      {
+        "name": "p95 latency, lookups",
+        "meaning": "The time within which 95% of lookups answer. Customers in the app need 3 seconds or less."
+      },
+      {
+        "name": "p95 latency, reconciliations",
+        "meaning": "The same for reconciliations, which run in the background."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Scaffold, high effort for everything",
+        "expect": "95.7% accurate, reconciliations only 89.0%, 3,750 thinking tokens per task, ₹41,948 a day (₹12,58,425 a month), lookups 21.4 s at p95."
+      },
+      {
+        "k": "goals",
+        "name": "Goals and constraints, high effort for everything",
+        "expect": "96.9% accurate, reconciliations 93.0%, ₹36,295 a day, but lookups still take 19.2 s at p95."
+      },
+      {
+        "k": "split",
+        "name": "Goals, high for reconciliations, low for lookups",
+        "expect": "96.5% accurate, 2,805 thinking tokens per task, ₹28,263 a day, lookups 3.0 s at p95."
+      },
+      {
+        "k": "routed",
+        "name": "Goals, high for reconciliations, lookups on a fast model",
+        "expect": "96.2% accurate, reconciliations 93.0%, 2,700 thinking tokens per task, ₹25,900 a day (₹7,77,000 a month), lookups 0.7 s at p95."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fit",
+        "text": "Reach at least 96% accuracy for no more than ₹30,000 a day, with lookups answering within 3 seconds at p95.",
+        "hint": "Use the goals prompt at high effort for reconciliations, and give lookups low effort or the fast model."
+      },
+      {
+        "k": "recon",
+        "text": "Get reconciliations to 93% or better without running lookups at the same effort.",
+        "hint": "The scaffold caps reconciliations at 89% on high effort; switch to goals and constraints, and change where lookups go."
+      },
+      {
+        "k": "cheap",
+        "text": "Keep the day under ₹15,000 while staying at 94% accuracy or better.",
+        "hint": "Try medium effort for reconciliations with the goals prompt, and the fast model for lookups."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude extended thinking",
+        "type": "API · Anthropic",
+        "best": "Hard multi-step tasks with a thinking budget or, on newer models, adaptive thinking with an effort setting.",
+        "pros": [
+          "budget_tokens gives a firm upper bound on thinking",
+          "Thinking blocks can be kept across tool calls"
+        ],
+        "cons": [
+          "Thinking counts towards max_tokens and is billed as output",
+          "Not compatible with temperature changes or response prefill"
+        ],
+        "ex": "A reconciliation call with an 8,000-token thinking budget and max_tokens of 10,000.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking"
+      },
+      {
+        "n": "OpenAI reasoning effort",
+        "type": "API · OpenAI",
+        "best": "reasoning.effort in the Responses API, with reasoning tokens reported in usage.",
+        "pros": [
+          "One parameter per request, easy to set per task type",
+          "Reasoning tokens reported separately in usage"
+        ],
+        "cons": [
+          "Reasoning itself is hidden; only summaries are available",
+          "Effort values differ between model versions"
+        ],
+        "ex": "high effort for chargeback analysis, low or none for status replies.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://platform.openai.com/docs/guides/reasoning"
+      },
+      {
+        "n": "Gemini thinking",
+        "type": "API · Google",
+        "best": "A thinking budget or thinking level in the generation config of Gemini thinking models.",
+        "pros": [
+          "Thinking can be reduced or, on some models, turned off",
+          "Thought summaries on request"
+        ],
+        "cons": [
+          "Parameter names changed between model generations",
+          "Budget ranges vary by model"
+        ],
+        "ex": "A low thinking level for FAQ answers, a higher one for policy comparisons.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://ai.google.dev/gemini-api/docs/thinking"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source",
+        "best": "Side-by-side evals of prompt styles and effort settings on the same cases.",
+        "pros": [
+          "Compare scaffold and goals prompts on one test set",
+          "Tracks cost and latency next to accuracy"
+        ],
+        "cons": [
+          "You still build the labelled cases",
+          "Long reasoning runs make eval suites slow"
+        ],
+        "ex": "A matrix of 2 prompts × 3 effort levels over 300 labelled reconciliations.",
+        "prod": 2,
+        "start": 3,
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "n": "Langfuse",
+        "type": "Open source · commercial cloud",
+        "best": "Tracing token usage, cost and latency per task type in production.",
+        "pros": [
+          "Shows which task types burn thinking tokens",
+          "p95 latency per route"
+        ],
+        "cons": [
+          "Needs instrumentation in your code",
+          "Another service to run or pay for"
+        ],
+        "ex": "A dashboard of thinking tokens and p95 latency, split by lookup and reconciliation.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://langfuse.com/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Hard multi-step task on Claude",
+        "tool": "Claude extended thinking"
+      },
+      {
+        "need": "Per-request effort on OpenAI models",
+        "tool": "OpenAI reasoning effort"
+      },
+      {
+        "need": "Pick the prompt style and effort from data",
+        "tool": "promptfoo"
+      }
+    ],
+    "goals": [
+      "Write prompts for reasoning models as goals, constraints and checks rather than step-by-step recipes",
+      "Explain why asking for the working in the answer costs tokens and time without helping",
+      "Set effort per task type and decide when a non-reasoning model is the better choice"
+    ]
+  },
+  "practice": {
+    "scenario": "RupeeRail, a fictional payment aggregator, moved its settlement reconciliations to a reasoning model but kept the old chat-model prompt: “think step by step”, six numbered steps, five worked examples and “show all your working before the JSON”. Every lookup ran through the same model at high effort. The team rewrote the prompt as a goal, constraints, one self-check and “JSON only”, kept high effort for reconciliations and sent lookups to a fast model. Reconciliation accuracy rose from 89% to 93%, the daily bill fell from ₹41,948 to ₹25,900, and lookups answered in under a second at p95.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Settlement reconciliation and chargeback analysis at high effort; transaction-status lookups on a fast model"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claim-versus-policy checks with many clauses, prompted with the goal, the rules and the checks rather than a fixed procedure"
+      },
+      {
+        "industry": "Software",
+        "use": "Code review and bug diagnosis on a reasoning model; changelog summaries and ticket tagging on a non-reasoning one"
+      }
+    ],
+    "analogy": "Briefing a senior chartered accountant rather than a trainee. You tell them what the reconciliation must achieve, the rules that apply and the totals that must tie out, then ask for the findings. You do not hand them a numbered checklist or ask them to write out every thought, and you do not book them for a one-line balance query.",
+    "library": {
+      "name": "OpenAI Python SDK",
+      "what": "The Responses API takes reasoning={\"effort\": ...} on reasoning models; usage reports reasoning tokens separately, and they count against max_output_tokens.",
+      "install": "pip install openai"
+    },
+    "note": "Model names are examples and change often. Effort values depend on the model: low, medium and high are common, some models also accept minimal, none or xhigh. On Claude use thinking={'type': 'enabled', 'budget_tokens': N} (N at least 1,024 and below max_tokens), or adaptive thinking with an effort setting on newer models; on Gemini set a thinking budget or thinking level in the generation config. Check each provider’s docs for your model.",
+    "samples": [
+      {
+        "file": "reconcile_router.py",
+        "language": "python",
+        "code": "from openai import OpenAI\n\nclient = OpenAI()\nREASONING, FAST = \"gpt-5-mini\", \"gpt-4.1-mini\"   # examples: check current model names\n\nINSTRUCTIONS = {\n    # goal, constraints, one check, output format: no \"think step by step\"\n    \"recon\": (\n        \"Goal: reconcile the UPI settlement file with the ledger.\\n\"\n        \"Constraints: amounts are in paise; refunds may settle up to T+2; \"\n        \"match a row only when both the UTR and the amount agree.\\n\"\n        \"Before answering, check that matched + mismatched equals the rows in the file.\\n\"\n        'Return only JSON: {\"matched\": int, \"mismatches\": [{\"utr\": str, \"cause\": str}]}'\n    ),\n    \"lookup\": \"Answer the merchant's question from the record, in one sentence.\",\n}\nEFFORT = {\"recon\": \"high\"}   # lookups skip reasoning entirely\n\n\ndef run(task_type: str, data: str) -> tuple[str, int]:\n    if task_type not in EFFORT:                       # simple and latency-bound\n        r = client.responses.create(model=FAST, instructions=INSTRUCTIONS[task_type],\n                                    input=data, max_output_tokens=200)\n        return r.output_text, 0\n    r = client.responses.create(\n        model=REASONING,\n        reasoning={\"effort\": EFFORT[task_type]},\n        instructions=INSTRUCTIONS[task_type],\n        input=data,\n        max_output_tokens=25_000,                     # reasoning tokens count against this\n    )\n    if r.status == \"incomplete\":                      # output room used up by reasoning\n        raise RuntimeError(f\"incomplete: {r.incomplete_details}\")\n    return r.output_text, r.usage.output_tokens_details.reasoning_tokens\n\n\nif __name__ == \"__main__\":\n    text, used = run(\"lookup\", \"UTR 401234567890: settled 26-09-2026, ₹4,999.00. Q: has it settled?\")\n    print(text, used)\n    rows = open(\"settlement_2026-09-26.csv\").read()\n    text, used = run(\"recon\", rows)\n    print(f\"reasoning tokens: {used:,}\")\n    print(text)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A reconciliation on a reasoning model reads 3,400 input tokens, thinks for 9,000 tokens and writes a 400-token answer. Input costs ₹170 per million tokens and output ₹850 per million, with thinking billed as output. What does one reconciliation cost, in rupees?",
+    "answer": "Input: 3,400 × ₹0.00017 = ₹0.578. Output: (9,000 + 400) × ₹0.00085 = ₹7.99. Total ₹8.568, about ₹8.57, and ₹7.65 of it (89%) is thinking. Asking for another 900 tokens of written-out working would add ₹0.77 per reconciliation, ₹2,295 a day at 3,000 reconciliations.",
+    "expected": {
+      "value": 8.57,
+      "tolerance": 0.02,
+      "label": "₹ per reconciliation ="
+    },
+    "interview": [
+      {
+        "question": "How does prompting a reasoning model differ from prompting a chat model?",
+        "answer": "The model already plans and checks in its own thinking tokens, so step-by-step scaffolds, “show your working” and long worked examples are unnecessary and can make results worse by forcing a fixed path. Give the goal, the constraints, what a correct answer must satisfy and the output format, start zero-shot, and set the effort or thinking budget per task type. Then evaluate, because a prompt tuned for a chat model needs a fresh baseline."
+      },
+      {
+        "question": "When would you not use a reasoning model?",
+        "answer": "When the task is simple and latency-bound, such as a status lookup, a classification or a short reply: a non-reasoning model answers in under a second at a small fraction of the cost with similar accuracy. Also when you must audit a fixed procedure step by step; run those steps in code as a workflow and log each one, rather than hoping the hidden thinking follows it."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Keeping “think step by step” and a numbered recipe in the prompt",
+        "fix": "State the goal, constraints and checks, and let the model plan its own path"
+      },
+      {
+        "mistake": "Asking for the reasoning in the answer",
+        "fix": "Ask for the answer or JSON only; the thinking already happens, and is billed, in thinking tokens"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rz01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A prompt for a reasoning model that reconciles UPI settlements says “Think step by step. Step 1: list the rows. Step 2: …”. What is the best change?",
+      "options": [
+        "Add more numbered steps",
+        "Replace the recipe with the goal, the constraints and the checks the answer must pass",
+        "Ask for the reasoning to be written out in the answer",
+        "Switch the model off thinking"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reasoning models plan their own path; state what to achieve and what must hold, not how to think."
+    },
+    {
+      "id": "rz02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why is “show all your working before the JSON” wasteful on a reasoning model?",
+      "options": [
+        "The model cannot write explanations",
+        "The model already reasons in thinking tokens, so the written-out working is extra paid output that adds latency",
+        "JSON cannot follow text",
+        "It lowers the thinking budget"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Thinking happens and is billed anyway; asking for it again in the answer costs output tokens and time."
+    },
+    {
+      "id": "rz03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A shop assistant answers “where is my order?” from a single tracking record. Which setup fits best?",
+      "options": [
+        "A reasoning model at high effort",
+        "A reasoning model at medium effort with five worked examples",
+        "A fast non-reasoning model, or the lowest effort",
+        "A reasoning model with a step-by-step scaffold"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Simple, latency-bound lookups gain little from thinking and pay for it in cost and seconds."
+    },
+    {
+      "id": "rz04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A reconciliation reads 3,400 input tokens, thinks for 9,000 and answers in 400. Input costs ₹170 and output ₹850 per million tokens, with thinking billed as output. What does one call cost?",
+      "options": [
+        "₹0.92",
+        "₹4.40",
+        "₹8.57",
+        "₹9.52"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "3,400 × ₹0.00017 = ₹0.578; 9,400 × ₹0.00085 = ₹7.99; total ₹8.568."
+    },
+    {
+      "id": "rz05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "On Claude with extended thinking, budget_tokens is 8,000. Which max_tokens setting works?",
+      "options": [
+        "4,000",
+        "8,000",
+        "10,000",
+        "Any value; they are independent"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "budget_tokens must be below max_tokens, and thinking counts towards it; 10,000 leaves room for the answer."
+    },
+    {
+      "id": "rz06",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A team migrating to a reasoning model keeps eight long worked examples in every prompt. What does current provider guidance suggest?",
+      "options": [
+        "Keep all eight: more examples always help",
+        "Start zero-shot, and add one or two examples only if the output format needs showing",
+        "Double them for harder tasks",
+        "Put them in the answer instead"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reasoning models often do well zero-shot; examples cost tokens and can pull the model towards their surface patterns."
+    },
+    {
+      "id": "rz07",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which belong in a prompt for a reasoning model that analyses chargebacks? Select all that apply.",
+      "options": [
+        "The goal: decide whether to contest, with a reason",
+        "Constraints such as the card-network deadline and the evidence required",
+        "“Think step by step, then show every step in your reply”",
+        "The output format, such as a JSON object with decision and reason"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Goal, constraints and format tell it what and why; the scaffold and shown working add cost without helping."
+    },
+    {
+      "id": "rz08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Lookups on a reasoning model at high effort take 19 seconds at p95. Customers need an answer within 3 seconds. What is the most direct fix?",
+      "options": [
+        "Raise max_tokens",
+        "Lower the effort for lookups or send them to a fast model",
+        "Add a scaffold so it thinks faster",
+        "Ask for shorter reasoning in the answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Latency comes mostly from thinking tokens; set effort per task type or route the task away from thinking."
+    },
+    {
+      "id": "rz09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "7,000 lookups a day cost ₹1.513 each at high effort and ₹0.028 each on a fast model. What is the daily saving from routing them?",
+      "options": [
+        "₹1,039",
+        "₹10,395",
+        "₹10,591",
+        "₹1,03,950"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "7,000 × (₹1.513 − ₹0.028) = 7,000 × ₹1.485 = ₹10,395."
+    },
+    {
+      "id": "rz10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinical-coding assistant must check a discharge summary against many coding rules. Why might a numbered procedure in the prompt lower accuracy on a reasoning model?",
+      "options": [
+        "Numbered lists are not allowed",
+        "It forces a fixed path, which can override a better one the model would plan for the case",
+        "Reasoning models ignore instructions",
+        "It raises the temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Provider guidance says prescriptive step-by-step instructions are often unnecessary and can hurt; give the rules and checks instead."
+    },
+    {
+      "id": "rz11",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which statements about thinking tokens are true? Select all that apply.",
+      "options": [
+        "They are billed as output tokens",
+        "They count towards the output limit, such as max_tokens",
+        "They are free when only a summary is shown",
+        "They add latency before the answer appears"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Thinking is billed as output even when summarised or hidden, it uses the output limit, and it takes time."
+    },
+    {
+      "id": "rz12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A reasoning prompt asks for 900 tokens of written working on each of 3,000 daily reconciliations. Output costs ₹850 per million tokens. What does the working alone cost per day?",
+      "options": [
+        "₹229.50",
+        "₹765",
+        "₹2,295",
+        "₹22,950"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "900 × 3,000 = 27,00,000 tokens × ₹0.00085 = ₹2,295 a day."
+    },
+    {
+      "id": "rz13",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC wants the model to verify its own reconciliation. What prompt wording suits a reasoning model?",
+      "options": [
+        "“Think step by step and double-check each step in your reply.”",
+        "“Before you answer, check that matched plus mismatched equals the rows in the file.”",
+        "“Be careful.”",
+        "“Use chain-of-thought.”"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Name a concrete check the answer must pass; the model runs it in its thinking and returns only the result."
+    },
+    {
+      "id": "rz14",
+      "kind": "single",
+      "industry": "Software",
+      "question": "With Claude extended thinking, the code reads r.content[0].text and crashes. Why?",
+      "options": [
+        "Thinking responses have no content",
+        "The first content block is the thinking block; the answer is in a later text block",
+        "The budget was too small",
+        "Text blocks come only when streaming"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Take the block whose type is text, not the first block."
+    },
+    {
+      "id": "rz15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "On the OpenAI Responses API, a reasoning request comes back with status “incomplete” and no visible text. What is the likely cause?",
+      "options": [
+        "The effort was too low",
+        "Reasoning tokens used up max_output_tokens before any answer",
+        "The instructions were too short",
+        "The model does not support JSON"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reasoning tokens count against max_output_tokens; leave generous room or lower the effort."
+    },
+    {
+      "id": "rz16",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is a non-reasoning model the better choice? Select all that apply.",
+      "options": [
+        "Tagging claims into 6 categories in under a second",
+        "Checking a claim against 40 policy clauses and prior claims",
+        "Drafting a one-line status update from a record",
+        "Replying to “what is my policy number?”"
+      ],
+      "correct": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Simple, latency-bound tasks go to a fast model; the multi-clause check is where thinking pays."
+    },
+    {
+      "id": "rz17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "RupeeRail runs 7,000 lookups and 3,000 reconciliations a day. Lookups are 98.0% accurate and reconciliations 93.0%. What is overall accuracy?",
+      "options": [
+        "93.0%",
+        "95.5%",
+        "96.5%",
+        "98.0%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.7 × 98.0% + 0.3 × 93.0% = 68.6% + 27.9% = 96.5%."
+    },
+    {
+      "id": "rz18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A team sets one high effort for every request “to be safe”. What is the main cost?",
+      "options": [
+        "Nothing: unused thinking is free",
+        "Simple requests pay for thinking they do not need, in money and seconds",
+        "Hard requests get less thinking",
+        "The model refuses short questions"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Set effort per task type: low for routine requests, high for multi-step ones."
+    },
+    {
+      "id": "rz19",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "You are switching a code-review prompt from a chat model to a reasoning model. Which steps are sensible? Select all that apply.",
+      "options": [
+        "Remove “think step by step” and the numbered review procedure",
+        "State what a good review must catch and the output format",
+        "Keep the old prompt unchanged and assume it still works",
+        "Compare both prompts on the same labelled set of pull requests"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Rewrite as goals and format, then measure: a prompt tuned for one model family needs a fresh baseline."
+    },
+    {
+      "id": "rz20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A reconciliation prompt moves from a scaffold to goals and constraints, and accuracy on 3,000 daily reconciliations rises from 89% to 93%. How many fewer wrong reconciliations a day is that?",
+      "options": [
+        "40",
+        "120",
+        "330",
+        "2,790"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 × (93% − 89%) = 3,000 × 4% = 120 fewer wrong reconciliations a day."
+    }
+  ]
+}

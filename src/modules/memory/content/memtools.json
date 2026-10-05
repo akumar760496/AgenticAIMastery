@@ -1,0 +1,902 @@
+{
+  "id": "memtools",
+  "moduleSlug": "memory",
+  "name": "Agent-Managed Memory",
+  "shortName": "Memory tools",
+  "question": "Should the agent decide what to remember?",
+  "summary": "Give the agent tools to view, write, search and edit its own memory, and let it decide when to use them. MemGPT framed this as an operating system paging data between a small main context and larger stores. The agent can then resume long tasks across sessions, but every path and write must be checked.",
+  "useCases": [
+    "Multi-day tasks that must resume where they stopped",
+    "Agents whose useful notes are hard to predict in advance",
+    "Workflows where the agent keeps checklists or progress files"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Claude memory tool",
+        "detail": "memory_20250818: view, create, str_replace, insert, delete, rename"
+      },
+      {
+        "term": "Storage",
+        "detail": "client-side under /memories: you implement the handlers"
+      },
+      {
+        "term": "Path safety",
+        "detail": "resolve every path and check it stays inside the memory root"
+      },
+      {
+        "term": "Letta",
+        "detail": "memory blocks in context plus archival memory the agent searches"
+      },
+      {
+        "term": "Pairing",
+        "detail": "memory tool plus context editing: 39% better than baseline in Anthropic’s eval"
+      },
+      {
+        "term": "Review",
+        "detail": "log every write; sample and review them"
+      }
+    ]
+  },
+  "steps": [
+    "Declare the memory tool and implement its handlers on your storage",
+    "Resolve each path and reject anything outside the memory root",
+    "Let the agent view memory first and record progress as it works",
+    "Pair with context editing, and log and review every write"
+  ],
+  "pitfalls": [
+    "Checking the path with startswith, so /memories/../ escapes",
+    "The agent writing sensitive data or instructions into its own memory",
+    "Progress written too rarely, so work is redone after a reset"
+  ],
+  "tools": [
+    "Claude memory tool",
+    "Letta",
+    "LangMem tools",
+    "Mem0",
+    "OpenAI Agents SDK Sessions"
+  ],
+  "remember": "Let it take notes. Check every path.",
+  "caption": "Illustrative three-session task: 30 checklist items.",
+  "comparison": {
+    "scope": "Agent’s own notes",
+    "cost": 2,
+    "needs": "Tool handlers and path checks",
+    "best": "Unsafe writes or paths"
+  },
+  "diagram": {
+    "file": "diagrams/memtools.svg"
+  },
+  "lesson": {
+    "file": "memory_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic, logging",
+        "steps": []
+      },
+      {
+        "text": "from pathlib import Path",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "ROOT = Path(\"memories\").resolve()",
+        "steps": []
+      },
+      {
+        "text": "TOOLS = [{\"type\": \"memory_20250818\", \"name\": \"memory\"}]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def safe(p: str) -> Path:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    full = (ROOT / p.removeprefix(\"/memories\").lstrip(\"/\")).resolve()",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if not full.is_relative_to(ROOT):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        raise PermissionError(f\"outside /memories: {p}\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return full",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_memory(cmd: dict) -> str:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    path = safe(cmd[\"path\"])",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "    if cmd[\"command\"] == \"view\":",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return \"\\n\".join(x.name for x in path.iterdir()) if path.is_dir() else path.read_text()",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if cmd[\"command\"] == \"create\":",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        path.parent.mkdir(parents=True, exist_ok=True); path.write_text(cmd[\"file_text\"])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    # str_replace, insert, delete, rename (old_path/new_path) follow the same pattern",
+        "steps": []
+      },
+      {
+        "text": "    logging.info(\"memory %s %s\", cmd[\"command\"], path)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return \"ok\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "msgs = [{\"role\": \"user\", \"content\": \"Continue the ITR checklist for client 114.\"}]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "while True:",
+        "steps": []
+      },
+      {
+        "text": "    r = client.beta.messages.create(model=MODEL, max_tokens=2048,",
+        "steps": []
+      },
+      {
+        "text": "        tools=TOOLS, messages=msgs,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        betas=[\"context-management-2025-06-27\"],",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        context_management={\"edits\": [{\"type\": \"clear_tool_uses_20250919\"}]})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    msgs.append({\"role\": \"assistant\", \"content\": r.content})",
+        "steps": []
+      },
+      {
+        "text": "    calls = [b for b in r.content if b.type == \"tool_use\"]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if not calls:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        break",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    msgs.append({\"role\": \"user\", \"content\": [{\"type\": \"tool_result\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        \"tool_use_id\": b.id, \"content\": run_memory(b.input)} for b in calls]})",
+        "steps": [
+          4
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Declare the memory tool",
+        "text": "memory_20250818 is a client-side tool. Claude sends view, create, str_replace, insert, delete and rename commands; your code stores the files."
+      },
+      {
+        "title": "Implement the handlers",
+        "text": "Map each command onto your own storage: a folder, a database or object storage, per tenant and client."
+      },
+      {
+        "title": "Validate every path",
+        "text": "Resolve the path first, then check it is still inside the memory root. /memories/../config.env resolves outside and is refused."
+      },
+      {
+        "title": "Run the loop",
+        "text": "The agent views its memory first, finds progress.md at item 12 of 30, resumes at 13 and updates the file as it goes."
+      },
+      {
+        "title": "Pair with context editing",
+        "text": "Clearing old tool results keeps each session small. Before results are cleared, the agent can save what matters to memory."
+      },
+      {
+        "title": "Log and review writes",
+        "text": "Every write is logged with its path, so a person can review what the agent chose to remember."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"6\" y=\"8\" width=\"160\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"86\" y=\"25\">memory tool</text><text class=\"sb\" x=\"86\" y=\"40\">memory_20250818</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"194\" y=\"8\" width=\"160\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"274\" y=\"25\">your handlers</text><text class=\"sb\" x=\"274\" y=\"40\">files · DB · S3</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M166 28L192 28\" marker-end=\"url(#arr)\"/></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"73\" text-anchor=\"middle\">view</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"124\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"73\" text-anchor=\"middle\">create</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"242\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"298\" y=\"73\" text-anchor=\"middle\">str_replace</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"6\" y=\"84\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"99\" text-anchor=\"middle\">insert</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"124\" y=\"84\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"99\" text-anchor=\"middle\">delete</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"242\" y=\"84\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"298\" y=\"99\" text-anchor=\"middle\">rename</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"6\" y=\"116\" width=\"236\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"124\" y=\"131\" text-anchor=\"middle\">/memories/../config.env</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"256\" cy=\"127\" r=\"9\" class=\"bd-fail\"/><path d=\"M252.5 123.5l7 7M259.5 123.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t fail\" x=\"272\" y=\"131\" style=\"text-anchor:start\">refused</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"6\" y=\"144\" width=\"236\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"124\" y=\"159\" text-anchor=\"middle\">/memories/progress.md</text></g><g class=\"a\" style=\"--d:0.45s\"><circle cx=\"256\" cy=\"155\" r=\"9\" class=\"bd-pass\"/><path d=\"M252 155l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"6\" y=\"176\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"61\" y=\"191\" text-anchor=\"middle\">view progress.md</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M118 187L130 187\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"132\" y=\"176\" width=\"96\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"191\" text-anchor=\"middle\">resume at 13</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M230 187L242 187\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"244\" y=\"176\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"191\" text-anchor=\"middle\">update 24/30</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"6\" y=\"206\" width=\"348\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"221\" text-anchor=\"middle\">old tool results cleared · notes saved first</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"mono a\" x=\"6\" y=\"242\" style=\"--d:0s\">log: create /memories/progress.md · str_replace ×11</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Long tasks resume across sessions and context resets",
+      "The agent decides what is worth noting",
+      "Simple file operations are easy to inspect",
+      "Pairs well with context editing to keep sessions small"
+    ],
+    "cons": [
+      "Writes are less predictable than a fixed pipeline",
+      "Path handling is a security boundary you must get right",
+      "The agent can store sensitive data or instructions",
+      "Progress written too rarely means redone work"
+    ],
+    "avoidWhen": [
+      "Regulated data where every write must follow a fixed schema",
+      "Short tasks that finish in one session"
+    ],
+    "tools": [
+      {
+        "name": "Claude memory tool",
+        "type": "Anthropic API (client-side tool)",
+        "what": "File-style memory under /memories with handlers you implement",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool"
+      },
+      {
+        "name": "Letta",
+        "type": "Open source · cloud",
+        "what": "Stateful agents that edit memory blocks and archival memory",
+        "url": "https://github.com/letta-ai/letta"
+      },
+      {
+        "name": "LangMem tools",
+        "type": "Open source",
+        "what": "manage_memory and search_memory tools for LangGraph agents",
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "name": "Mem0",
+        "type": "Open source · managed platform",
+        "what": "Memory add and search exposed to agents as tools",
+        "url": "https://github.com/mem0ai/mem0"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A chartered-accountancy practice’s agent works through a 30-item ITR checklist for client 114 across up to three sessions. Each session ends when the context fills. With the memory tool the agent can keep /memories/progress.md; the handlers you write decide which paths are allowed.",
+    "controls": [
+      "Toggle the memory tool and context editing.",
+      "Choose how often the agent writes progress: every item, every 5, every 10 or never.",
+      "Choose the path check and the path the agent sends, including a traversal attempt."
+    ],
+    "outputs": [
+      {
+        "name": "Checklist finished",
+        "meaning": "Whether all 30 items are done by the end of session 3, and how many were redone."
+      },
+      {
+        "name": "Tokens per session",
+        "meaning": "Start-up, items and progress writes for each session."
+      },
+      {
+        "name": "Total tokens",
+        "meaning": "All three sessions, against 480k with no memory."
+      },
+      {
+        "name": "Memory writes",
+        "meaning": "Progress updates written to /memories."
+      },
+      {
+        "name": "Path resolves to",
+        "meaning": "Where the requested path really points after resolving ../ segments."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No memory",
+        "expect": "Every session restarts at item 1: 160k tokens each, 480k in total, never past item 12. The startswith check lets /memories/../config.env through."
+      },
+      {
+        "k": "mem10",
+        "name": "Memory, write every 10",
+        "expect": "Finishes in session 3 with 355k tokens, but 4 items are redone; the traversal still escapes."
+      },
+      {
+        "k": "sparse",
+        "name": "Memory and editing, every 10",
+        "expect": "16 items a session, but sparse writes mean 12 redone items: 309k tokens. /etc/passwd is refused."
+      },
+      {
+        "k": "safe",
+        "name": "Memory, every 5, resolved paths",
+        "expect": "358k tokens and 4 redone items; /memories/clients/../progress.md resolves inside the root and is allowed."
+      }
+    ],
+    "missions": [
+      {
+        "k": "resume",
+        "text": "Finish the checklist by session 3 without redoing any item.",
+        "hint": "Turn on memory and write progress after every item."
+      },
+      {
+        "k": "block",
+        "text": "Block /memories/../config.env.",
+        "hint": "Resolve the path first, then check it is still under /memories."
+      },
+      {
+        "k": "lean",
+        "text": "Finish all 30 items with under 240k tokens in total.",
+        "hint": "Context editing fits 16 items a session. Writing every item costs 30 writes; every 5 costs only 6."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude memory tool",
+        "type": "Anthropic API · client-side tool",
+        "start": 3,
+        "prod": 3,
+        "best": "File-style memory under /memories that Claude views and edits with commands your handlers carry out.",
+        "ex": "Per-client progress files for multi-day ITR work, stored in your own encrypted bucket.",
+        "pros": [
+          "Storage stays on your side",
+          "Pairs with context editing"
+        ],
+        "cons": [
+          "You must write safe handlers",
+          "The agent decides what to write"
+        ],
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool"
+      },
+      {
+        "n": "Letta",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Stateful agents that edit their own memory blocks and search archival memory, following the MemGPT design.",
+        "ex": "A long-running research agent keeps findings in archival memory and a task block in context.",
+        "pros": [
+          "Full agent-managed memory runtime",
+          "Shared blocks between agents"
+        ],
+        "cons": [
+          "A platform to adopt, not a library",
+          "Harder to constrain writes"
+        ],
+        "url": "https://github.com/letta-ai/letta"
+      },
+      {
+        "n": "LangMem tools",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "manage_memory and search_memory tools that LangGraph agents call themselves.",
+        "ex": "Give a support agent tools to save and search notes in a per-user namespace.",
+        "pros": [
+          "Drop-in tools for LangGraph agents",
+          "Namespaces for scoping"
+        ],
+        "cons": [
+          "Best with LangGraph",
+          "Validation of writes is yours"
+        ],
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "n": "Mem0",
+        "type": "Open source · managed platform",
+        "start": 3,
+        "prod": 2,
+        "best": "Exposing memory add and search to an agent as tools, with reconciliation behind them.",
+        "ex": "An assistant calls add_memory when a user states a durable preference.",
+        "pros": [
+          "Reconciliation handles duplicates",
+          "Many integrations"
+        ],
+        "cons": [
+          "Less suited to file-style progress notes",
+          "Extra LLM calls per write"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "On Claude, simplest",
+        "tool": "Claude memory tool with context editing"
+      },
+      {
+        "need": "A full stateful agent runtime",
+        "tool": "Letta"
+      },
+      {
+        "need": "LangGraph agents",
+        "tool": "LangMem tools"
+      }
+    ],
+    "goals": [
+      "Implement memory tool handlers with safe path resolution",
+      "Explain the trade-off between progress-write frequency, tokens and redone work",
+      "Decide when agent-managed memory is worse than a developer-run pipeline"
+    ]
+  },
+  "practice": {
+    "scenario": "A chartered-accountancy practice’s agent prepares ITR filings over several days. With the Claude memory tool it keeps a file per client under /memories, such as the checklist of 30 items and where it stopped. When a new session starts it views the directory first and resumes. The handlers resolve every path and refuse anything outside the memory root.",
+    "industries": [
+      {
+        "industry": "Accounting",
+        "use": "Resume a multi-day filing checklist from per-client notes"
+      },
+      {
+        "industry": "Software engineering",
+        "use": "Keep a progress file across coding sessions"
+      },
+      {
+        "industry": "Research",
+        "use": "Store findings and open questions between long research runs"
+      }
+    ],
+    "analogy": "A locum doctor’s handover notes. Whoever takes the next shift reads the notes first, and only authorised staff may write in the file.",
+    "library": {
+      "name": "Anthropic SDK (memory tool)",
+      "what": "memory_20250818 is a client-side tool: Claude issues view, create, str_replace, insert, delete and rename commands and your code stores the files.",
+      "install": "pip install anthropic"
+    },
+    "note": "Run the usual tool loop: pass each memory tool_use block to handle() and return its result. Log every write for review.",
+    "samples": [
+      {
+        "file": "memory_tool.py",
+        "language": "python",
+        "code": "from pathlib import Path\nimport anthropic\n\nROOT = Path(\"./memories\").resolve()\nclient = anthropic.Anthropic()\n\ndef safe(p: str) -> Path:\n    full = (ROOT / p.removeprefix(\"/memories\").lstrip(\"/\")).resolve()\n    if not full.is_relative_to(ROOT):                  # resolve first, then check\n        raise ValueError(\"path outside /memories\")\n    return full\n\ndef handle(cmd: dict) -> str:\n    if cmd[\"command\"] == \"view\":\n        p = safe(cmd[\"path\"])\n        return \"\\n\".join(x.name for x in p.iterdir()) if p.is_dir() else p.read_text()\n    if cmd[\"command\"] == \"create\":\n        p = safe(cmd[\"path\"]); p.parent.mkdir(parents=True, exist_ok=True)\n        p.write_text(cmd[\"file_text\"]); return \"saved\"\n    ...                                                # str_replace, insert, delete, rename\n\nr = client.beta.messages.create(\n    model=\"claude-sonnet-4-5\", max_tokens=2048,        # use your current model\n    betas=[\"context-management-2025-06-27\"],\n    tools=[{\"type\": \"memory_20250818\", \"name\": \"memory\"}],\n    messages=[{\"role\": \"user\", \"content\": \"Continue the ITR checklist for client 114.\"}])\n"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Without memory, each of 3 sessions re-reads everything: 160k tokens each. With memory, session 1 costs 90k and sessions 2 and 3 cost 60k each. What percentage of tokens is saved?",
+    "answer": "Without: 3 × 160k = 480k. With: 90k + 60k + 60k = 210k. Saving: 270k / 480k = 56.25%.",
+    "expected": {
+      "value": 56.25,
+      "tolerance": 0.1,
+      "label": "% saved ="
+    },
+    "interview": [
+      {
+        "question": "Why is a startswith check not enough for memory paths?",
+        "answer": "A path like /memories/../secrets.txt starts with /memories but resolves outside it. Resolve the full path first, including symlinks, then check that it stays inside the memory root."
+      },
+      {
+        "question": "When would you not give the agent memory tools?",
+        "answer": "When writes must be predictable and auditable, as in regulated customer data. A developer-run pipeline with a fixed schema and policy is easier to test and review than an agent deciding what to store."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Validating paths with a string prefix",
+        "fix": "Resolve, then check the root; reject symlinks out"
+      },
+      {
+        "mistake": "Letting the agent write without logs",
+        "fix": "Log every write and review a sample"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mt01",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "A memory handler checks path.startswith(\"/memories\"). Which path wrongly passes?",
+      "options": [
+        "/memories/progress.md",
+        "/memories/../secrets.txt",
+        "/etc/passwd",
+        "/tmp/notes.md"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It starts with /memories but resolves outside; resolve first, then check the root."
+    },
+    {
+      "id": "mt02",
+      "kind": "multi",
+      "industry": "Accounting",
+      "question": "Which commands does Claude’s memory tool (memory_20250818) support? Select all that apply.",
+      "options": [
+        "view",
+        "str_replace",
+        "execute",
+        "rename"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "It supports view, create, str_replace, insert, delete and rename; there is no execute."
+    },
+    {
+      "id": "mt03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where are the memory tool’s files stored?",
+      "options": [
+        "On Anthropic’s servers",
+        "Client-side, in storage your handlers manage",
+        "In the model weights",
+        "In the prompt cache"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The memory tool is client-side: you implement the handlers and storage."
+    },
+    {
+      "id": "mt04",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "Three sessions cost 160k each without memory. With memory they cost 90k, 60k and 60k. What percentage is saved?",
+      "options": [
+        "43.75%",
+        "56.25%",
+        "50%",
+        "62.5%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "480k − 210k = 270k; 270 ÷ 480 = 56.25%."
+    },
+    {
+      "id": "mt05",
+      "kind": "single",
+      "industry": "Legal services",
+      "question": "Which paper framed agent-managed memory as an operating system paging between a small main context and larger stores?",
+      "options": [
+        "Reflexion",
+        "MemGPT",
+        "RULER",
+        "Lost in the Middle"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "MemGPT introduced virtual context management with memory tiers."
+    },
+    {
+      "id": "mt06",
+      "kind": "multi",
+      "industry": "Software engineering",
+      "question": "Which make memory tool handlers safer? Select all that apply.",
+      "options": [
+        "Resolve the path, then check it is inside the root",
+        "Per-tenant storage directories",
+        "Allow symlinks that point anywhere",
+        "Skip logging to save time"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Resolved-path checks and tenant isolation help; unrestricted symlinks and no logs are unsafe."
+    },
+    {
+      "id": "mt07",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "An agent writes progress every 5 items. A session ends after item 12. Where does the next session resume?",
+      "options": [
+        "Item 13",
+        "Item 11",
+        "Item 1",
+        "Item 6"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The last saved checkpoint is item 10, so it resumes at item 11 and redoes 11 and 12."
+    },
+    {
+      "id": "mt08",
+      "kind": "single",
+      "industry": "Research",
+      "question": "In Anthropic’s evaluation, memory tool plus context editing improved performance by about how much over baseline?",
+      "options": [
+        "9%",
+        "39%",
+        "84%",
+        "100%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic reported a 39% improvement with both; 84% was the token reduction from context editing."
+    },
+    {
+      "id": "mt09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "When is agent-managed memory a poor fit?",
+      "options": [
+        "Multi-day tasks that must resume",
+        "Regulated customer data where every write must follow a fixed schema",
+        "Research notes between runs",
+        "Coding progress files"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Predictable, auditable writes favour a developer-run pipeline."
+    },
+    {
+      "id": "mt10",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "A session fits 16 items. The agent writes progress every item. How many sessions does a 30-item checklist need?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "16 + 14 = 30, so two sessions."
+    },
+    {
+      "id": "mt11",
+      "kind": "multi",
+      "industry": "Software engineering",
+      "question": "Letta memory blocks have which properties? Select all that apply.",
+      "options": [
+        "A label and a value",
+        "A character limit",
+        "A description that guides the agent",
+        "A GPU assignment"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Blocks have a label, value, limit and description; there is no GPU field."
+    },
+    {
+      "id": "mt12",
+      "kind": "single",
+      "industry": "Legal services",
+      "question": "Which Letta tools let an agent write to and search archival memory?",
+      "options": [
+        "archival_memory_insert and archival_memory_search",
+        "memory_view and memory_edit",
+        "insert_row and select_rows",
+        "put and get"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Letta’s archival memory uses archival_memory_insert and archival_memory_search."
+    },
+    {
+      "id": "mt13",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "Python: (ROOT / \"../config.env\").resolve() lands outside ROOT. Which check catches it?",
+      "options": [
+        "str(path).startswith(str(ROOT))",
+        "path.resolve().is_relative_to(ROOT)",
+        "path.exists()",
+        "len(str(path)) < 255"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Resolve first, then test containment with is_relative_to."
+    },
+    {
+      "id": "mt14",
+      "kind": "single",
+      "industry": "Research",
+      "question": "Why pair the memory tool with context editing?",
+      "options": [
+        "Context editing replaces memory",
+        "The agent can save key information before old tool results are cleared",
+        "It disables caching",
+        "It makes writes synchronous"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Claude is warned near the clearing threshold and can save what matters to memory first."
+    },
+    {
+      "id": "mt15",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A clinic agent can write its own memory. Which risks need controls? Select all that apply.",
+      "options": [
+        "Writing patient health details into notes",
+        "Storing instructions that change its future behaviour",
+        "Reading its progress file at session start",
+        "Resuming a checklist"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Sensitive data and injected instructions need filters and review; reading progress and resuming are the intended use."
+    },
+    {
+      "id": "mt16",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "Each item costs 7k tokens, start-up 4k and each progress write 1k. A session does 16 items and writes 3 times. What does it cost?",
+      "options": [
+        "112k",
+        "116k",
+        "119k",
+        "131k"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "4 + 16 × 7 + 3 × 1 = 4 + 112 + 3 = 119k."
+    },
+    {
+      "id": "mt17",
+      "kind": "single",
+      "industry": "Software engineering",
+      "question": "What should the agent do first in a new session with the memory tool?",
+      "options": [
+        "Delete old memories",
+        "View its memory directory",
+        "Rename all files",
+        "Start the task from scratch"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Viewing memory first is what lets it resume progress."
+    },
+    {
+      "id": "mt18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A path /memories/clients/../progress.md is requested. After resolving, where does it point?",
+      "options": [
+        "/memories/progress.md",
+        "/progress.md",
+        "/memories/clients/progress.md",
+        "/clients/progress.md"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "clients/.. cancels out, leaving /memories/progress.md, which is inside the root."
+    },
+    {
+      "id": "mt19",
+      "kind": "multi",
+      "industry": "Legal services",
+      "question": "Which belong in a review process for agent-written memory? Select all that apply.",
+      "options": [
+        "Logging every write with its path",
+        "Sampling writes for sensitive data",
+        "Letting the agent approve its own writes",
+        "Deleting logs weekly"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Logs and sampling support review; self-approval and deleting logs defeat it."
+    },
+    {
+      "id": "mt20",
+      "kind": "single",
+      "industry": "Accounting",
+      "question": "Progress is written every 10 items; sessions fit 16. Starting at item 1, how many items are redone across sessions 1 and 2?",
+      "options": [
+        "0",
+        "4",
+        "6",
+        "12"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Session 1 does 1–16 and saves 10; session 2 restarts at 11, redoing 11–16: 6 items."
+    }
+  ]
+}

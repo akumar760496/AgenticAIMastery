@@ -1,0 +1,898 @@
+{
+  "id": "whenmulti",
+  "moduleSlug": "multi-agent",
+  "name": "Single vs Multi-Agent",
+  "shortName": "One or many?",
+  "question": "Should I split this across agents at all?",
+  "summary": "A decision method, not a framework. Split work across agents only when the pieces are independent enough to run in parallel and too big for one context window. Parallel agents cut wall time and add coverage, but they multiply tokens: Anthropic reports agents using about 4× the tokens of chat and multi-agent systems about 15×. Otherwise one agent is cheaper and more coherent.",
+  "useCases": [
+    "Research across many independent sources, such as 12 companies’ results",
+    "Material too large for one context window when read together",
+    "Deadlines where saved minutes are worth more than extra tokens"
+  ],
+  "keyFacts": {
+    "label": "Decision factors",
+    "items": [
+      {
+        "term": "Independent branches",
+        "detail": "subtasks that share no inputs can run at once"
+      },
+      {
+        "term": "Context per branch",
+        "detail": "each branch must fit one window; the whole job may not"
+      },
+      {
+        "term": "Token multiplier",
+        "detail": "about 4× chat for one agent, about 15× for multi-agent (Anthropic)"
+      },
+      {
+        "term": "Wall time",
+        "detail": "parallel time is the slowest branch plus merging, not the sum"
+      },
+      {
+        "term": "Coherence",
+        "detail": "coupled decisions split across agents can conflict (Cognition)"
+      },
+      {
+        "term": "Verdict",
+        "detail": "split only if time or coverage gained is worth more than the extra tokens"
+      }
+    ]
+  },
+  "steps": [
+    "Write the job as a small task graph with the inputs each step needs",
+    "Count branches that share no inputs, and check each fits one context window",
+    "Estimate tokens (about 4× vs 15× a chat baseline) and wall time for both designs",
+    "Price both, including the value of time saved, and split only if multi-agent wins"
+  ],
+  "pitfalls": [
+    "Splitting coupled work: agents make conflicting implicit decisions",
+    "Forgetting that parallelism saves time, not tokens",
+    "Coding and shared-context tasks rarely have enough truly parallel pieces"
+  ],
+  "tools": [
+    "Claude Agent SDK",
+    "OpenAI Agents SDK",
+    "LangGraph",
+    "CrewAI",
+    "Microsoft Agent Framework"
+  ],
+  "remember": "Split for breadth, not by default. Parallel saves minutes, not tokens.",
+  "caption": "Illustrative: 6 minutes and about 2k chat-equivalent tokens per filing (10k in all); 4× that for one agent (40k) and 15× for five (150k), plus 1 minute to merge.",
+  "comparison": {
+    "scope": "Whether to split at all",
+    "cost": 4,
+    "needs": "A task graph and a cost estimate",
+    "best": "About 15× the tokens of chat"
+  },
+  "diagram": {
+    "file": "diagrams/whenmulti.svg"
+  },
+  "lesson": {
+    "file": "split_or_not.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "TASKS = {                                   # task -> inputs it needs",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"read_TCS\": [], \"read_INFY\": [], \"read_HDFCB\": [],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"read_ITC\": [], \"read_LT\": [],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"valuation\": [\"read_TCS\", \"read_INFY\", \"read_HDFCB\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                  \"read_ITC\", \"read_LT\"],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "}",
+        "steps": []
+      },
+      {
+        "text": "MINUTES = {t: 6 for t in TASKS}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "BASE_TOKENS = 2_000                  # chat-equivalent, per filing",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "WINDOW = 200_000                     # one context window",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "INR_PER_MIN, INR_PER_1K = 20, 0.5",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "branches = [t for t, needs in TASKS.items() if not needs]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "coupled = [t for t, needs in TASKS.items() if needs]  # keep together",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "per_branch = 4 * BASE_TOKENS",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "fits = per_branch < WINDOW",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "single_tokens = 4 * BASE_TOKENS * len(branches)       # 40k",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "multi_tokens = 15 * BASE_TOKENS * len(branches)       # 150k",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "single_min = sum(MINUTES[t] for t in branches)        # 30",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "multi_min = max(MINUTES[t] for t in branches) + 1     # 7, with merge",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "saved = (single_min - multi_min) * INR_PER_MIN",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "extra = (multi_tokens - single_tokens) / 1000 * INR_PER_1K",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "split = len(branches) > 1 and fits and saved > extra",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "print(split, saved, extra)            # True 460 55.0",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Sketch the dependencies",
+        "text": "Write the job as a small task graph: each task and the inputs it needs. Five filings can each be read alone; the valuation needs all five."
+      },
+      {
+        "title": "Count independent branches",
+        "text": "Tasks that need nothing from each other can run at the same time. Here there are 5 such branches; the coupled valuation stays with one agent."
+      },
+      {
+        "title": "Check context per branch",
+        "text": "Each branch must fit in one context window. One filing needs about 8k tokens of working context, far below 200k."
+      },
+      {
+        "title": "Estimate tokens",
+        "text": "Agents use about 4× the tokens of chat and multi-agent systems about 15×, so 10k of chat-equivalent work becomes about 40k for one agent and 150k for five."
+      },
+      {
+        "title": "Estimate wall time",
+        "text": "Parallel time is the slowest branch plus merging, not the sum: 6 + 1 = 7 minutes, against 30 minutes one after another."
+      },
+      {
+        "title": "Decide",
+        "text": "Split only if what the time saves is worth more than the extra tokens. At INR 20 a minute, 23 minutes saved is worth INR 460 against INR 55 of extra tokens."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<path class=\"ln draw \" pathLength=\"1\" d=\"M39 32 L180 58\" style=\"--d:0.2s\"/><g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"10\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"39\" y=\"25\" text-anchor=\"middle\">TCS</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M109 32 L180 58\" style=\"--d:0.24000000000000002s\"/><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx \" x=\"78\" y=\"10\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"109\" y=\"25\" text-anchor=\"middle\">INFY</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M179 32 L180 58\" style=\"--d:0.28s\"/><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx \" x=\"148\" y=\"10\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"25\" text-anchor=\"middle\">HDFCB</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M249 32 L180 58\" style=\"--d:0.32s\"/><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx \" x=\"218\" y=\"10\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"249\" y=\"25\" text-anchor=\"middle\">ITC</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M319 32 L180 58\" style=\"--d:0.36s\"/><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx \" x=\"288\" y=\"10\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"319\" y=\"25\" text-anchor=\"middle\">LT</text></g><g class=\"a \" style=\"--d:0.4s\"><rect class=\"bx \" x=\"120\" y=\"58\" width=\"120\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"71\">valuation</text><text class=\"sb\" x=\"180\" y=\"86\">needs all five</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"108\" style=\"--d:0s\">5 independent branches</text><text class=\"tl a\" x=\"352\" y=\"108\" style=\"text-anchor:end;--d:0.1s\">valuation: one agent</text><g class=\"a\" style=\"--d:0.15s\"><circle cx=\"39\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M35 40l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"109\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M105 40l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.25s\"><circle cx=\"179\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M175 40l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"249\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M245 40l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.35s\"><circle cx=\"319\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M315 40l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"128\" style=\"text-anchor:end;--d:0s\">Context/branch</text><rect x=\"110\" y=\"118\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"118\" width=\"7.6000000000000005\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"128\" style=\"--d:0.2s\">8k/200k</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"152\" style=\"text-anchor:end;--d:0s\">Tokens, 1 agent</text><rect x=\"110\" y=\"142\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"142\" width=\"50.666666666666664\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"152\" style=\"--d:0.2s\">40k</text><text class=\"tl a\" x=\"104\" y=\"170\" style=\"text-anchor:end;--d:0.15s\">Tokens, 5 agents</text><rect x=\"110\" y=\"160\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"160\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.25s\"/><text class=\"mono l a\" x=\"306\" y=\"170\" style=\"--d:0.35s\">150k</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"194\" style=\"text-anchor:end;--d:0s\">Minutes, 1 agent</text><rect x=\"110\" y=\"184\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"184\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"194\" style=\"--d:0.2s\">30</text><text class=\"tl a\" x=\"104\" y=\"212\" style=\"text-anchor:end;--d:0.15s\">Minutes, 5 agents</text><rect x=\"110\" y=\"202\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"202\" width=\"44.333333333333336\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.25s\"/><text class=\"mono l a\" x=\"306\" y=\"212\" style=\"--d:0.35s\">7</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"222\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"238\" text-anchor=\"middle\">Split: INR 460 of time saved for INR 55 of tokens</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Cuts wall time when the work really is parallel",
+      "Covers more ground than one context window can hold",
+      "Each branch gets a clean, focused context",
+      "Forces you to write the task graph down before building"
+    ],
+    "cons": [
+      "About 15× the tokens of chat, against about 4× for one agent",
+      "Split agents make conflicting implicit decisions on coupled work",
+      "More moving parts to debug, trace and evaluate",
+      "Merging results adds its own step and its own errors"
+    ],
+    "avoidWhen": [
+      "Coding and other shared-context work with few truly parallel pieces",
+      "Small jobs where one agent finishes quickly and nobody waits"
+    ],
+    "tools": [
+      {
+        "name": "Claude Agent SDK",
+        "type": "Agent SDK (Anthropic)",
+        "what": "Sub-agents with isolated context, tool lists and spend caps",
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Agents, handoffs and agents-as-tools in Python",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Explicit graphs with parallel branches and typed state",
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "name": "CrewAI",
+        "type": "Open source",
+        "what": "Role-based crews with sequential or hierarchical processes",
+        "url": "https://docs.crewai.com/"
+      },
+      {
+        "name": "Microsoft Agent Framework",
+        "type": "Open source (Microsoft)",
+        "what": "Agents and multi-agent workflows; successor to AutoGen",
+        "url": "https://learn.microsoft.com/en-us/agent-framework/overview/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A research desk must decide, job by job, whether to use one agent or a team. Each subtask takes 6 minutes. Dependency density says how many subtasks form a chain (each needing the one before). One agent uses about 4× the chat-equivalent tokens and a team about 15×, at INR 0.5 per 1,000 tokens. One context window holds 128k tokens, and merging a team’s results takes 1 minute.",
+    "controls": [
+      "Set the number of subtasks and how densely they depend on each other.",
+      "Set the chat-equivalent tokens each subtask needs.",
+      "Set what a minute of saved time is worth, in INR."
+    ],
+    "outputs": [
+      {
+        "name": "Parallel branches",
+        "meaning": "Subtasks that can run at once: the chain counts as one branch."
+      },
+      {
+        "name": "Team wall time",
+        "meaning": "The longest chain × 6 minutes + 1 minute to merge, against the sum for one agent."
+      },
+      {
+        "name": "Tokens",
+        "meaning": "4× the chat-equivalent tokens for one agent and 15× for a team."
+      },
+      {
+        "name": "Coverage",
+        "meaning": "How much of the work fits in each agent’s 128k window."
+      },
+      {
+        "name": "Cost per useful answer",
+        "meaning": "Token cost plus the value of wall time, divided by the subtasks done well."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Split only if the team’s cost per useful answer is lower."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Mixed job",
+        "expect": "5 subtasks at 60% density: a chain of 3 leaves 3 branches. The team takes 19 minutes against 30 (63%) and 150k tokens against 40k. Cost per useful answer: INR 16.0 for one agent, INR 22.6 for the team, so stay with one agent."
+      },
+      {
+        "k": "big",
+        "name": "Big job, time not valued",
+        "expect": "10 subtasks at 40%: 6 branches. One agent covers only 40% of the work well (it needs 320k tokens of context); the team covers 80%. With time worth nothing, INR 40.0 against 75.0 still favours one agent."
+      },
+      {
+        "k": "coupled",
+        "name": "Fully coupled model",
+        "expect": "5 subtasks, all chained: 1 branch. A team takes 31 minutes against 30 and 300k tokens against 80k, so there is nothing to gain."
+      },
+      {
+        "k": "small",
+        "name": "Small and cheap",
+        "expect": "4 independent 1k subtasks: the team is fast (7 minutes against 24, 29%) but costs INR 7.5 per answer against INR 2.0, so one agent wins when nobody is waiting."
+      }
+    ],
+    "missions": [
+      {
+        "k": "wins",
+        "text": "Make the team cheaper per useful answer than one agent.",
+        "hint": "Remove dependencies and give saved minutes a value: time and coverage are where a team earns back its extra tokens. Try 5 independent subtasks at INR 10 a minute."
+      },
+      {
+        "k": "fast",
+        "text": "Get the team’s wall time under 40% of one agent’s.",
+        "hint": "Team time is 6 minutes × the longest chain + 1. Lower the dependency density."
+      },
+      {
+        "k": "stay",
+        "text": "Find a job with 6 or more subtasks where one agent is still the right choice.",
+        "hint": "Chain every subtask (100% density), or make saved time worth nothing."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude Agent SDK",
+        "type": "Agent SDK · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Sub-agents defined in code, each with its own prompt, tool list and model, called through the Agent tool.",
+        "ex": "A research orchestrator fans out one read-only sub-agent per company filing and merges their summaries.",
+        "pros": [
+          "Context isolation built in",
+          "Depth, concurrency and spend caps"
+        ],
+        "cons": [
+          "Tied to Claude models",
+          "Sub-agent spawning must be bounded deliberately"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Lightweight Python agents with tools, handoffs, agents-as-tools, guardrails and tracing.",
+        "ex": "A manager agent calls a research agent as a tool, then hands the chat to a support agent.",
+        "pros": [
+          "Small, readable API",
+          "Tracing included"
+        ],
+        "cons": [
+          "Orchestration beyond handoffs is up to you",
+          "Some features favour OpenAI models"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Explicit graphs with typed state, reducers, parallel branches, checkpoints and interrupts.",
+        "ex": "Carrier, warehouse and weather nodes write to one typed board that a dispatcher node reads.",
+        "pros": [
+          "Precise control of state and flow",
+          "Persistence and human-in-the-loop"
+        ],
+        "cons": [
+          "More code than prompt-level frameworks",
+          "Graph design takes practice"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "n": "CrewAI",
+        "type": "Open source · hosted option",
+        "start": 3,
+        "prod": 2,
+        "best": "Role-based crews that run tasks sequentially or under a manager agent.",
+        "ex": "An analyst, a writer and a reviewer crew draft a weekly market note.",
+        "pros": [
+          "Fast to prototype with roles",
+          "Sequential and hierarchical processes"
+        ],
+        "cons": [
+          "Less control over state than a graph",
+          "Manager behaviour can be hard to predict"
+        ],
+        "url": "https://docs.crewai.com/"
+      },
+      {
+        "n": "Microsoft Agent Framework",
+        "type": "Open source · Microsoft",
+        "start": 2,
+        "prod": 3,
+        "best": "Agents and multi-agent workflows for Python and .NET; the successor to AutoGen and Semantic Kernel.",
+        "ex": "A .NET bank team builds a workflow with sequential, concurrent and handoff steps.",
+        "pros": [
+          "Enterprise integrations and .NET support",
+          "Actively developed successor to AutoGen"
+        ],
+        "cons": [
+          "Newer, so fewer examples",
+          "APIs still settling"
+        ],
+        "url": "https://learn.microsoft.com/en-us/agent-framework/overview/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Deciding before you build",
+        "tool": "Draw the task graph and estimate tokens and time"
+      },
+      {
+        "need": "Parallel research with Claude",
+        "tool": "Claude Agent SDK sub-agents"
+      },
+      {
+        "need": "Explicit parallel branches in one app",
+        "tool": "LangGraph"
+      }
+    ],
+    "goals": [
+      "Explain why multi-agent systems trade tokens for wall time and coverage",
+      "Estimate tokens and wall time for one agent and for a team",
+      "Recognise coupled work that should stay with one agent"
+    ]
+  },
+  "practice": {
+    "scenario": "A Mumbai brokerage’s research desk compares 12 companies’ quarterly results the morning they are published. Each company’s filing can be read and summarised on its own, so the desk runs one sub-agent per company and merges the summaries. The valuation model that follows is tightly coupled (every assumption feeds every other), so it stays with a single agent.",
+    "industries": [
+      {
+        "industry": "Equity research",
+        "use": "One sub-agent per company or filing; one agent for the coupled valuation"
+      },
+      {
+        "industry": "Legal due diligence",
+        "use": "Parallel review of independent contracts in a data room"
+      },
+      {
+        "industry": "Software engineering",
+        "use": "Usually one agent: code changes share context and conflict when split"
+      }
+    ],
+    "analogy": "A newsroom on results day. Twelve reporters can each cover one company at once, but a single editor writes the front-page analysis, because its arguments depend on each other.",
+    "library": {
+      "name": "networkx",
+      "what": "A graph library for Python. Model the job as a task graph, find independent branches and compute the parallel critical path before you pay for extra agents.",
+      "install": "pip install networkx"
+    },
+    "note": "A planning script, run before you build anything. The 4× and 15× multipliers are the rough averages Anthropic reported; replace them with your own measurements.",
+    "samples": [
+      {
+        "file": "split_or_not.py",
+        "language": "python",
+        "code": "import networkx as nx\n\nG = nx.DiGraph()\nfor c in [\"TCS\", \"Infosys\", \"HDFC Bank\", \"ITC\"]:          # 12 in practice\n    G.add_node(c, minutes=6, tokens=2_000)                 # chat-equivalent tokens\nG.add_node(\"valuation\", minutes=20, tokens=6_000, coupled=True)\n\ndef plan(G, merge_min=1):\n    work = G.subgraph(n for n in G if not G.nodes[n].get(\"coupled\"))\n    branches = list(nx.weakly_connected_components(work))   # share no inputs\n    base = sum(d[\"tokens\"] for _, d in work.nodes(data=True))\n    t_single = sum(d[\"minutes\"] for _, d in work.nodes(data=True))\n    t_multi = max(sum(G.nodes[n][\"minutes\"] for n in b) for b in branches) + merge_min\n    return dict(branches=len(branches),\n                single=dict(minutes=t_single, tokens=4 * base),\n                multi=dict(minutes=t_multi, tokens=15 * base))\n\ndef worth_splitting(p, inr_per_min, inr_per_1k_tokens):\n    saved = (p[\"single\"][\"minutes\"] - p[\"multi\"][\"minutes\"]) * inr_per_min\n    extra = (p[\"multi\"][\"tokens\"] - p[\"single\"][\"tokens\"]) / 1000 * inr_per_1k_tokens\n    return p[\"branches\"] > 1 and saved > extra\n\np = plan(G)\nprint(p, worth_splitting(p, inr_per_min=50, inr_per_1k_tokens=0.5))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A job has 6 independent subtasks of 5 minutes each and a chat-equivalent baseline of 3k tokens per subtask. One agent uses about 4× the baseline; six sub-agents use about 15× and need 2 minutes to merge. How many extra tokens (in thousands) does the multi-agent design use?",
+    "answer": "Baseline: 6 × 3k = 18k. Single agent: 4 × 18k = 72k tokens and 30 minutes. Multi-agent: 15 × 18k = 270k tokens and 5 + 2 = 7 minutes. Extra tokens: 270k − 72k = 198k, bought to save 23 minutes.",
+    "expected": {
+      "value": 198,
+      "tolerance": 0.5,
+      "label": "extra tokens (k) ="
+    },
+    "interview": [
+      {
+        "question": "When would you choose a single agent even though the task has many steps?",
+        "answer": "When the steps share context or make coupled decisions, such as editing one codebase or building one valuation model. Split agents make implicit decisions that can conflict. A single agent with context compression is cheaper and more coherent."
+      },
+      {
+        "question": "How do you estimate whether multi-agent is worth it before building it?",
+        "answer": "Draw the task graph, count branches that share no inputs, and check each fits one context window. Estimate tokens (roughly 15× chat for multi-agent against 4× for one agent) and wall time (slowest branch plus merge). Split only if the time or coverage gained is worth more than the extra tokens."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t split a task because it has many steps.",
+        "fix": "Split only when steps are independent and each fits its own context window."
+      },
+      {
+        "mistake": "Don’t assume parallel agents save tokens.",
+        "fix": "Budget for more tokens: parallelism saves wall time, not tokens."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "wm01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A research desk must compare the quarterly results of 12 companies on results day. Each company’s filing can be read and summarised on its own. Which design fits best?",
+      "options": [
+        "One agent reading all 12 filings in turn",
+        "One sub-agent per company, run in parallel, with an orchestrator that merges the summaries",
+        "A debate between three agents on each filing",
+        "A triage agent that hands the chat to one company specialist at a time"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The filings are independent and together too large for one context, which is exactly where parallel sub-agents pay for their extra tokens."
+    },
+    {
+      "id": "wm02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team plans to split a refactor of three tightly coupled modules across five coding agents. What is the main risk?",
+      "options": [
+        "The agents will run out of tools",
+        "Each agent makes implicit design decisions that conflict with the others’",
+        "The refactor will finish too quickly to review",
+        "Parallel agents cannot use version control"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Coupled work carries decisions that must agree. Cognition warns that conflicting implicit decisions produce bad results; one agent with context compression is safer here."
+    },
+    {
+      "id": "wm03",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Eight contracts in a data room can each be reviewed independently in 5 minutes, and merging the reviews takes 2 minutes. How long does a parallel team take?",
+      "options": [
+        "40 minutes",
+        "7 minutes",
+        "5 minutes",
+        "42 minutes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Parallel wall time is the slowest branch plus merging: 5 + 2 = 7 minutes."
+    },
+    {
+      "id": "wm04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A job needs about 12k chat-equivalent tokens. Using the rough multipliers of 4× for one agent and 15× for a multi-agent team, how many extra tokens does the team use?",
+      "options": [
+        "132k",
+        "180k",
+        "48k",
+        "168k"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One agent: 4 × 12k = 48k. Team: 15 × 12k = 180k. Extra: 180k − 48k = 132k."
+    },
+    {
+      "id": "wm05",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which signs suggest a due-diligence job is a good fit for several agents? Select all that apply.",
+      "options": [
+        "The documents can each be reviewed without reading the others",
+        "The material is far larger than one context window",
+        "Every section edits one shared, evolving draft",
+        "Agents must agree on each intermediate decision before moving on"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Independence and size favour a team. A shared evolving draft and step-by-step agreement are coupling, which favours one agent."
+    },
+    {
+      "id": "wm06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Four claim files can be checked in parallel, 6 minutes each, plus 1 minute to merge. What is the team’s wall time as a share of one agent doing them in turn?",
+      "options": [
+        "About 29%",
+        "25%",
+        "About 71%",
+        "About 17%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Team: 6 + 1 = 7 minutes. One agent: 4 × 6 = 24 minutes. 7 ÷ 24 ≈ 29%."
+    },
+    {
+      "id": "wm07",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "An EdTech lab is reading Anthropic’s report on its research system. What share of the performance variance on BrowseComp did token usage alone explain?",
+      "options": [
+        "About 15%",
+        "About 80%",
+        "About 40%",
+        "About 95%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic reported that token usage by itself explained 80% of the variance, which is why multi-agent gains and costs go together."
+    },
+    {
+      "id": "wm08",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "An e-commerce firm moves catalogue research from one agent to a team of five. Which of these typically rise? Select all that apply.",
+      "options": [
+        "Total tokens",
+        "Coordination work: briefing and merging",
+        "Debugging and tracing effort",
+        "Wall time for work that really is parallel"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Tokens, coordination and debugging effort all grow. Wall time for parallel work falls, which is the reason to split."
+    },
+    {
+      "id": "wm09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank split a credit memo into four agents, one per section. The memo came back with contradictory assumptions about the borrower’s cash flow. What is the best fix?",
+      "options": [
+        "Add a fifth agent to vote on each section",
+        "Give each agent a larger context window",
+        "Write the memo with one agent, or share full context and traces with every writer",
+        "Run the four agents in sequence instead of in parallel"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The sections are coupled. One agent, or agents that share the full context and traces, avoids conflicting implicit decisions."
+    },
+    {
+      "id": "wm10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "One agent uses 40k tokens and takes 30 minutes; a team uses 150k tokens and takes 7 minutes. Tokens cost INR 0.5 per 1,000 and a saved minute is worth INR 2. Should you split?",
+      "options": [
+        "Yes: 23 minutes saved",
+        "No: INR 46 of time saved is less than INR 55 of extra tokens",
+        "Yes: tokens are cheap",
+        "No: teams are always slower"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Extra tokens: 110k × INR 0.5 per 1,000 = INR 55. Time saved: 23 × INR 2 = INR 46. The team costs more than it saves."
+    },
+    {
+      "id": "wm11",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "In the same job (INR 55 of extra tokens to save 23 minutes), at what value of a saved minute does the team break even?",
+      "options": [
+        "About INR 0.42",
+        "About INR 2.39",
+        "INR 23",
+        "INR 5.50"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Break-even is INR 55 ÷ 23 minutes ≈ INR 2.39 a minute."
+    },
+    {
+      "id": "wm12",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A network-audit job has 6 subtasks of 5 minutes each. Four form a chain (each needs the one before) and two are independent. Merging takes 1 minute. How long does a parallel team take?",
+      "options": [
+        "11 minutes",
+        "21 minutes",
+        "6 minutes",
+        "31 minutes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The chain of 4 runs in order: 4 × 5 = 20 minutes, plus 1 to merge = 21. The two independent subtasks finish alongside it."
+    },
+    {
+      "id": "wm13",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "When is one agent the better choice? Select all that apply.",
+      "options": [
+        "A discharge summary where every section depends on the same patient notes",
+        "A small job that nobody is waiting for",
+        "Scanning fifty independent clinical-trial registries",
+        "Reading material ten times the size of one context window"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Coupled work and small, unhurried jobs suit one agent. Many independent sources or material far beyond one window favour a team."
+    },
+    {
+      "id": "wm14",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Each of 8 carrier investigations needs about 60k tokens of working context; a window holds 200k. Why might a team be justified here even at a higher token bill?",
+      "options": [
+        "Each investigation fits one window, but all eight (480k) do not fit in one agent’s context",
+        "Sub-agents use fewer tokens per investigation",
+        "A team avoids any need to merge results",
+        "Teams never need briefs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Coverage is the other reason to split: the whole job overflows one context, while each branch fits."
+    },
+    {
+      "id": "wm15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments team wants Claude sub-agents with isolated contexts and a hard spend cap for each query. Which tool feature fits?",
+      "options": [
+        "CrewAI sequential process",
+        "Claude Agent SDK sub-agents with max_budget_usd",
+        "langgraph-swarm active_agent",
+        "The MAST taxonomy"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The Claude Agent SDK defines sub-agents with their own context and tools, and max_budget_usd caps the whole query, sub-agents included."
+    },
+    {
+      "id": "wm16",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An airline’s engineering manager reads Cognition’s “Don’t build multi-agents”. What does the post recommend for long tasks?",
+      "options": [
+        "Many parallel agents that never share context",
+        "One single-threaded agent that shares full context, with context compression for long tasks",
+        "A debate among three agents per step",
+        "A new agent for every tool call"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The post argues for sharing context and full traces, and recommends a single-threaded agent with compression over parallel agents with partial context."
+    },
+    {
+      "id": "wm17",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Before deciding between one agent and a team, which numbers do you need? Select all that apply.",
+      "options": [
+        "How many branches share no inputs",
+        "What a saved minute is worth against the price of tokens",
+        "The model’s parameter count",
+        "How many tools are in your tool registry"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The decision rests on parallel branches and on the value of time versus tokens. Parameter counts and registry size do not decide it."
+    },
+    {
+      "id": "wm18",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Ten independent subtasks need 3k chat-equivalent tokens each. A team uses about 15× that. At USD 3 per million tokens, what does the team’s run cost?",
+      "options": [
+        "USD 0.36",
+        "USD 1.35",
+        "USD 0.09",
+        "USD 13.50"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "10 × 3k = 30k; 15 × 30k = 450k tokens; 450k × USD 3 per million = USD 1.35."
+    },
+    {
+      "id": "wm19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A coding-assistant start-up wants to copy Anthropic’s parallel research design for bug fixing. What does Anthropic’s post say about coding?",
+      "options": [
+        "It is the best fit for multi-agent systems",
+        "It is a poorer fit, because it has fewer truly parallel pieces and more shared context",
+        "Coding agents cannot use tools",
+        "Coding always needs debate"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The post notes that domains needing shared context, such as most coding, have fewer parallelisable tasks."
+    },
+    {
+      "id": "wm20",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "You are deciding whether a contract-review job should use several agents. Which steps belong in the decision? Select all that apply.",
+      "options": [
+        "Draw the task graph with each step’s inputs",
+        "Check that each branch fits one context window",
+        "Estimate tokens and wall time for both designs",
+        "Start with as many agents as the API allows, then trim"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Graph, context check and cost estimate come first. Starting with the maximum number of agents burns tokens before you know you need them."
+    }
+  ]
+}

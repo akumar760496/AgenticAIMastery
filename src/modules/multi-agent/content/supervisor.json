@@ -1,0 +1,916 @@
+{
+  "id": "supervisor",
+  "moduleSlug": "multi-agent",
+  "name": "Supervisor and Workers",
+  "shortName": "Supervisor",
+  "question": "Who splits the job and puts it back together?",
+  "summary": "An orchestrator breaks a task into pieces and sends each to a worker sub-agent. Each worker starts with a fresh context, its own brief and a restricted set of tools, and returns only a short final message, so the orchestrator’s context stays clean. The orchestrator then merges the results and flags gaps. Anthropic calls this the orchestrator–workers pattern.",
+  "useCases": [
+    "Research or review that splits into independent parts",
+    "Work where each part needs different tools or permissions",
+    "Long jobs where one context would overflow with raw material"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Orchestrator",
+        "detail": "plans, delegates at run time and synthesizes"
+      },
+      {
+        "term": "Worker brief",
+        "detail": "objective, output format, sources and task boundaries"
+      },
+      {
+        "term": "Context isolation",
+        "detail": "a worker sees only its own prompt and the brief it is given"
+      },
+      {
+        "term": "Summary return",
+        "detail": "only the worker’s final message reaches the orchestrator"
+      },
+      {
+        "term": "Tool scope",
+        "detail": "least privilege per worker, for example Read and Grep only"
+      },
+      {
+        "term": "Limits",
+        "detail": "Claude Agent SDK: nesting depth 3 and 20 concurrent sub-agents by default"
+      }
+    ]
+  },
+  "steps": [
+    "Define each worker with a description, a system prompt and a minimal tool list",
+    "Write every brief so it carries all the context a fresh worker needs",
+    "Fan the workers out concurrently, with a budget or concurrency cap",
+    "Ask for a fixed, compact output format, then merge and list what is missing"
+  ],
+  "pitfalls": [
+    "Vague briefs make workers duplicate each other or wander out of scope",
+    "Returning full transcripts floods the orchestrator’s context",
+    "Spawning many workers for a simple question burns tokens for nothing"
+  ],
+  "tools": [
+    "Claude Agent SDK subagents",
+    "OpenAI Agents SDK as_tool",
+    "LangGraph",
+    "CrewAI hierarchical process",
+    "Magentic-One"
+  ],
+  "remember": "Brief fully, scope tightly, return summaries.",
+  "caption": "Illustrative: four workers each read about 30k tokens and return about 1k; the orchestrator holds 2k of its own plus 4k of summaries.",
+  "comparison": {
+    "scope": "Who plans and merges",
+    "cost": 3,
+    "needs": "Worker briefs and tool scopes",
+    "best": "Orchestrator is a bottleneck"
+  },
+  "diagram": {
+    "file": "diagrams/supervisor.svg"
+  },
+  "lesson": {
+    "file": "pv_orchestrator.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CLASSES = [\"SGLT2\", \"DPP-4\", \"statins\", \"ARBs\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "BRIEF = \"\"\"Objective: list suspected adverse events for {c} drugs.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "Output: JSON rows {{drug, event, paper_id, quote}}, at most 40.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "Sources: only files under ./papers/{c}/. No web search.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "Boundaries: do not judge causality. Stop when every file is read.\"\"\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "workers = {",
+        "steps": []
+      },
+      {
+        "text": "    f\"screen-{c.lower()}\": AgentDefinition(",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        description=f\"Screens {c} papers for adverse events.\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        prompt=BRIEF.format(c=c),              # the whole brief",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "        tools=[\"Read\", \"Grep\", \"Glob\"],        # read-only worker",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        model=\"sonnet\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    )",
+        "steps": []
+      },
+      {
+        "text": "    for c in CLASSES",
+        "steps": []
+      },
+      {
+        "text": "}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "options = ClaudeAgentOptions(",
+        "steps": []
+      },
+      {
+        "text": "    allowed_tools=[\"Read\", \"Grep\", \"Glob\", \"Agent\"],",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    agents=workers,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    max_budget_usd=5.0,                # caps sub-agents as well",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": ")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "PLAN = (\"Run the four screeners in parallel. Each returns only \"",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "        \"its JSON rows. Merge them into one table, remove \"",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        \"duplicates and list any paper no worker could read.\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def main():",
+        "steps": []
+      },
+      {
+        "text": "    async for msg in query(prompt=PLAN, options=options):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if hasattr(msg, \"result\"):     # final message only",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            print(msg.result)          # merged table and gaps",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define the workers",
+        "text": "One sub-agent per drug class, each with a description (when to use it), a system prompt and a model."
+      },
+      {
+        "title": "Restrict tools",
+        "text": "Screeners only read, so they get Read, Grep and Glob. A worker that cannot write cannot damage shared files."
+      },
+      {
+        "title": "Write the brief",
+        "text": "A worker starts with a fresh context and sees only its own prompt, so the brief carries everything: objective, output format, sources and boundaries."
+      },
+      {
+        "title": "Fan out",
+        "text": "The orchestrator calls the four workers through the Agent tool and they run at the same time, under one spend cap for the whole query."
+      },
+      {
+        "title": "Collect summaries",
+        "text": "Each worker read about 30k tokens, but only its final message returns: about 1k each. The orchestrator holds about 6k, not 122k."
+      },
+      {
+        "title": "Synthesize",
+        "text": "The orchestrator merges the rows, removes duplicates and lists what is missing, so a human reviewer sees both the findings and the gaps."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"110\" y=\"6\" width=\"140\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"27.5\">Orchestrator</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"8\" y=\"92\" width=\"80\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"48\" y=\"108\">SGLT2</text><text class=\"sb\" x=\"48\" y=\"123\">worker</text></g><g class=\"a \" style=\"--d:0.22999999999999998s\"><rect class=\"bx \" x=\"96\" y=\"92\" width=\"80\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"136\" y=\"108\">DPP-4</text><text class=\"sb\" x=\"136\" y=\"123\">worker</text></g><g class=\"a \" style=\"--d:0.31s\"><rect class=\"bx \" x=\"184\" y=\"92\" width=\"80\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"224\" y=\"108\">statins</text><text class=\"sb\" x=\"224\" y=\"123\">worker</text></g><g class=\"a \" style=\"--d:0.39s\"><rect class=\"bx \" x=\"272\" y=\"92\" width=\"80\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"312\" y=\"108\">ARBs</text><text class=\"sb\" x=\"312\" y=\"123\">worker</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"14\" y=\"136\" width=\"68\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"48\" y=\"149\" text-anchor=\"middle\">Read·Grep</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"102\" y=\"136\" width=\"68\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"136\" y=\"149\" text-anchor=\"middle\">Read·Grep</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"190\" y=\"136\" width=\"68\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"224\" y=\"149\" text-anchor=\"middle\">Read·Grep</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"278\" y=\"136\" width=\"68\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"312\" y=\"149\" text-anchor=\"middle\">Read·Grep</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"48\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"63\" text-anchor=\"middle\">brief: objective · output format · sources · limits</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw acc\" pathLength=\"1\" d=\"M180 70 L48 92\" style=\"--d:0s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M180 70 L136 92\" style=\"--d:0.06s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M180 70 L224 92\" style=\"--d:0.12s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M180 70 L312 92\" style=\"--d:0.18s\"/>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"176\" style=\"text-anchor:end;--d:0s\">Summaries back</text><rect x=\"110\" y=\"166\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"166\" width=\"9.344262295081966\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"176\" style=\"--d:0.2s\">6k</text><text class=\"tl a\" x=\"104\" y=\"196\" style=\"text-anchor:end;--d:0.15s\">Transcripts back</text><rect x=\"110\" y=\"186\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"186\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.25s\"/><text class=\"mono l a\" x=\"306\" y=\"196\" style=\"--d:0.35s\">122k</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"214\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"231\" text-anchor=\"middle\">merged: 37 events · gap flagged: 2 unreadable PDFs</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "The orchestrator decides the split at run time, so it adapts to each task",
+      "Workers’ raw reading stays out of the orchestrator’s context",
+      "Least-privilege tool lists per worker",
+      "Workers run in parallel and can use cheaper models"
+    ],
+    "cons": [
+      "The orchestrator is a single point of failure and a bottleneck",
+      "Vague briefs cause duplicated or out-of-scope work",
+      "Over-eager orchestrators spawn far more workers than needed",
+      "Summaries can drop details the merge step needed"
+    ],
+    "avoidWhen": [
+      "Steps are known in advance: a fixed graph is simpler and cheaper",
+      "A specialist should talk to the user directly: use a handoff instead"
+    ],
+    "tools": [
+      {
+        "name": "Claude Agent SDK subagents",
+        "type": "Agent SDK (Anthropic)",
+        "what": "AgentDefinition with prompt, tools and model; depth, concurrency and budget caps",
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "name": "OpenAI Agents SDK as_tool",
+        "type": "Open source (OpenAI)",
+        "what": "A manager agent calls specialists as tools and keeps control",
+        "url": "https://openai.github.io/openai-agents-python/multi_agent/"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Supervisors built with tool calling and explicit state",
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "name": "CrewAI hierarchical process",
+        "type": "Open source",
+        "what": "A manager agent delegates tasks to a crew and validates results",
+        "url": "https://docs.crewai.com/en/concepts/processes"
+      },
+      {
+        "name": "Magentic-One",
+        "type": "Research system (Microsoft)",
+        "what": "An orchestrator with task and progress ledgers directing specialist agents",
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A pharmacovigilance orchestrator screens a week’s papers on 8 drug classes, about 240k tokens of reading. A quarter of the papers are only reachable by web fetch. Each worker’s window holds 100k tokens and reads about 10k tokens a minute; the orchestrator itself uses 2k tokens.",
+    "controls": [
+      "Choose how many workers to start.",
+      "Choose how complete each worker’s brief is and which tools it gets.",
+      "Choose whether workers return a 1k structured summary or their full transcript."
+    ],
+    "outputs": [
+      {
+        "name": "Orchestrator context",
+        "meaning": "2k of its own plus whatever the workers send back."
+      },
+      {
+        "name": "Duplicated work",
+        "meaning": "Reading done twice because workers’ scopes overlap."
+      },
+      {
+        "name": "Coverage",
+        "meaning": "Brief quality × whether the work fits the workers’ windows × whether the papers are reachable."
+      },
+      {
+        "name": "Wall time",
+        "meaning": "The reading per worker at 10k tokens a minute, plus merging."
+      },
+      {
+        "name": "Workers that can write",
+        "meaning": "Workers with write or shell access, which screening never needs."
+      },
+      {
+        "name": "Tokens for the whole screen",
+        "meaning": "All reading, including duplicates, plus the orchestrator."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Title-only brief",
+        "expect": "4 workers with a one-line brief, all tools and full transcripts: the orchestrator holds 326k tokens, 35% of the work is duplicated, coverage is 75%, 12.1 minutes, and 4 workers can write."
+      },
+      {
+        "k": "objfull",
+        "name": "Better brief, transcripts back",
+        "expect": "6 workers with objective and format: duplication falls to 15% and coverage rises to 90%, but transcripts still put 278k tokens in the orchestrator’s context. 8.6 minutes."
+      },
+      {
+        "k": "local",
+        "name": "Summaries, local files only",
+        "expect": "3 workers returning summaries keep the orchestrator at 5k, but a title-only brief (23% duplicated) and local-only tools leave coverage at 56%."
+      },
+      {
+        "k": "one",
+        "name": "One worker",
+        "expect": "A single fully briefed worker with read and fetch would need 240k tokens in a 100k window, so coverage is 42%. Orchestrator 3k, 11.0 minutes."
+      }
+    ],
+    "missions": [
+      {
+        "k": "lean",
+        "text": "With 6 or more workers, keep the orchestrator’s context under 20k tokens.",
+        "hint": "Ask for summaries, not transcripts: 2k + 6 × 1k = 8k."
+      },
+      {
+        "k": "nodup",
+        "text": "Get duplicated work below 10%.",
+        "hint": "Give every worker the full brief: objective, output format, sources and boundaries."
+      },
+      {
+        "k": "safe",
+        "text": "Reach 100% coverage without giving any worker write access.",
+        "hint": "At least 3 workers so the reading fits, the full brief, and read + web fetch tools."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude Agent SDK",
+        "type": "Agent SDK · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Sub-agents defined in code, each with its own prompt, tool list and model, called through the Agent tool.",
+        "ex": "A research orchestrator fans out one read-only sub-agent per company filing and merges their summaries.",
+        "pros": [
+          "Context isolation built in",
+          "Depth, concurrency and spend caps"
+        ],
+        "cons": [
+          "Tied to Claude models",
+          "Sub-agent spawning must be bounded deliberately"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "n": "OpenAI Agents SDK as_tool",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "A manager agent calls specialist agents as tools and composes the reply itself.",
+        "ex": "A portfolio manager agent calls a news agent and a filings agent as tools, then writes the answer.",
+        "pros": [
+          "Manager keeps control of the conversation",
+          "Same tracing as the rest of the SDK"
+        ],
+        "cons": [
+          "You write the fan-out and merge logic",
+          "Parallelism depends on the model issuing parallel tool calls"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/multi_agent/"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Explicit graphs with typed state, reducers, parallel branches, checkpoints and interrupts.",
+        "ex": "Carrier, warehouse and weather nodes write to one typed board that a dispatcher node reads.",
+        "pros": [
+          "Precise control of state and flow",
+          "Persistence and human-in-the-loop"
+        ],
+        "cons": [
+          "More code than prompt-level frameworks",
+          "Graph design takes practice"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "n": "CrewAI hierarchical process",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "A manager agent plans, delegates tasks to crew members and validates their results.",
+        "ex": "A manager delegates market, competitor and pricing research to three agents.",
+        "pros": [
+          "Delegation without writing the loop",
+          "Roles are easy to read"
+        ],
+        "cons": [
+          "Manager planning is less transparent",
+          "Harder to cap fan-out precisely"
+        ],
+        "url": "https://docs.crewai.com/en/concepts/processes"
+      },
+      {
+        "n": "Magentic-One",
+        "type": "Research system · Microsoft",
+        "start": 1,
+        "prod": 1,
+        "best": "Studying an orchestrator that keeps task and progress ledgers while directing web, file and coding agents.",
+        "ex": "Reproduce its orchestrator loop on a small web research task.",
+        "pros": [
+          "Well-documented orchestrator design",
+          "Shows ledgers for planning and replanning"
+        ],
+        "cons": [
+          "Built on AutoGen, now in maintenance mode",
+          "A research system, not a product"
+        ],
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Parallel research with Claude",
+        "tool": "Claude Agent SDK sub-agents"
+      },
+      {
+        "need": "A manager that keeps control",
+        "tool": "OpenAI Agents SDK as_tool"
+      },
+      {
+        "need": "Explicit, inspectable state",
+        "tool": "LangGraph"
+      }
+    ],
+    "goals": [
+      "Write a worker brief that a fresh context can act on",
+      "Explain why workers should return summaries, not transcripts",
+      "Scope each worker’s tools to least privilege"
+    ]
+  },
+  "practice": {
+    "scenario": "A Hyderabad pharma company’s pharmacovigilance team screens newly published papers every week for adverse events linked to its drugs. An orchestrator splits the screen by drug class and briefs one read-only worker per class. Each worker returns a structured summary, and a human safety reviewer checks the merged findings before anything is reported.",
+    "industries": [
+      {
+        "industry": "Pharmacovigilance",
+        "use": "One worker per drug or source, merged into one safety digest"
+      },
+      {
+        "industry": "Banking compliance",
+        "use": "Parallel checks on sanctions lists, adverse media and registries"
+      },
+      {
+        "industry": "Software engineering",
+        "use": "Parallel code review: style, security and test-coverage workers"
+      }
+    ],
+    "analogy": "A consultant partner and a team of analysts. The partner writes each analyst a clear brief, reads only their one-page memos, and writes the client report.",
+    "library": {
+      "name": "Claude Agent SDK",
+      "what": "Defines sub-agents with their own prompt and tool list; the orchestrator calls them through the Agent tool and receives only each one’s final message.",
+      "install": "pip install claude-agent-sdk"
+    },
+    "note": "The depth and concurrency limits are environment variables; max_budget_usd caps the whole query, sub-agents included.",
+    "samples": [
+      {
+        "file": "pv_screen.py",
+        "language": "python",
+        "code": "import asyncio\nfrom claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition\n\nCLASSES = [\"SGLT2 inhibitors\", \"DPP-4 inhibitors\", \"statins\", \"ARBs\"]\nBRIEF = (\"Screen papers in ./papers/{c} for adverse events. Objective: list every \"\n         \"suspected adverse event linked to a {c} drug. Output: JSON list of \"\n         \"{{drug, event, paper, quote}}. Use only the files given. Do not assess \"\n         \"causality; stop when every file is read.\")\n\nagents = {\n    c.split()[0].lower(): AgentDefinition(\n        description=f\"Adverse-event screener for {c}. Use for papers about {c}.\",\n        prompt=BRIEF.format(c=c),\n        tools=[\"Read\", \"Grep\", \"Glob\"],          # read-only worker\n        model=\"sonnet\",\n    ) for c in CLASSES\n}\n\nasync def main():\n    async for msg in query(\n        prompt=\"Run every screener in parallel, then merge their JSON into one \"\n               \"table and list any class with no papers read.\",\n        options=ClaudeAgentOptions(\n            allowed_tools=[\"Read\", \"Grep\", \"Glob\", \"Agent\"],\n            agents=agents,\n            env={\"CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH\": \"1\"},   # no nesting\n            max_budget_usd=5.0,\n        ),\n    ):\n        if hasattr(msg, \"result\"):\n            print(msg.result)\n\nasyncio.run(main())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An orchestrator uses 2k tokens of its own and sends out 6 workers. Each worker reads 25k tokens and returns a 1.5k summary. How many tokens does the orchestrator’s context hold after collecting summaries (in thousands)?",
+    "answer": "2k of its own + 6 × 1.5k of summaries = 11k tokens. If workers returned full transcripts it would hold 2k + 6 × 25k = 152k, which is why only final messages return.",
+    "expected": {
+      "value": 11,
+      "tolerance": 0.1,
+      "label": "orchestrator context (k) ="
+    },
+    "interview": [
+      {
+        "question": "What must a worker’s brief contain, and why?",
+        "answer": "An objective, an output format, guidance on which tools and sources to use, and clear boundaries. The worker starts with a fresh context and sees only its own prompt and the brief, so anything missing is simply unknown to it."
+      },
+      {
+        "question": "How is a supervisor different from a fixed execution graph?",
+        "answer": "In a graph the steps are fixed in advance by the developer. A supervisor decides at run time how to split the task, how many workers to start and what each should do, then merges what comes back."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t brief a worker with a one-line title.",
+        "fix": "Give it the objective, output format, sources and limits it needs."
+      },
+      {
+        "mistake": "Don’t give every worker every tool.",
+        "fix": "Scope tools per worker: readers get read-only tools."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sv01",
+      "kind": "single",
+      "industry": "Pharma",
+      "question": "Four pharmacovigilance workers keep reading the same papers and returning overlapping findings. What is the most likely cause?",
+      "options": [
+        "The workers use a small model",
+        "Their briefs lack clear boundaries: which drugs and sources each one owns",
+        "They return summaries instead of transcripts",
+        "The orchestrator merges too slowly"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without task boundaries each worker guesses its scope, so they overlap. A complete brief gives each one its own slice."
+    },
+    {
+      "id": "sv02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An orchestrator uses 3k tokens of its own and starts 5 workers. Each returns a 1.2k summary. How many tokens does the orchestrator hold after collecting them?",
+      "options": [
+        "6k",
+        "9k",
+        "15k",
+        "3k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3k + 5 × 1.2k = 3k + 6k = 9k."
+    },
+    {
+      "id": "sv03",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A compliance orchestrator briefs a sanctions-screening worker. What must the brief contain? Select all that apply.",
+      "options": [
+        "The objective and the output format",
+        "The sources to use and where the task ends",
+        "The orchestrator’s full conversation so far",
+        "The other workers’ system prompts"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A worker needs its objective, format, sources and boundaries. Passing the whole parent conversation or other workers’ prompts adds tokens without helping it."
+    },
+    {
+      "id": "sv04",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In the Claude Agent SDK, what does a (non-fork) sub-agent receive from its parent?",
+      "options": [
+        "The parent’s entire conversation history",
+        "Only the Agent tool’s prompt string, plus its own system prompt and tools",
+        "The parent’s system prompt and tool results",
+        "Nothing until it asks for context"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The only content passed from parent to sub-agent is the Agent tool’s prompt, so it must carry whatever the sub-agent needs."
+    },
+    {
+      "id": "sv05",
+      "kind": "single",
+      "industry": "Pharma",
+      "question": "Four workers each read about 30k tokens. The orchestrator uses 2k of its own. If workers return 1k summaries instead of full transcripts, how many tokens stay out of the orchestrator’s context?",
+      "options": [
+        "120k",
+        "116k",
+        "122k",
+        "6k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Transcripts: 2k + 4 × 30k = 122k. Summaries: 2k + 4 × 1k = 6k. Difference: 116k."
+    },
+    {
+      "id": "sv06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A code-review orchestrator starts style, security and test-coverage workers. None of them should change files. Which tool list fits the reviewers?",
+      "options": [
+        "Read, Grep and Glob",
+        "Read, Edit, Write and Bash",
+        "All tools, since they may need one",
+        "No tools at all"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Least privilege: reviewers need to read and search, not edit or run commands."
+    },
+    {
+      "id": "sv07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A shopping assistant’s orchestrator started 50 workers for “Which phone has the best camera under INR 30,000?”. What likely allowed this? Select all that apply.",
+      "options": [
+        "No guidance on how much effort a query deserves",
+        "No cap on concurrency or spend",
+        "A vague objective in the orchestrator’s instructions",
+        "Workers returning short summaries"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Anthropic saw early orchestrators spawn 50 sub-agents for simple queries. Effort guidance, clear objectives and caps prevent it; summaries are not the cause."
+    },
+    {
+      "id": "sv08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "With the Claude Agent SDK defaults, how many sub-agents can run at once before new spawns are refused?",
+      "options": [
+        "3",
+        "5",
+        "20",
+        "50"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The default concurrency limit is 20; it can be lowered with CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS."
+    },
+    {
+      "id": "sv09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A LangGraph team is choosing how to build a supervisor. What does LangChain currently recommend?",
+      "options": [
+        "The langgraph-supervisor library for all new projects",
+        "Building the supervisor directly with tool calling",
+        "A swarm of peer agents instead",
+        "CrewAI inside LangGraph"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "LangChain’s reference notes that it now recommends supervisors built with tool calling rather than the langgraph-supervisor library."
+    },
+    {
+      "id": "sv10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Six workers each read 40k tokens at about 10k tokens a minute, then the orchestrator merges for 1 minute. What is the wall time?",
+      "options": [
+        "24 minutes",
+        "5 minutes",
+        "4 minutes",
+        "25 minutes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each worker takes 40k ÷ 10k = 4 minutes in parallel, plus 1 minute to merge = 5 minutes."
+    },
+    {
+      "id": "sv11",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "How does a supervisor differ from a fixed execution graph? Select all that apply.",
+      "options": [
+        "A supervisor decides how to split the task at run time",
+        "A graph fixes its steps in advance",
+        "A supervisor cannot run workers in parallel",
+        "A graph cannot call language models"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The difference is who decides the steps and when. Both can run work in parallel and both can call models."
+    },
+    {
+      "id": "sv12",
+      "kind": "single",
+      "industry": "Pharma",
+      "question": "Where should the human safety reviewer sit in a pharmacovigilance screen run by an orchestrator and workers?",
+      "options": [
+        "Before each worker starts, approving its brief",
+        "After synthesis, checking the merged findings and listed gaps",
+        "Nowhere: the orchestrator is the check",
+        "Inside every worker, reading each paper"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reviewing the merged findings, including what could not be read, puts human judgement where it adds most at the lowest cost."
+    },
+    {
+      "id": "sv13",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A legal research team has four reading workers and one that files the final memo into the matter folder. How should write access be granted?",
+      "options": [
+        "To all five, for simplicity",
+        "Only to the filing worker, and only for its output location",
+        "To none; the orchestrator writes instead of the filing worker",
+        "To the reading workers only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Least privilege per agent: only the worker that must write gets write access, scoped to where it writes."
+    },
+    {
+      "id": "sv14",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A research query with Claude sub-agents reaches its max_budget_usd. What happens?",
+      "options": [
+        "The SDK silently raises the budget",
+        "New sub-agents are refused and the query ends with a budget error result",
+        "Only the orchestrator stops; workers carry on",
+        "Nothing until the next query"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "At the cap the SDK refuses further sub-agents, stops background ones and ends the query with the error_max_budget_usd subtype."
+    },
+    {
+      "id": "sv15",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A network-operations orchestrator struggles to merge its workers’ results. Which output rules help? Select all that apply.",
+      "options": [
+        "A fixed JSON schema for every worker’s return",
+        "A length limit on each return",
+        "Free-form prose so nothing is lost",
+        "The full transcript attached to every return"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A fixed, compact format makes results comparable and keeps the orchestrator’s context small. Prose and transcripts make merging harder."
+    },
+    {
+      "id": "sv16",
+      "kind": "single",
+      "industry": "Pharma",
+      "question": "Four workers read 240k tokens in total, and 25% of that reading is duplicated because their scopes overlap. How many tokens are wasted?",
+      "options": [
+        "15k",
+        "60k",
+        "45k",
+        "240k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "25% of 240k = 60k tokens spent reading what another worker already read."
+    },
+    {
+      "id": "sv17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team studies Magentic-One’s orchestrator. What does it keep to plan and track progress?",
+      "options": [
+        "A task ledger and a progress ledger",
+        "A vote among its workers",
+        "A single system prompt with no state",
+        "A handoff chain"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Magentic-One’s orchestrator maintains a task ledger (facts, guesses, plan) and a progress ledger, and replans when progress stalls."
+    },
+    {
+      "id": "sv18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Claims arrive with different mixes of documents, so the subtasks are not known until the claim is read. Which Anthropic pattern fits?",
+      "options": [
+        "Prompt chaining with fixed steps",
+        "Orchestrator–workers, where a central model breaks down the task and delegates at run time",
+        "Parallelization with a fixed set of sections",
+        "A single routing step"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic describes orchestrator–workers as a central LLM that dynamically breaks down tasks, delegates them and synthesizes results."
+    },
+    {
+      "id": "sv19",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "You are designing a supervisor for a hospital’s research team. Which choices apply least privilege and bounded growth? Select all that apply.",
+      "options": [
+        "Research workers get read-only tools",
+        "Only the report worker can write, to the report folder",
+        "Sub-agent nesting depth is capped",
+        "Every worker gets shell access in case it needs to install tools"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Read-only readers, one scoped writer and a depth cap keep the team safe and bounded. Blanket shell access is the opposite of least privilege."
+    },
+    {
+      "id": "sv20",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A logistics team sets CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH to 1. What changes?",
+      "options": [
+        "Only one sub-agent can run at a time",
+        "Sub-agents cannot spawn sub-agents of their own",
+        "The orchestrator cannot spawn any sub-agents",
+        "Each sub-agent may use only one tool"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Depth 1 stops sub-agents from spawning further layers; concurrency is a separate limit."
+    }
+  ]
+}

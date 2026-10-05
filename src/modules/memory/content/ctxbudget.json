@@ -1,0 +1,910 @@
+{
+  "id": "ctxbudget",
+  "moduleSlug": "memory",
+  "name": "Context Budgeting",
+  "shortName": "Context budget",
+  "question": "What earns a place in the window?",
+  "summary": "Treat the context window as a scarce attention budget: fill it with the smallest set of high-signal tokens that gets the task done. Decide what enters, in what order and how much, because accuracy falls as input grows, even on simple tasks, and facts buried in the middle of a long prompt are the ones most often missed.",
+  "useCases": [
+    "Agents that stuff whole documents, clause libraries or tool catalogues into every call",
+    "Quality that drops late in long sessions or on long inputs",
+    "Teams tempted to buy a bigger window instead of curating"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Context rot",
+        "detail": "accuracy changes with input length even on simple tasks (Chroma, 18 models)"
+      },
+      {
+        "term": "Lost in the middle",
+        "detail": "facts at the start or end are used best; the middle worst"
+      },
+      {
+        "term": "Advertised vs effective",
+        "detail": "in RULER only about half of models claiming 32k+ held up at 32k"
+      },
+      {
+        "term": "Order",
+        "detail": "long documents first, question last: up to 30% better in Anthropic’s tests"
+      },
+      {
+        "term": "Just in time",
+        "detail": "pass IDs and let tools fetch full text only when needed"
+      },
+      {
+        "term": "Success metric",
+        "detail": "accuracy at your real input lengths, per token spent"
+      }
+    ]
+  },
+  "steps": [
+    "Count tokens per segment: system prompt, documents, history, tool results",
+    "Find your effective budget: the length where your own eval stays accurate",
+    "Rank chunks by relevance and keep the top ones until the budget is spent",
+    "Put documents first and the question last; re-run the eval at 8k, 32k and 128k"
+  ],
+  "pitfalls": [
+    "Trusting the advertised maximum instead of measuring where accuracy falls",
+    "Leaving near-duplicate or outdated chunks in as distractors",
+    "Burying the most relevant chunk in the middle of a long prompt"
+  ],
+  "tools": [
+    "Claude token counting",
+    "tiktoken",
+    "Chroma context-rot",
+    "NVIDIA RULER",
+    "LangSmith"
+  ],
+  "remember": "Fewer, better tokens. Key facts at the edges.",
+  "caption": "Illustrative accuracies for one contract question. The pattern, not the exact numbers, is what the research shows.",
+  "comparison": {
+    "scope": "What enters the window",
+    "cost": 2,
+    "needs": "Token counts and a length eval",
+    "best": "Cutting a chunk that was needed"
+  },
+  "diagram": {
+    "file": "diagrams/ctxbudget.svg"
+  },
+  "lesson": {
+    "file": "curate_context.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "MODEL = \"claude-sonnet-4-5\"                      # use your current model",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def n_tokens(text: str) -> int:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    msg = [{\"role\": \"user\", \"content\": text}]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return client.messages.count_tokens(model=MODEL, messages=msg).input_tokens",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "inventory = {name: n_tokens(t) for name, t in segments.items()}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "BUDGET = 16_000      # where our own eval stays accurate, not 200_000",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def curate(question, chunks):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    ranked = sorted(chunks, key=lambda c: c.score, reverse=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    kept, used = [], n_tokens(question)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    for c in ranked:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if used + c.tokens > BUDGET:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            break",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        kept.append(c); used += c.tokens",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return kept",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def build(question, kept):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    docs = \"\\n\".join(f'<doc id=\"{c.id}\">{c.text}</doc>' for c in kept)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return f\"<documents>\\n{docs}\\n</documents>\\n\\n{question}\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "index = \"\\n\".join(f\"{c.id}: {c.title}\" for c in all_clauses)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "TOOLS = [{\"name\": \"get_clause\", \"description\": \"Fetch one clause by ID\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "          \"input_schema\": {\"type\": \"object\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                           \"properties\": {\"id\": {\"type\": \"string\"}}}}]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for length in (8_000, 32_000, 128_000):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(length, run_eval(EVAL_SET, pad_to=length))",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Inventory the window",
+        "text": "Count tokens per segment before sending. Here the clause library takes 90k of a 123k prompt; the system prompt, history and tools take the rest."
+      },
+      {
+        "title": "Set an effective budget",
+        "text": "The advertised window is 200k, but your own eval stays accurate only up to about 16k on this task. That measured length is the budget."
+      },
+      {
+        "title": "Rank by signal",
+        "text": "Score every chunk against the question and keep the top ones until the budget is spent. Five clauses, about 7.5k tokens, carry the answer."
+      },
+      {
+        "title": "Order deliberately",
+        "text": "Documents go first, most relevant at the top, and the question goes last. Nothing critical sits in the middle of a long block."
+      },
+      {
+        "title": "Load just in time",
+        "text": "Instead of full text for all 60 clauses, pass a short index of IDs and titles, and a get_clause tool the agent calls when it needs one."
+      },
+      {
+        "title": "Re-test at length",
+        "text": "Run the same eval with inputs padded to 8k, 32k and 128k. The drop at 128k is why the budget exists; re-check it when models change."
+      }
+    ],
+    "sceneHeight": 268,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"14\" style=\"--d:0s\">Prompt today · 123k tokens</text><rect class=\"bx acc a\" x=\"6\" y=\"20\" width=\"6.987804878048781\" height=\"18\" rx=\"3\" style=\"--d:0.1s\"/><rect class=\"bx warn a\" x=\"14.487804878048781\" y=\"20\" width=\"253.1341463414634\" height=\"18\" rx=\"3\" style=\"--d:0.2s\"/><rect class=\"bx  a\" x=\"269.1219512195122\" y=\"20\" width=\"60.74390243902439\" height=\"18\" rx=\"3\" style=\"--d:0.30000000000000004s\"/><rect class=\"bx soft a\" x=\"331.3658536585366\" y=\"20\" width=\"21.134146341463413\" height=\"18\" rx=\"3\" style=\"--d:0.4s\"/><text class=\"mono a\" x=\"6\" y=\"52\" style=\"--d:0.5s\">system 3k · clauses 90k · history 22k · tools 8k</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"76\" style=\"--d:0s\">Advertised</text><rect x=\"80\" y=\"67\" width=\"236\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"80\" y=\"67\" width=\"236\" height=\"11\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"322\" y=\"77\" style=\"--d:0.2s\">200k</text><text class=\"tl l a\" x=\"6\" y=\"94\" style=\"--d:0.2s\">Effective</text><rect x=\"80\" y=\"85\" width=\"236\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"80\" y=\"85\" width=\"18.88\" height=\"11\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.3s\"/><text class=\"mono a\" x=\"106\" y=\"95\" style=\"--d:0.4s\">16k · eval stays accurate</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"116\" style=\"--d:0s\">Ranked chunks (score)</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"6\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"21.5\" y=\"137\" text-anchor=\"middle\">.94</text></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><rect class=\"bx acc\" x=\"41\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"56.5\" y=\"137\" text-anchor=\"middle\">.91</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"76\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"91.5\" y=\"137\" text-anchor=\"middle\">.88</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"111\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"126.5\" y=\"137\" text-anchor=\"middle\">.83</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx acc\" x=\"146\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"161.5\" y=\"137\" text-anchor=\"middle\">.80</text></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx soft\" x=\"181\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"196.5\" y=\"137\" text-anchor=\"middle\">.52</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"216\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"231.5\" y=\"137\" text-anchor=\"middle\">.47</text></g><g class=\"a\" style=\"--d:0.45000000000000007s\"><rect class=\"bx soft\" x=\"251\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"266.5\" y=\"137\" text-anchor=\"middle\">.41</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"286\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"301.5\" y=\"137\" text-anchor=\"middle\">.35</text></g><g class=\"a\" style=\"--d:0.55s\"><rect class=\"bx soft\" x=\"321\" y=\"122\" width=\"31\" height=\"22\" rx=\"4\"/><text class=\"mono\" x=\"336.5\" y=\"137\" text-anchor=\"middle\">.30</text></g><g class=\"a\" style=\"--d:0.7s\"><text class=\"tag-t\" x=\"92\" y=\"158\" style=\"fill:var(--accent)\">keep top 5 · 7.5k</text><text class=\"tag-t\" x=\"268\" y=\"158\" style=\"fill:var(--ink-2)\">drop the rest</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"6\" y=\"170\" width=\"48\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"30\" y=\"185\" text-anchor=\"middle\">doc 1</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx \" x=\"58\" y=\"170\" width=\"48\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"82\" y=\"185\" text-anchor=\"middle\">doc 2</text></g><g class=\"a\" style=\"--d:0.22s\"><rect class=\"bx \" x=\"110\" y=\"170\" width=\"48\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"134\" y=\"185\" text-anchor=\"middle\">doc 3</text></g><g class=\"a\" style=\"--d:0.28s\"><rect class=\"bx \" x=\"162\" y=\"170\" width=\"48\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"186\" y=\"185\" text-anchor=\"middle\">doc 4</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx \" x=\"214\" y=\"170\" width=\"48\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"238\" y=\"185\" text-anchor=\"middle\">doc 5</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx pass\" x=\"270\" y=\"170\" width=\"84\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"312\" y=\"185\" text-anchor=\"middle\">question</text></g><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"6\" y=\"205\" style=\"fill:var(--accent);text-anchor:start\">most relevant first</text><text class=\"tag-t pass\" x=\"312\" y=\"205\">query last</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"214\" width=\"348\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"229\" text-anchor=\"middle\">index: 60 IDs · get_clause(\"31\") only when needed</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"mono a\" x=\"6\" y=\"258\" style=\"--d:0s\">8k</text><rect x=\"36\" y=\"249\" width=\"50\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"36\" y=\"249\" width=\"45\" height=\"11\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"90\" y=\"258\" style=\"--d:0.2s\">90%</text><text class=\"mono a\" x=\"124\" y=\"258\" style=\"--d:0.1s\">32k</text><rect x=\"154\" y=\"249\" width=\"50\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"154\" y=\"249\" width=\"42\" height=\"11\" rx=\"3\" class=\"bar grow \" style=\"--d:0.2s\"/><text class=\"mono a\" x=\"208\" y=\"258\" style=\"--d:0.30000000000000004s\">84%</text><text class=\"mono a\" x=\"242\" y=\"258\" style=\"--d:0.2s\">128k</text><rect x=\"272\" y=\"249\" width=\"50\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"272\" y=\"249\" width=\"30.5\" height=\"11\" rx=\"3\" class=\"bar grow fail\" style=\"--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"326\" y=\"258\" style=\"--d:0.4s\">61%</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Raises accuracy on long inputs, often more than a bigger model would",
+      "Cuts cost and latency along with tokens",
+      "Needs no new infrastructure: counting, ranking and ordering",
+      "Makes failures easier to debug: you know what the model saw"
+    ],
+    "cons": [
+      "Needs a length eval to find the effective budget",
+      "A chunk cut in error can remove the one fact that mattered",
+      "Relevance scores depend on your retriever or re-ranker",
+      "Budgets must be re-measured when models change"
+    ],
+    "avoidWhen": [
+      "Inputs are already short and fixed (little to curate)",
+      "The task genuinely needs the whole document at once, such as a full-text diff"
+    ],
+    "tools": [
+      {
+        "name": "Claude token counting",
+        "type": "Anthropic API (free endpoint)",
+        "what": "Count input tokens for a request before sending it",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting"
+      },
+      {
+        "name": "tiktoken",
+        "type": "Open source (OpenAI)",
+        "what": "Fast local tokenizer for OpenAI models",
+        "url": "https://github.com/openai/tiktoken"
+      },
+      {
+        "name": "Chroma context-rot",
+        "type": "Open source (research)",
+        "what": "Code to test how accuracy changes with input length",
+        "url": "https://github.com/chroma-core/context-rot"
+      },
+      {
+        "name": "NVIDIA RULER",
+        "type": "Open source (research)",
+        "what": "Synthetic long-context benchmark to find effective length",
+        "url": "https://github.com/NVIDIA/RULER"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial (LangChain)",
+        "what": "Run the same eval set at several input lengths and compare",
+        "url": "https://docs.smith.langchain.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A contract-review agent answers “Can the buyer terminate for delay?” from a supply agreement split into 40 clauses of 3k tokens, ranked by relevance. The answer needs the clauses ranked 1, 2 and 4. You decide how much goes into the prompt, whether outdated near-duplicate clauses sneak in, where the key clause sits and whether the question comes last. Accuracy follows a fixed, illustrative curve shaped like the published findings.",
+    "controls": [
+      "Drag the context size to set how many ranked chunks fit, from 4k to 200k tokens.",
+      "Add near-duplicate distractors: outdated clause versions that take space and confuse the model.",
+      "Move the key fact to the start, middle or end, and toggle documents-first, question-last."
+    ],
+    "outputs": [
+      {
+        "name": "Tokens sent",
+        "meaning": "System prompt and question (2k) plus every chunk that fits, 3k each."
+      },
+      {
+        "name": "Required facts included",
+        "meaning": "How many of the three clauses the answer needs made it into the prompt."
+      },
+      {
+        "name": "Accuracy (simulated)",
+        "meaning": "97% peak, scaled by facts included and a length decay, minus penalties for distractors, a middle position and question-first order."
+      },
+      {
+        "name": "Cost per call",
+        "meaning": "Tokens sent at an illustrative $3 per million input tokens."
+      },
+      {
+        "name": "Versus start",
+        "meaning": "Token change against the starting 128k prompt."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Starting prompt",
+        "expect": "128k tokens: 38 relevant chunks and 4 distractors, key clause in the middle, question first. All 3 facts, but accuracy is only 48% at $0.384 a call."
+      },
+      {
+        "k": "huge",
+        "name": "Use the whole window",
+        "expect": "200k allowed, 140k sent with 6 distractors: accuracy falls to 42%. More room did not help."
+      },
+      {
+        "k": "curated",
+        "name": "Curated to 16k",
+        "expect": "14k tokens, 4 chunks, no distractors: accuracy 84%, 89% fewer tokens, even with the key clause in the middle."
+      },
+      {
+        "k": "mid32",
+        "name": "32k, key fact buried",
+        "expect": "32k tokens with the question last, but the key clause in the middle: 73%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "acc85",
+        "text": "Reach at least 85% accuracy with all 3 required facts included.",
+        "hint": "Try 16k with no distractors, the key fact at the start and the question last."
+      },
+      {
+        "k": "cut70",
+        "text": "Cut tokens by at least 70% from the start without losing accuracy.",
+        "hint": "70% fewer than 128k means 38k or less; 16k or 32k with no distractors both work."
+      },
+      {
+        "k": "edge",
+        "text": "Gain at least 10 points just by moving the key fact out of the middle.",
+        "hint": "The middle penalty grows with length and is largest from about 32k. Compare middle with start at 32k."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude token counting",
+        "type": "Anthropic API · free endpoint",
+        "start": 3,
+        "prod": 3,
+        "best": "Counting input tokens for a request, including system prompt and tools, before you send it.",
+        "ex": "Count each segment of a contract prompt and refuse to send more than your measured budget.",
+        "pros": [
+          "Exact counts for Claude models, free to call",
+          "Counts tools, images and documents too"
+        ],
+        "cons": [
+          "Separate rate limits from message calls",
+          "Claude models only"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/token-counting"
+      },
+      {
+        "n": "tiktoken",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Fast, local token counts for OpenAI models without a network call.",
+        "ex": "Budget chunks offline in a preprocessing job before indexing a clause library.",
+        "pros": [
+          "Very fast and local",
+          "Simple API"
+        ],
+        "cons": [
+          "Counts differ for other providers’ tokenizers",
+          "Does not include per-message overhead automatically"
+        ],
+        "url": "https://github.com/openai/tiktoken"
+      },
+      {
+        "n": "Chroma context-rot",
+        "type": "Open source · research code",
+        "start": 2,
+        "prod": 1,
+        "best": "Reproducing the context-rot experiments on your own models and inputs.",
+        "ex": "Measure how accuracy on your clause questions changes from 8k to 128k with a single distractor added.",
+        "pros": [
+          "Shows the length effect on simple tasks",
+          "Easy to adapt to your data"
+        ],
+        "cons": [
+          "Research code, not a product",
+          "You supply the eval design"
+        ],
+        "url": "https://github.com/chroma-core/context-rot"
+      },
+      {
+        "n": "NVIDIA RULER",
+        "type": "Open source · benchmark",
+        "start": 1,
+        "prod": 2,
+        "best": "Finding a model’s effective context length with synthetic long-context tasks.",
+        "ex": "Check where a candidate model stops performing well before setting a long-document budget.",
+        "pros": [
+          "Many task types beyond needle-in-a-haystack",
+          "Widely cited results"
+        ],
+        "cons": [
+          "Synthetic tasks, not your domain",
+          "Heavy to run on many lengths"
+        ],
+        "url": "https://github.com/NVIDIA/RULER"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial · by LangChain · free tier",
+        "start": 2,
+        "prod": 3,
+        "best": "Running one eval dataset at several input lengths and comparing experiments.",
+        "ex": "Run the 50 contract questions at 8k, 32k and 128k and chart accuracy per length.",
+        "pros": [
+          "Experiments and traces in one place",
+          "Works with any stack"
+        ],
+        "cons": [
+          "Paid at higher volumes",
+          "Length padding is yours to build"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Count tokens before sending",
+        "tool": "Claude token counting or tiktoken"
+      },
+      {
+        "need": "Find your effective length",
+        "tool": "Chroma context-rot or RULER on your data"
+      },
+      {
+        "need": "Track accuracy per length over time",
+        "tool": "LangSmith"
+      }
+    ],
+    "goals": [
+      "Explain context rot and lost in the middle, and why a bigger window does not fix them",
+      "Set a budget from your own length eval and fill it with the highest-signal chunks",
+      "Order a prompt: documents first, most relevant at the top, question last"
+    ]
+  },
+  "practice": {
+    "scenario": "A contract-review agent at a Mumbai law firm loaded all 60 clauses of a supply agreement for every question, about 90,000 tokens. Answers to “Can the buyer terminate for delay?” kept missing an exception buried in clause 31. The team now counts tokens per segment, ranks clauses against the question, keeps the top 5 (about 7,000 tokens), puts them first and the question last, and re-runs its 50-question eval at each input length.",
+    "industries": [
+      {
+        "industry": "Legal services",
+        "use": "Send the few clauses that bear on the question, not the whole agreement"
+      },
+      {
+        "industry": "Stockbroking support",
+        "use": "Load the two relevant circulars and the client’s last orders, not the full rulebook"
+      },
+      {
+        "industry": "Insurance claims",
+        "use": "Put the policy wording and the claim form first, the adjuster’s question last"
+      }
+    ],
+    "analogy": "A barrister’s brief to the judge. The judge could read the whole case file, but the brief puts the three decisive documents on top and the question at the end.",
+    "library": {
+      "name": "Anthropic SDK (token counting)",
+      "what": "messages.count_tokens returns the input token count for a request before you send it, so you can budget each segment.",
+      "install": "pip install anthropic"
+    },
+    "note": "score each clause with your retriever or re-ranker; count_tokens is a free endpoint with its own rate limits, so cache counts for fixed clauses.",
+    "samples": [
+      {
+        "file": "budget.py",
+        "language": "python",
+        "code": "import anthropic\nclient = anthropic.Anthropic()\nMODEL = \"claude-sonnet-4-5\"          # use your current model\nBUDGET = 8_000                       # effective budget found by your own length eval\n\ndef tokens(text: str) -> int:\n    r = client.messages.count_tokens(model=MODEL,\n        messages=[{\"role\": \"user\", \"content\": text}])\n    return r.input_tokens\n\ndef build_prompt(question: str, clauses: list[tuple[float, str]]) -> str:\n    kept, used = [], tokens(question)\n    for score, text in sorted(clauses, reverse=True):     # highest relevance first\n        t = tokens(text)\n        if used + t > BUDGET:\n            break\n        kept.append(text); used += t\n    docs = \"\\n\".join(f\"<clause>{c}</clause>\" for c in kept)\n    return f\"{docs}\\n\\nQuestion: {question}\"               # documents first, query last\n"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent sends 60 clauses of 1,500 tokens each plus a 500-token question on every call. You keep the top 5 clauses instead. By what percentage do input tokens fall?",
+    "answer": "Before: 60 × 1,500 + 500 = 90,500 tokens. After: 5 × 1,500 + 500 = 8,000. The drop is 82,500 / 90,500 ≈ 91.2%.",
+    "expected": {
+      "value": 91.2,
+      "tolerance": 0.3,
+      "label": "% fewer tokens ="
+    },
+    "interview": [
+      {
+        "question": "Why not just use the model with the biggest context window?",
+        "answer": "Advertised length is not effective length: accuracy falls as input grows even on simple tasks, distractors hurt more at long lengths, and facts in the middle are used worst. A bigger window also costs more per call. Curate first, then measure accuracy at your real lengths."
+      },
+      {
+        "question": "How do you choose what goes into the window?",
+        "answer": "Inventory tokens per segment, rank candidate chunks by relevance, keep the top ones until an effective budget found by your own eval, place documents first and the question last, and load everything else just in time through tools."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Sizing the prompt to the advertised maximum",
+        "fix": "Measure where your own eval accuracy drops and budget below it"
+      },
+      {
+        "mistake": "Placing the key chunk in the middle of a long prompt",
+        "fix": "Put the most relevant material at the start and the question at the end"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cb01",
+      "kind": "single",
+      "industry": "Legal services",
+      "question": "A contract-review agent sends all 60 clauses (90k tokens) with every question and keeps missing an exception in clause 31. What is the first change?",
+      "options": [
+        "Switch to a model with a 1M-token window",
+        "Rank clauses against the question and send only the top few",
+        "Repeat the question at the start of the prompt",
+        "Raise the temperature so the model explores more"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Curating to the few relevant clauses removes distractors and shortens the input, which is what restores accuracy."
+    },
+    {
+      "id": "cb02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent receives 40 policy chunks of 2,500 tokens and a 500-token question. You keep the top 6 chunks. How many input tokens remain?",
+      "options": [
+        "15,000",
+        "15,500",
+        "100,500",
+        "16,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6 × 2,500 + 500 = 15,500 tokens."
+    },
+    {
+      "id": "cb03",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which findings support curating context rather than filling a large window? Select all that apply.",
+      "options": [
+        "Accuracy changes with input length even on simple tasks",
+        "Facts in the middle of long inputs are used worst",
+        "Every model performs equally well up to its advertised maximum",
+        "Longer prompts always cost less per useful answer"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Context-rot and lost-in-the-middle results both favour curating. Advertised length is often not effective length, and longer prompts cost more."
+    },
+    {
+      "id": "cb04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A loan-policy assistant scores 92% on questions at 8k tokens and 71% when the same questions are padded to 128k. What should the context budget be based on?",
+      "options": [
+        "The advertised 200k window",
+        "The length where your own eval stays accurate",
+        "The average document length",
+        "Whatever fits after the system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The budget is the measured effective length for your task, not the model’s advertised maximum."
+    },
+    {
+      "id": "cb05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinical-guideline assistant places the key dosage table in the middle of a 60k-token prompt. Accuracy is poor. What is the cheapest fix?",
+      "options": [
+        "Move the most relevant material to the start and put the question last",
+        "Add a second copy of the whole guideline",
+        "Switch to a larger model",
+        "Lower max_tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Models use information at the start and end best; the middle is the weakest position."
+    },
+    {
+      "id": "cb06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Your prompt costs $3 per million input tokens. Cutting a 120,000-token prompt to 12,000 tokens saves how much per 1,000 calls?",
+      "options": [
+        "$32.40",
+        "$324.00",
+        "$36.00",
+        "$3.24"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Saving per call: 108,000 × $3/M = $0.324. Over 1,000 calls: $324."
+    },
+    {
+      "id": "cb07",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A plan-comparison agent loads 80 tariff sheets per question. Which changes follow context-budgeting practice? Select all that apply.",
+      "options": [
+        "Pass a short index of tariff IDs and a tool to fetch one sheet",
+        "Put the customer’s question after the retrieved sheets",
+        "Add outdated tariff versions so the model sees the history",
+        "Pad the prompt to the model’s maximum for consistency"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Just-in-time loading and query-last ordering both follow the practice. Outdated versions are distractors; padding adds rot."
+    },
+    {
+      "id": "cb08",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "RULER tested 17 models that all claimed at least 32k context. About how many performed satisfactorily at 32k?",
+      "options": [
+        "All 17",
+        "About half",
+        "Only one",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "RULER found only about half held up at 32k, showing that claimed length is not effective length."
+    },
+    {
+      "id": "cb09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A support agent’s prompt has a 3k system prompt, 40k of help articles, 22k of history and 15k of tool results. What share of the 80k prompt is help articles?",
+      "options": [
+        "40%",
+        "50%",
+        "45%",
+        "55%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40k ÷ 80k = 50%."
+    },
+    {
+      "id": "cb10",
+      "kind": "single",
+      "industry": "Legal services",
+      "question": "Two near-duplicate versions of a termination clause (2019 and 2024) are both in the prompt. What is the risk?",
+      "options": [
+        "None: more context is always safer",
+        "The outdated clause acts as a distractor and can be quoted as current",
+        "The model will refuse to answer",
+        "The prompt cache will be disabled"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Near-duplicate distractors hurt more as inputs grow; the model may cite the outdated version."
+    },
+    {
+      "id": "cb11",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which belong in a context-budgeting pipeline for a dispute-resolution agent? Select all that apply.",
+      "options": [
+        "Token counts per segment before sending",
+        "A relevance score for each candidate chunk",
+        "An eval run at several input lengths",
+        "Random shuffling of chunk order on each call"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Counting, ranking and testing at length are the core steps. Random order puts key facts in the middle at random."
+    },
+    {
+      "id": "cb12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Anthropic’s long-context guidance says to put long documents before the query. In its tests, up to how much did this improve response quality?",
+      "options": [
+        "3%",
+        "30%",
+        "300%",
+        "It made no difference"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The guidance reports up to 30% better quality with the query at the end."
+    },
+    {
+      "id": "cb13",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A tutor agent has an effective budget of 16k. The question takes 500 tokens and each notes chunk is 1,500 tokens. How many chunks fit?",
+      "options": [
+        "10",
+        "11",
+        "9",
+        "16"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(16,000 − 500) ÷ 1,500 = 10.33, so 10 whole chunks fit."
+    },
+    {
+      "id": "cb14",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A route-planning agent performs well at 20k but badly at 150k, even though all needed facts are present at 150k. What explains this?",
+      "options": [
+        "The model cannot read more than 20k tokens",
+        "Context rot: accuracy falls as input length grows",
+        "The prompt cache expired",
+        "Tool calls failed at 150k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "All facts can be present and accuracy can still fall as the input grows."
+    },
+    {
+      "id": "cb15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A compliance assistant must answer from 3 circulars among 200. Which prompt designs are sound? Select all that apply.",
+      "options": [
+        "Top 3 circulars first, question last",
+        "An index of all 200 circular titles, with a fetch tool",
+        "All 200 circulars, with the 3 relevant ones in the middle",
+        "All 200 circulars repeated twice for emphasis"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Curated top chunks and just-in-time loading both work. Burying or repeating everything adds rot and cost."
+    },
+    {
+      "id": "cb16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Your prompt builder puts the highest-scoring chunk in the centre “for balance”. What is wrong?",
+      "options": [
+        "Nothing: balance helps attention",
+        "It places the best chunk where models use information worst",
+        "It makes the prompt longer",
+        "It breaks token counting"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The centre of a long prompt is the lost-in-the-middle zone; the best chunk belongs at the start."
+    },
+    {
+      "id": "cb17",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Which tool counts input tokens for a Claude request before you send it?",
+      "options": [
+        "The messages.count_tokens endpoint",
+        "tiktoken",
+        "The Batch API",
+        "RULER"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Claude’s token-counting endpoint returns input_tokens for a request; tiktoken is for OpenAI tokenizers."
+    },
+    {
+      "id": "cb18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Accuracy is 88% at 8k, 84% at 32k and 62% at 128k. Your prompts average 90k. What do you do?",
+      "options": [
+        "Nothing: 90k is below the 200k window",
+        "Curate prompts down to about 32k or less",
+        "Increase to 128k to be safe",
+        "Add more examples to the prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The eval shows accuracy holding to about 32k and falling sharply after, so curate below that."
+    },
+    {
+      "id": "cb19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A context budget of 12k must hold a 1,000-token system prompt, a 400-token question and chunks of 2,200 tokens. Which statements are correct? Select all that apply.",
+      "options": [
+        "4 chunks fit",
+        "5 chunks fit",
+        "The 4 chunks plus overhead total 10,200 tokens",
+        "The 5 chunks plus overhead total 12,400 tokens, over budget"
+      ],
+      "correct": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Room for chunks: 12,000 − 1,400 = 10,600, so 4 fit (8,800 + 1,400 = 10,200). Five would need 12,400."
+    },
+    {
+      "id": "cb20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team wants to skip curation because “the model has a huge window”. What single piece of evidence settles it?",
+      "options": [
+        "The model’s marketing page",
+        "Your own eval run at your real input lengths",
+        "A public scoreboard ranking",
+        "The average prompt length last month"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only your own eval at your lengths shows whether accuracy holds."
+    }
+  ]
+}

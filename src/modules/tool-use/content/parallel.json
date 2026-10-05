@@ -1,0 +1,880 @@
+{
+  "id": "parallel",
+  "moduleSlug": "tool-use",
+  "name": "Parallel and Sequential Tool Calls",
+  "shortName": "Parallel calls",
+  "question": "Which calls can go out together?",
+  "summary": "A model can emit several independent calls in one turn. Your code can run them concurrently, so the wait becomes the slowest call instead of the sum. A call that needs another call’s output must wait for it. All results go back together, and a failure in the batch must not drop its siblings.",
+  "useCases": [
+    "Several independent lookups per request: KYC checks, fare searches",
+    "Fan-out reads across services before one decision",
+    "Latency-sensitive assistants where every second counts"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Speed-up",
+        "detail": "wall-clock falls from the sum to the critical path"
+      },
+      {
+        "term": "Returning results",
+        "detail": "all tool_result blocks in one user message, before any text"
+      },
+      {
+        "term": "Failures",
+        "detail": "each failed or skipped call still gets a result with is_error"
+      },
+      {
+        "term": "Turning it off",
+        "detail": "disable_parallel_tool_use inside tool_choice"
+      },
+      {
+        "term": "Dependencies",
+        "detail": "a call that needs another’s output runs after it"
+      },
+      {
+        "term": "Benchmarks",
+        "detail": "BFCL scores simple, multiple, parallel and parallel-multiple calls"
+      }
+    ]
+  },
+  "steps": [
+    "Collect every tool_use block in the response",
+    "Classify each call: independent read, dependent, or side-effecting",
+    "Run independent calls together with per-call timeouts; run dependent calls in order",
+    "Return one message with all results, errors marked, then measure the critical path"
+  ],
+  "pitfalls": [
+    "Running a dependent call in the same batch as its input: it reads an id that does not exist yet",
+    "Letting one exception cancel the batch so no results go back",
+    "Splitting results across messages, which discourages parallel calls later"
+  ],
+  "tools": [
+    "Anthropic parallel tool use",
+    "OpenAI parallel_tool_calls",
+    "Python asyncio",
+    "LangGraph"
+  ],
+  "remember": "Sum becomes max, but only for calls that do not depend on each other.",
+  "caption": "Illustrative KYC latencies. The four lookups run together; open_account waits for all four.",
+  "comparison": {
+    "scope": "Calls within one turn",
+    "cost": 2,
+    "needs": "Medium: async execution",
+    "best": "Hidden dependencies"
+  },
+  "diagram": {
+    "file": "diagrams/parallel.svg"
+  },
+  "lesson": {
+    "file": "kyc_turn.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import asyncio, json, time",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "READS = {\"pan_verify\", \"ckyc_search\", \"aadhaar_otp_status\", \"bureau_pull\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def run_one(block, timeout=3.0):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        out = await asyncio.wait_for(TOOLS[block.name](**block.input), timeout)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return {\"type\": \"tool_result\", \"tool_use_id\": block.id,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                \"content\": json.dumps(out)}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    except Exception as e:                        # never drop a result",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return {\"type\": \"tool_result\", \"tool_use_id\": block.id,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                \"content\": f\"Error: {e!r}\", \"is_error\": True}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def run_turn(resp):",
+        "steps": []
+      },
+      {
+        "text": "    calls = [b for b in resp.content if b.type == \"tool_use\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    reads = [c for c in calls if c.name in READS]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    rest = [c for c in calls if c.name not in READS]  # writes, dependents",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "    t0 = time.perf_counter()",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    results = list(await asyncio.gather(*(run_one(c) for c in reads)))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    failed = any(r.get(\"is_error\") for r in results)",
+        "steps": []
+      },
+      {
+        "text": "    for c in rest:                                # in order, after the join",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if failed:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            results.append({\"type\": \"tool_result\", \"tool_use_id\": c.id,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                            \"content\": \"Not executed: a lookup failed.\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                            \"is_error\": True})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        else:",
+        "steps": []
+      },
+      {
+        "text": "            results.append(await run_one(c))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    log.info(\"wall %.2fs\", time.perf_counter() - t0)  # max(reads) + rest",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {\"role\": \"user\", \"content\": results}   # all results, one message",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Collect every call",
+        "text": "One response can contain several tool_use blocks. Here the model asks for four KYC lookups at once: PAN, CKYC, Aadhaar OTP status and the credit bureau."
+      },
+      {
+        "title": "Classify each call",
+        "text": "The four lookups only read and do not need each other’s output, so they can run together. Writes and calls that need another call’s result go to a second group."
+      },
+      {
+        "title": "Run the reads together",
+        "text": "asyncio.gather starts all four at once, each with its own timeout. The wait becomes the slowest lookup, 1,200 ms, not the 3,400 ms sum."
+      },
+      {
+        "title": "Run dependent calls after the join",
+        "text": "open_account needs all four results, so it runs only after the join: 1,200 + 400 = 1,600 ms. In practice it often arrives in the model’s next turn."
+      },
+      {
+        "title": "Return every result in one message",
+        "text": "A failed call returns is_error true, and a call skipped because of it says so. All results go back in one user message, one per tool_use_id."
+      },
+      {
+        "title": "Measure the critical path",
+        "text": "Wall-clock time is the longest chain of dependent calls: bureau (1,200 ms), then open_account (400 ms). Adding more independent lookups barely changes it."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"83\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"49.5\" y=\"22\" text-anchor=\"middle\">PAN</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"95\" y=\"8\" width=\"83\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"136.5\" y=\"22\" text-anchor=\"middle\">CKYC</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"182\" y=\"8\" width=\"83\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"223.5\" y=\"22\" text-anchor=\"middle\">Aadhaar OTP</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"269\" y=\"8\" width=\"83\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"310.5\" y=\"22\" text-anchor=\"middle\">Bureau</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"36\" width=\"256\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"136\" y=\"50\" text-anchor=\"middle\">independent reads: run together</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"270\" y=\"36\" width=\"82\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"311\" y=\"50\" text-anchor=\"middle\">dependent</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"64\" y=\"82\" style=\"text-anchor:end;--d:0s\">PAN</text><rect x=\"70\" y=\"72\" width=\"90\" height=\"13\" rx=\"3\" class=\"bar grow \" style=\"--d:0s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.2s\" x=\"164\" y=\"82\" style=\"--d:0.2s\">600 ms</text><text class=\"tl a\" x=\"64\" y=\"102\" style=\"text-anchor:end;--d:0s\">CKYC</text><rect x=\"70\" y=\"92\" width=\"105\" height=\"13\" rx=\"3\" class=\"bar grow \" style=\"--d:0.05s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.2s\" x=\"179\" y=\"102\" style=\"--d:0.2s\">700 ms</text><text class=\"tl a\" x=\"64\" y=\"122\" style=\"text-anchor:end;--d:0s\">Aadhaar</text><rect x=\"70\" y=\"112\" width=\"135\" height=\"13\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.2s\" x=\"209\" y=\"122\" style=\"--d:0.2s\">900 ms</text><text class=\"tl a\" x=\"64\" y=\"142\" style=\"text-anchor:end;--d:0s\">bureau</text><rect x=\"70\" y=\"132\" width=\"180\" height=\"13\" rx=\"3\" class=\"bar grow \" style=\"--d:0.15000000000000002s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.2s\" x=\"254\" y=\"142\" style=\"--d:0.2s\">1,200 ms</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"64\" y=\"162\" style=\"text-anchor:end;--d:0s\">open</text><rect x=\"250\" y=\"152\" width=\"60\" height=\"13\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><g class=\"a\" style=\"--d:0s\"><line x1=\"250\" x2=\"250\" y1=\"138\" y2=\"170\" class=\"ln dash\" style=\"stroke:var(--warn)\"/></g><text class=\"mono a\" style=\"text-anchor:end;--d:0.2s\" x=\"244\" y=\"182\" style=\"--d:0.2s\">waits for the join at 1,200 ms</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"192\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"207\" text-anchor=\"middle\">5 tool_result blocks · one user message</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"222\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"237\" text-anchor=\"middle\">wall = 1,200 + 400 = 1,600 ms (sum 3,800 ms)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Wall-clock time falls from the sum of calls to the critical path",
+      "No extra model turns: several calls come back in one message",
+      "Simple to add with asyncio or a thread pool",
+      "Scales well for fan-out reads across services"
+    ],
+    "cons": [
+      "Hidden dependencies cause races and wrong results",
+      "More concurrent requests can hit rate limits",
+      "Failure handling is harder: one call can fail while others succeed",
+      "Side-effecting calls need a defined order"
+    ],
+    "avoidWhen": [
+      "Every call needs the previous one’s output",
+      "Writes whose order matters, such as debit then credit"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic parallel tool use",
+        "type": "API feature",
+        "what": "Several tool_use blocks per response; disable_parallel_tool_use to turn it off",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use"
+      },
+      {
+        "name": "OpenAI parallel_tool_calls",
+        "type": "API feature",
+        "what": "Multiple function calls per response, on by default",
+        "url": "https://developers.openai.com/api/docs/guides/function-calling"
+      },
+      {
+        "name": "Python asyncio",
+        "type": "Standard library",
+        "what": "gather and wait_for for concurrent calls with timeouts",
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Planning fan-out and join across a whole workflow",
+        "url": "https://docs.langchain.com/oss/python/langgraph/overview"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A stockbroker’s onboarding agent opens a demat account. In one turn it asks for five calls: PAN verification (600 ms), CKYC search (700 ms), Aadhaar OTP status (900 ms), a credit bureau pull (1,200 ms) and open_account (400 ms), which needs all four checks. Each card lets you change a call’s latency and what it depends on.",
+    "controls": [
+      "Set each call’s latency and, from the second call on, which earlier call it depends on.",
+      "Run independent calls in sequence or in parallel.",
+      "Make bureau_pull time out, and choose whether errors are caught per call."
+    ],
+    "outputs": [
+      {
+        "name": "Timeline",
+        "meaning": "When each call starts and ends; skipped calls show no bar."
+      },
+      {
+        "name": "Wall-clock time",
+        "meaning": "When the last call finishes, against the sum of all latencies."
+      },
+      {
+        "name": "Critical path",
+        "meaning": "Number of calls in the longest dependent chain."
+      },
+      {
+        "name": "Results returned",
+        "meaning": "tool_result blocks sent back; every tool_use id needs one."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Time saved, or why the request fails."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One after another",
+        "expect": "Every call waits for the previous one: 3,800 ms wall-clock, a critical path of all 5 calls."
+      },
+      {
+        "k": "par",
+        "name": "Fan out, then open",
+        "expect": "The four lookups run together; open_account waits for the bureau: 1,600 ms, 2.38× faster, critical path 2 calls."
+      },
+      {
+        "k": "fail",
+        "name": "A timeout, uncaught",
+        "expect": "bureau_pull times out and the exception aborts the batch: 0 of 5 results are returned and the request fails."
+      },
+      {
+        "k": "chain",
+        "name": "A hidden chain",
+        "expect": "CKYC waits for PAN and Aadhaar waits for CKYC: 2,600 ms, with a critical path of 4 calls."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fast",
+        "text": "Bring wall-clock time under 1,000 ms with all 5 results returned.",
+        "hint": "Parallel first. Then shorten the slowest input of open_account, or ask whether open_account really needs every lookup."
+      },
+      {
+        "k": "allfive",
+        "text": "With bureau_pull timing out, still return all 5 results.",
+        "hint": "Catch errors per call: the timeout returns is_error, and open_account returns “Not executed”."
+      },
+      {
+        "k": "crit3",
+        "text": "In parallel, make the critical path exactly 3 calls long.",
+        "hint": "Make one lookup depend on another so that chain finishes after the bureau call."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic parallel tool use",
+        "type": "API feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Several tool_use blocks in one response; all results go back in one user message.",
+        "ex": "The model asks for four KYC lookups at once; the app returns four tool_result blocks together.",
+        "pros": [
+          "On by default",
+          "A setting inside tool_choice turns it off when order matters"
+        ],
+        "cons": [
+          "Your executor must run the calls concurrently",
+          "Splitting results across messages discourages later parallel calls"
+        ],
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use"
+      },
+      {
+        "n": "OpenAI parallel function calls",
+        "type": "API feature · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Multiple function calls in one response, controlled by a parallel_tool_calls flag.",
+        "ex": "Turn parallel calls off for a step that must book one seat at a time.",
+        "pros": [
+          "Simple on/off control",
+          "Works with the standard function-calling loop"
+        ],
+        "cons": [
+          "Execution is still your job",
+          "Interacts with strict mode on some models"
+        ],
+        "url": "https://developers.openai.com/api/docs/guides/function-calling"
+      },
+      {
+        "n": "Python asyncio",
+        "type": "Standard library",
+        "start": 3,
+        "prod": 3,
+        "best": "Running I/O-bound tool calls concurrently with gather and per-call timeouts with wait_for.",
+        "ex": "asyncio.gather over four lookups, each wrapped in wait_for(…, 3.0).",
+        "pros": [
+          "No extra dependency",
+          "Fine-grained control of errors"
+        ],
+        "cons": [
+          "Blocking client libraries need threads",
+          "Easy to let one exception cancel the rest"
+        ],
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Declaring fan-out and join across a whole workflow, with checkpoints.",
+        "ex": "A KYC graph fans out four check nodes and joins them in an open-account node.",
+        "pros": [
+          "Dependencies are explicit and visible",
+          "Checkpointing and retries built in"
+        ],
+        "cons": [
+          "More machinery than one turn needs",
+          "Framework to learn"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/overview"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Parallel calls from the model",
+        "tool": "Anthropic or OpenAI parallel tool calls"
+      },
+      {
+        "need": "Run them concurrently in Python",
+        "tool": "asyncio.gather with timeouts"
+      },
+      {
+        "need": "A whole multi-step workflow",
+        "tool": "LangGraph"
+      }
+    ],
+    "goals": [
+      "Identify which calls in a turn are independent",
+      "Calculate wall-clock time from latencies and dependencies",
+      "Return complete, correctly marked results when one call fails"
+    ]
+  },
+  "practice": {
+    "scenario": "A travel agent is asked for the cheapest Delhi–Bengaluru trip next Friday. In one turn the model asks for three airline fare searches and a hotel availability check; the app runs all four at once, so the wait is the slowest search rather than the sum. Booking the chosen flight and hotel happens afterwards, in sequence, because each booking needs a fare id from the searches.",
+    "industries": [
+      {
+        "industry": "Banking KYC",
+        "use": "PAN, CKYC, Aadhaar-OTP status and bureau checks run together before account opening"
+      },
+      {
+        "industry": "Travel",
+        "use": "Fare and hotel searches fan out; bookings run one at a time"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Stock, price and delivery-estimate lookups for a basket in one turn"
+      }
+    ],
+    "analogy": "Ordering at a food court. You place orders at three counters at once and wait only for the slowest one, but you can’t pay for the meal until every counter has told you the price.",
+    "library": {
+      "name": "Python asyncio + Anthropic SDK",
+      "what": "asyncio.gather runs the independent calls concurrently; each gets its own timeout and its own tool_result.",
+      "install": "pip install anthropic"
+    },
+    "note": "TOOLS maps tool names to your async functions. Results are returned in the order the model asked for them.",
+    "samples": [
+      {
+        "file": "run_turn.py",
+        "language": "python",
+        "code": "import asyncio, json\n\nREADS = {\"search_fares\", \"hotel_availability\"}          # independent, no side effects\n\nasync def run_one(block, timeout=5.0):\n    try:\n        out = await asyncio.wait_for(TOOLS[block.name](**block.input), timeout)\n        return {\"type\": \"tool_result\", \"tool_use_id\": block.id, \"content\": json.dumps(out)}\n    except Exception as e:                               # a failure never drops its siblings\n        return {\"type\": \"tool_result\", \"tool_use_id\": block.id,\n                \"content\": f\"Error: {e!r}\", \"is_error\": True}\n\nasync def run_turn(resp):\n    calls = [b for b in resp.content if b.type == \"tool_use\"]\n    reads = [c for c in calls if c.name in READS]\n    others = [c for c in calls if c.name not in READS]\n    results = list(await asyncio.gather(*(run_one(c) for c in reads)))\n    for c in others:                                     # dependent or side-effecting: in order\n        results.append(await run_one(c))\n    order = {c.id: i for i, c in enumerate(calls)}\n    results.sort(key=lambda r: order[r[\"tool_use_id\"]])\n    return {\"role\": \"user\", \"content\": results}          # all results in one message"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Calls A (300 ms), B (800 ms) and C (500 ms) are independent. D (400 ms) needs B’s output. E (200 ms) needs both C and D. With unlimited concurrency, what is the wall-clock time in ms?",
+    "answer": "A, B and C start at 0. D starts when B ends at 800 and ends at 1,200. E waits for C (500) and D (1,200), so it runs 1,200–1,400. Wall-clock 1,400 ms against 2,200 ms in sequence. The critical path is B → D → E.",
+    "expected": {
+      "value": 1400,
+      "tolerance": 1,
+      "label": "ms ="
+    },
+    "interview": [
+      {
+        "question": "How do you decide which tool calls in one turn can run in parallel?",
+        "answer": "Calls that only read and do not need each other’s output can run together. A call whose arguments come from another call’s result must wait, and side-effecting calls usually run one at a time in a defined order. The speed-up is bounded by the critical path, the longest chain of dependent calls."
+      },
+      {
+        "question": "One call in a parallel batch fails. What do you send back?",
+        "answer": "A result for every call. The failed one gets is_error: true with a clear message; calls skipped because of it get an error such as “Not executed: the preceding call failed”. All results go in one user message. Dropping results leaves call ids unanswered and the request is rejected."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Putting a call and the call that needs its output in one gather",
+        "fix": "Run dependent calls after the call they depend on"
+      },
+      {
+        "mistake": "Letting one exception cancel the whole batch",
+        "fix": "Catch per call and return every result, errors marked"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pa01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A KYC turn asks for PAN (600 ms), CKYC (700 ms), Aadhaar OTP status (900 ms) and bureau (1,200 ms) checks, all independent. Run concurrently, how long do they take?",
+      "options": [
+        "600 ms",
+        "1,200 ms",
+        "3,400 ms",
+        "850 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Concurrent independent calls finish with the slowest one: 1,200 ms."
+    },
+    {
+      "id": "pa02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "In the same flow, open_account (400 ms) needs all four checks. What is the wall-clock time for the whole turn?",
+      "options": [
+        "1,200 ms",
+        "1,600 ms",
+        "3,800 ms",
+        "400 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,200 ms for the slowest check, then 400 ms: 1,600 ms."
+    },
+    {
+      "id": "pa03",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Calls A (300 ms), B (800 ms) and C (500 ms) are independent. D (400 ms) needs B. E (200 ms) needs C and D. What is the wall-clock time?",
+      "options": [
+        "1,200 ms",
+        "1,400 ms",
+        "1,600 ms",
+        "2,200 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "D ends at 800 + 400 = 1,200 ms; E runs 1,200–1,400 ms."
+    },
+    {
+      "id": "pa04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "How should results from three parallel tool calls be returned to Claude?",
+      "options": [
+        "In three separate user messages",
+        "All three tool_result blocks in one user message, before any text",
+        "Only the fastest result",
+        "As plain text in the next user question"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "All results go in one user message; splitting them discourages later parallel calls."
+    },
+    {
+      "id": "pa05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A batch runs create_order and charge_card(order_id=...) together in one gather. What is wrong?",
+      "options": [
+        "Nothing; gather is safe",
+        "The charge depends on the order id, so it must run after create_order succeeds",
+        "charge_card should run first",
+        "gather cannot run two calls"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A call that needs another call’s output, especially a write, must wait for it."
+    },
+    {
+      "id": "pa06",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A plan-comparison turn fans out four price lookups; one times out. What should the response to the model contain? Select all that apply.",
+      "options": [
+        "Three normal results",
+        "One result with is_error for the timeout",
+        "All four tool_result blocks in one message",
+        "No results, because the batch failed"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Every call gets a result; the failure is marked, not allowed to drop its siblings."
+    },
+    {
+      "id": "pa07",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Which Claude setting turns off parallel tool calls?",
+      "options": [
+        "parallel_tool_calls: false in the message",
+        "disable_parallel_tool_use inside tool_choice",
+        "max_tools: 1",
+        "stream: false"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "disable_parallel_tool_use sits inside tool_choice."
+    },
+    {
+      "id": "pa08",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "With tool_choice auto and disable_parallel_tool_use true, how many tool calls can one response contain?",
+      "options": [
+        "None",
+        "At most one",
+        "Exactly two",
+        "Unlimited"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With auto it can make at most one call; with any or tool, exactly one."
+    },
+    {
+      "id": "pa09",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Four independent carrier-rate calls take 400, 900, 650 and 1,100 ms. How much time does running them in parallel save over sequential?",
+      "options": [
+        "1,100 ms",
+        "1,950 ms",
+        "3,050 ms",
+        "2,000 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sequential 3,050 ms; parallel 1,100 ms; saved 1,950 ms."
+    },
+    {
+      "id": "pa10",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which calls are safe to put in the same parallel batch? Select all that apply.",
+      "options": [
+        "Fetch policy details",
+        "Fetch the claim history",
+        "Approve the claim, then pay it out",
+        "Create a payout that needs the approval id"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Independent reads can run together; the approval and the payout that depends on it cannot."
+    },
+    {
+      "id": "pa11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A lab agent makes 6 independent calls of 500 ms each, but a partner API allows only 2 concurrent requests. What is the fastest possible wall-clock time?",
+      "options": [
+        "500 ms",
+        "1,000 ms",
+        "1,500 ms",
+        "3,000 ms"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Three waves of two calls: 3 × 500 = 1,500 ms."
+    },
+    {
+      "id": "pa12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A research agent adds a fifth independent 700 ms lookup to four others whose slowest takes 1,100 ms. What happens to wall-clock time?",
+      "options": [
+        "It grows by 700 ms",
+        "It stays 1,100 ms",
+        "It becomes 1,800 ms",
+        "It halves"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The new call finishes before the slowest existing one, so the critical path is unchanged."
+    },
+    {
+      "id": "pa13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In asyncio, one call in gather raises and you did not catch it. What is the risk?",
+      "options": [
+        "Nothing; other results are still returned",
+        "The exception propagates, and without per-call handling you return no results for the batch",
+        "The failed call is retried automatically",
+        "asyncio cancels the model request"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Catch errors per call so every call still produces a result."
+    },
+    {
+      "id": "pa14",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which benchmark categories does BFCL cover? Select all that apply.",
+      "options": [
+        "Simple calls",
+        "Parallel calls",
+        "Parallel-multiple calls",
+        "Image generation quality"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "BFCL scores simple, multiple, parallel and parallel-multiple calls, plus multi-turn tasks from v3."
+    },
+    {
+      "id": "pa15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A dependent chain is 300 → 500 → 200 ms, and two other independent calls take 700 and 900 ms. What is the wall-clock time?",
+      "options": [
+        "900 ms",
+        "1,000 ms",
+        "1,600 ms",
+        "2,600 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The chain takes 1,000 ms, longer than 900 ms, so it is the critical path."
+    },
+    {
+      "id": "pa16",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A travel agent checks three airlines and a hotel at once, then books. Why must the flight and hotel bookings run after the searches?",
+      "options": [
+        "Booking APIs are slower",
+        "Each booking needs a fare or room id returned by a search",
+        "Parallel calls cannot write",
+        "The model cannot emit two calls"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Bookings depend on search output and have side effects, so they wait."
+    },
+    {
+      "id": "pa17",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which statements about parallel tool calls are true? Select all that apply.",
+      "options": [
+        "The speed-up is bounded by the longest dependent chain",
+        "A skipped call should still return a result",
+        "Parallel calls always reduce cost per token",
+        "Every call in a batch must use the same tool"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Critical path bounds the speed-up and every call needs a result. Parallelism does not change token prices, and calls can use different tools."
+    },
+    {
+      "id": "pa18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Five independent calls take 200 ms each. Run sequentially they take 1,000 ms. Run in parallel, what is the speed-up?",
+      "options": [
+        "2×",
+        "4×",
+        "5×",
+        "10×"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1,000 ÷ 200 = 5×."
+    },
+    {
+      "id": "pa19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A call is skipped because the call it depended on failed. What should its result say?",
+      "options": [
+        "Nothing; omit it",
+        "An error such as “Not executed: the preceding call failed”",
+        "A success with empty content",
+        "The result of the failed call"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic’s guidance returns an is_error result explaining it was not executed."
+    },
+    {
+      "id": "pa20",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "A dispatcher’s fan-out of 40 lookups triggers 429 errors. Which fixes help? Select all that apply.",
+      "options": [
+        "Cap concurrency with a semaphore",
+        "Back off and retry on 429",
+        "Spread calls with jitter",
+        "Increase the number of concurrent calls to finish sooner"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Limiting concurrency and backing off with jitter respect the rate limit; more concurrency makes it worse."
+    }
+  ]
+}

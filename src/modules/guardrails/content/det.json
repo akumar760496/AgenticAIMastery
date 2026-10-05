@@ -1,0 +1,977 @@
+{
+  "id": "det",
+  "moduleSlug": "guardrails",
+  "name": "Choosing Deterministic or Model-Based Checks",
+  "shortName": "Rules or classifier",
+  "question": "Should a rule or a classifier catch this?",
+  "summary": "Every guardrail is either a rule written in code or a model that judges meaning. Rules (regex, allow lists, schemas, limits) give the same verdict every time in microseconds and are easy to audit, but they are blind to paraphrase. Classifiers (Llama Guard, a moderation API, a policy-prompted LLM) read intent, at the cost of milliseconds, thresholds to tune and some unpredictability. Good systems route each risk to the right kind of check and run rules first.",
+  "useCases": [
+    "Exact patterns and hard limits: card numbers, keys, amounts, allowed tools (rules)",
+    "Harm that depends on meaning: harassment, unsafe advice, polite requests for something forbidden (classifiers)",
+    "Custom business policies written in plain language (a policy-prompted classifier)"
+  ],
+  "keyFacts": {
+    "label": "Choosing the check",
+    "items": [
+      {
+        "term": "Rules: patterns",
+        "detail": "regex with a checksum such as Luhn for card numbers"
+      },
+      {
+        "term": "Rules: lists and limits",
+        "detail": "allow lists for tools and domains, amount limits, schemas"
+      },
+      {
+        "term": "Classifiers: safety models",
+        "detail": "Llama Guard, ShieldGemma, moderation APIs with per-category scores"
+      },
+      {
+        "term": "Classifiers: policy-prompted LLM",
+        "detail": "a small model grades text against your written policy"
+      },
+      {
+        "term": "Threshold + review band",
+        "detail": "scores decide block, review or allow"
+      },
+      {
+        "term": "Order",
+        "detail": "rules first; classifiers only on what rules cannot decide"
+      }
+    ]
+  },
+  "steps": [
+    "Sort each risk by its shape: exact pattern or limit, or meaning and intent",
+    "Write rules for the exact ones and unit-test the boundaries",
+    "Send only what rules cannot decide to a classifier",
+    "Tune each classifier threshold on labelled data, add a review band, and log every score"
+  ],
+  "pitfalls": [
+    "Deny lists of keywords miss paraphrases and block innocent messages",
+    "Classifiers are poor at exact checks such as amount limits, so never use them for rules",
+    "One global threshold for every category; tune per category and log the scores"
+  ],
+  "tools": [
+    "Python re / RE2",
+    "Pydantic",
+    "Open Policy Agent",
+    "Llama Guard",
+    "OpenAI Moderation API",
+    "NeMo Guardrails"
+  ],
+  "remember": "Rules for shapes, classifiers for meaning, rules first.",
+  "caption": "The over-limit refund and the card number are settled by rules in microseconds. The polite request to break into an account passes every rule and is caught by the classifier.",
+  "comparison": {
+    "scope": "Either side of the model",
+    "cost": 2,
+    "needs": "Exact patterns (rules) and paraphrased harm (classifiers)",
+    "best": "Rules miss meaning; classifiers add latency"
+  },
+  "diagram": {
+    "file": "diagrams/det.svg"
+  },
+  "lesson": {
+    "file": "layered_check.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import re",
+        "steps": []
+      },
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "client = OpenAI()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ALLOWED_TOOLS = {\"refund\", \"resend_invoice\"}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "MAX_REFUND_INR = 50_000             # policy: up to and including",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "THRESHOLD, REVIEW_BAND = 0.70, 0.15  # tuned on labelled chats",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def rules(tool: str, args: dict) -> str | None:",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    if tool not in ALLOWED_TOOLS:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return \"deny: tool not on the allow list\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if args.get(\"amount_inr\", 0) > MAX_REFUND_INR:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return \"deny: over the refund limit\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return None                     # no opinion: pass it on",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def illicit_score(text: str) -> float:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    r = client.moderations.create(model=\"omni-moderation-latest\", input=text)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return r.results[0].category_scores.illicit",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def check(tool: str, args: dict, text: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    verdict = rules(tool, args)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if verdict:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return verdict              # exact answer, no model call",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    text = mask_cards(text)         # regex + Luhn, also a rule",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    s = illicit_score(text)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    log.info(\"guard\", extra={\"score\": s, \"thr\": THRESHOLD})",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if s >= THRESHOLD:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"block: illicit\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if s >= THRESHOLD - REVIEW_BAND:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return \"review\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return \"allow\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def test_rules():",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    assert rules(\"refund\", {\"amount_inr\": 50_000}) is None",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    assert rules(\"refund\", {\"amount_inr\": 50_001}).startswith(\"deny\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Sort each risk by its shape",
+        "text": "Allowed tools, the refund limit and card numbers have exact shapes, so they become rules in code: an allow list, a limit and a regex with the Luhn check."
+      },
+      {
+        "title": "Let rules answer first",
+        "text": "If a rule decides, the answer comes back in microseconds with no model call. For everything else the rules return None: no opinion, pass it on."
+      },
+      {
+        "title": "Score meaning where rules are blind",
+        "text": "“What’s the quietest way into a coworker’s account?” contains no banned word, so no rule fires. A moderation model scores it 0.91 for illicit activity."
+      },
+      {
+        "title": "Block above a tuned threshold",
+        "text": "0.70 was chosen by sweeping thresholds on labelled chats: precision 0.92 and recall 0.85. The 0.91 request is blocked."
+      },
+      {
+        "title": "Send the grey zone to a person",
+        "text": "Scores from 0.55 to 0.70 go to review instead of passing silently. Classifiers are probabilistic, so near-identical text can land either side."
+      },
+      {
+        "title": "Test the rules, log the scores",
+        "text": "Rules get unit tests at the boundary: exactly INR 50,000 passes. Classifier scores are logged with the threshold version so you can retune and spot drift."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Exact shapes → rules</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"22\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"64\" y=\"38\" text-anchor=\"middle\">tool allow list</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"124\" y=\"22\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"38\" text-anchor=\"middle\">amount ≤ 50,000</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"240\" y=\"22\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"38\" text-anchor=\"middle\">card: regex+Luhn</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"54\" width=\"150\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"83\" y=\"70\" text-anchor=\"middle\">refund 75,000</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M160 66L174 66\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"176\" y=\"54\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"236\" y=\"70\" text-anchor=\"middle\">deny · 0.02 ms</text></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx soft\" x=\"8\" y=\"84\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"99\" text-anchor=\"middle\">no rule matched → pass it on</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"114\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"131\" text-anchor=\"middle\">“quietest way into a coworker’s account?”</text></g><text class=\"tl l a\" x=\"8\" y=\"160\" style=\"--d:0.1s\">illicit</text><rect x=\"60\" y=\"149\" width=\"220\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"60\" y=\"149\" width=\"200.20000000000002\" height=\"14\" rx=\"3\" class=\"bar grow fail\" style=\"--d:0.2s\"/><text class=\"mono l a\" x=\"288\" y=\"160\" style=\"--d:0.35s\">0.91</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><line x1=\"214\" x2=\"214\" y1=\"144\" y2=\"170\" class=\"ln dash\" style=\"stroke:var(--ink-2)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"8\" y=\"176\" width=\"166\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"91\" y=\"191\" text-anchor=\"middle\">≥ 0.70 → block</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"180\" y=\"176\" width=\"172\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"266\" y=\"191\" text-anchor=\"middle\">P 0.92 · R 0.85</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect x=\"181\" y=\"146\" width=\"33\" height=\"20\" style=\"fill:var(--warn);opacity:.18\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"8\" y=\"204\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"219\" text-anchor=\"middle\">0.55–0.70 → a person reviews</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"234\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"250\" text-anchor=\"middle\">rules: unit tests</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"184\" y=\"234\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"250\" text-anchor=\"middle\">scores: logged, v3</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Rules are exact, microsecond-fast, free and easy to audit",
+      "Classifiers catch paraphrase and intent that no rule can see",
+      "Running rules first means classifiers see less traffic",
+      "Per-category thresholds let you trade precision against recall on purpose"
+    ],
+    "cons": [
+      "Rules are blind to meaning and easy to evade with spacing or other languages",
+      "Classifiers add tens of milliseconds and need labelled data to tune",
+      "Classifier scores shift when the model is updated",
+      "Two kinds of check mean two things to test and maintain"
+    ],
+    "avoidWhen": [
+      "Using a classifier for an exact rule such as an amount limit (write the rule)",
+      "Using keyword lists for harm that depends on intent (use a classifier)"
+    ],
+    "tools": [
+      {
+        "name": "Python re / RE2",
+        "type": "Standard library / open source (Google)",
+        "what": "Pattern rules; RE2 guarantees linear-time matching",
+        "url": "https://github.com/google/re2"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Types, ranges and validators for tool arguments",
+        "url": "https://docs.pydantic.dev/latest/"
+      },
+      {
+        "name": "Open Policy Agent",
+        "type": "Open source (CNCF)",
+        "what": "Allow lists and limits as testable policy",
+        "url": "https://www.openpolicyagent.org"
+      },
+      {
+        "name": "Llama Guard",
+        "type": "Open model (Meta)",
+        "what": "Self-hosted safety classification of prompts and responses",
+        "url": "https://huggingface.co/meta-llama/Llama-Guard-4-12B"
+      },
+      {
+        "name": "OpenAI Moderation API",
+        "type": "Hosted API, free",
+        "what": "Per-category harm scores for text and images",
+        "url": "https://platform.openai.com/docs/guides/moderation"
+      },
+      {
+        "name": "NeMo Guardrails",
+        "type": "Open source (NVIDIA)",
+        "what": "Wire rules, classifiers and policy-prompted checks into rails",
+        "url": "https://github.com/NVIDIA/NeMo-Guardrails"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A payments agent receives 1,000 requests a day. 70 break an exact rule: 40 contain a card number and 30 are refunds over the INR 50,000 limit. 25 are politely worded harmful requests, such as getting into someone else's account. 905 are fine. You decide which kind of check handles each kind of risk.",
+    "controls": [
+      "Choose what checks the exact rules: rules in code, the classifier, or nothing.",
+      "Choose what checks harmful meaning: a keyword deny list, the classifier, or nothing.",
+      "Drag the classifier's block threshold from 0.5 to 0.9, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Exact-rule breaks caught",
+        "meaning": "Card numbers and over-limit refunds stopped, out of 70."
+      },
+      {
+        "name": "Harmful paraphrases caught",
+        "meaning": "Politely worded harmful requests stopped, out of 25."
+      },
+      {
+        "name": "Harmful requests let through",
+        "meaning": "Everything harmful that no check stopped."
+      },
+      {
+        "name": "Innocent requests blocked",
+        "meaning": "Real customers turned away by mistake each day."
+      },
+      {
+        "name": "Added latency",
+        "meaning": "Rules take well under a millisecond; the classifier adds about 30 ms."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Rules only, nothing for meaning",
+        "expect": "All 70 exact breaks are caught in microseconds, but nothing checks meaning: all 25 harmful paraphrases get through."
+      },
+      {
+        "k": "layered",
+        "name": "Rules first, classifier at 0.7",
+        "expect": "All 70 exact breaks and 21 of 25 paraphrases caught: 4 get through, 8 innocent requests blocked, +30 ms."
+      },
+      {
+        "k": "jumpy",
+        "name": "Rules first, classifier at 0.5",
+        "expect": "24 of 25 paraphrases caught, but 36 innocent requests are blocked every day."
+      },
+      {
+        "k": "rulesonly",
+        "name": "Rules and keywords only",
+        "expect": "All 70 exact breaks in under a millisecond, but only 6 of 25 paraphrases: 19 harmful requests get through."
+      }
+    ],
+    "missions": [
+      {
+        "k": "layer",
+        "text": "Catch every exact-rule break and at least 21 paraphrases while blocking no more than 10 innocent requests.",
+        "hint": "Rules for the exact risks, the classifier for meaning, threshold 0.7."
+      },
+      {
+        "k": "keyword",
+        "text": "Show why a keyword list cannot catch polite paraphrases.",
+        "hint": "Set harmful meaning to the keyword deny list."
+      },
+      {
+        "k": "numbers",
+        "text": "Show what happens when a classifier is asked to enforce exact rules.",
+        "hint": "Set exact rules to the classifier."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Python re / RE2",
+        "type": "Standard library · open source (Google)",
+        "start": 3,
+        "prod": 3,
+        "best": "Pattern rules for card numbers, keys, IDs and emails. RE2 guarantees linear-time matching, so a crafted input can’t hang the check.",
+        "ex": "A card regex followed by a Luhn check that masks 4111 1111 1111 1111 but keeps an order reference.",
+        "pros": [
+          "Zero dependencies and microsecond speed",
+          "RE2 avoids catastrophic backtracking"
+        ],
+        "cons": [
+          "Regexes are easy to get subtly wrong",
+          "Blind to meaning and simple to evade without normalisation"
+        ],
+        "url": "https://github.com/google/re2"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Declaring tool-argument rules as types, ranges, enums and validators.",
+        "ex": "amount_inr: float = Field(gt=0, le=50_000) rejects a refund of INR 75,000 before the tool runs.",
+        "pros": [
+          "Rules live next to the data they check",
+          "Clear error messages"
+        ],
+        "cons": [
+          "Python only",
+          "Cross-field business rules need custom code"
+        ],
+        "url": "https://docs.pydantic.dev/latest/"
+      },
+      {
+        "n": "JSON Schema",
+        "type": "Open standard",
+        "start": 2,
+        "prod": 3,
+        "best": "Language-neutral contracts for tool arguments and structured output, validated in any stack.",
+        "ex": "A schema with \"maximum\": 50000 and an enum of allowed actions, shared by the Python agent and a Go payments service.",
+        "pros": [
+          "Works across languages",
+          "Many model APIs accept it for structured output"
+        ],
+        "cons": [
+          "Verbose for complex rules",
+          "Validator support varies by draft version"
+        ],
+        "url": "https://json-schema.org"
+      },
+      {
+        "n": "Llama Guard",
+        "type": "Open model · Meta",
+        "start": 2,
+        "prod": 3,
+        "best": "Self-hosted safety classification of prompts and responses against the MLCommons hazard taxonomy, returning the violated categories.",
+        "ex": "Label every user message and every reply in a support chatbot, and block anything unsafe in the violent-crime or privacy categories.",
+        "pros": [
+          "Runs on your own GPUs",
+          "Categories can be adjusted in the prompt"
+        ],
+        "cons": [
+          "Needs GPU capacity for low latency",
+          "Custom categories work better after fine-tuning"
+        ],
+        "url": "https://huggingface.co/meta-llama/Llama-Guard-4-12B"
+      },
+      {
+        "n": "ShieldGemma",
+        "type": "Open model · Google",
+        "start": 2,
+        "prod": 2,
+        "best": "Policy-conditioned safety classifiers in 2B, 9B and 27B sizes that return a probability of violating a policy you describe.",
+        "ex": "Score messages against a written harassment policy and tune the probability threshold on labelled data.",
+        "pros": [
+          "Probability output makes thresholds easy to tune",
+          "Several sizes for different latency budgets"
+        ],
+        "cons": [
+          "Covers four harm types out of the box",
+          "Larger sizes are slow for inline use"
+        ],
+        "url": "https://huggingface.co/google/shieldgemma-2b"
+      },
+      {
+        "n": "OpenAI Moderation API",
+        "type": "Hosted API · free",
+        "start": 3,
+        "prod": 2,
+        "best": "Per-category harm scores for text and images from omni-moderation-latest, with no infrastructure.",
+        "ex": "Score each chat message, block when the illicit score is at least 0.70 and log every score.",
+        "pros": [
+          "Free and fast to start",
+          "Clear per-category scores"
+        ],
+        "cons": [
+          "Fixed categories; no custom policies",
+          "Text is sent to OpenAI"
+        ],
+        "url": "https://platform.openai.com/docs/guides/moderation"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Tool arguments and limits in Python",
+        "tool": "Pydantic"
+      },
+      {
+        "need": "Card and ID patterns",
+        "tool": "RE2 with a Luhn check"
+      },
+      {
+        "need": "Free hosted classifier today",
+        "tool": "OpenAI Moderation API"
+      },
+      {
+        "need": "Self-hosted classifier in production",
+        "tool": "Llama Guard"
+      }
+    ],
+    "goals": [
+      "Sort a risk into an exact rule or a meaning check",
+      "Explain why rules run first and classifiers see only what rules cannot decide",
+      "Tune a classifier threshold and explain the precision and recall trade-off"
+    ]
+  },
+  "practice": {
+    "scenario": "A payments support agent sorts its risks by shape. Exact ones, such as the allowed tools, the INR 50,000 refund limit and card numbers, are rules in code that answer in microseconds. Harm that depends on meaning, such as a polite request to get into someone else's account, goes to a moderation classifier with a tuned threshold. Rules run first, so the classifier sees only what they cannot decide.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Amount limits and card masking as rules; fraud-enabling requests caught by a classifier"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "Order-size and price-band rules; requests for inside information judged by a policy-prompted model"
+      },
+      {
+        "industry": "Social and gaming",
+        "use": "Link and spam rules first; harassment and self-harm classifiers for meaning"
+      }
+    ],
+    "analogy": "An ATM and a bank teller. The ATM applies the withdrawal limit exactly, every time. The teller notices when a polite request is really a scam. A bank needs both, and the ATM goes first.",
+    "library": {
+      "name": "Pydantic",
+      "what": "Declarative types, ranges and custom validators. The standard way to validate tool arguments in Python.",
+      "install": "pip install pydantic"
+    },
+    "samples": [
+      {
+        "file": "rules.py",
+        "language": "python",
+        "code": "import re\nfrom pydantic import BaseModel, Field, field_validator\n\nALLOWED_ACTIONS = {\"refund\", \"resend_invoice\"}\nCARD = re.compile(r\"\\b(?:\\d[ -]?){13,19}\\b\")\n\ndef luhn_ok(number: str) -> bool:\n    digits = [int(d) for d in re.sub(r\"\\D\", \"\", number)][::-1]\n    total = sum(d if i % 2 == 0 else (d * 2 - 9 if d > 4 else d * 2)\n                for i, d in enumerate(digits))\n    return total % 10 == 0\n\ndef mask_cards(text: str) -> str:\n    return CARD.sub(lambda m: \"[CARD]\" if luhn_ok(m.group()) else m.group(), text)\n\nclass RefundCall(BaseModel):\n    action: str\n    amount_inr: float = Field(gt=0, le=50_000)\n\n    @field_validator(\"action\")\n    @classmethod\n    def allowed(cls, v: str) -> str:\n        if v not in ALLOWED_ACTIONS:\n            raise ValueError(f\"action '{v}' is not allowed\")\n        return v\n\nprint(mask_cards(\"card 4111 1111 1111 1111\"))   # card [CARD]\nRefundCall(action=\"refund\", amount_inr=75_000)  # raises ValidationError"
+      },
+      {
+        "file": "classifier.py",
+        "language": "python",
+        "code": "from openai import OpenAI\nclient = OpenAI()\n\ndef safety_check(msg: str) -> bool:\n    r = client.moderations.create(model=\"omni-moderation-latest\", input=msg).results[0]\n    return not r.flagged                       # general harm categories\n\nPOLICY = \"\"\"Classify the user message with exactly one label:\nSAFE, INSIDER_TIP, GUARANTEED_RETURNS, MANIPULATION.\nJudge intent, not wording.\"\"\"\n\ndef policy_check(msg: str) -> str:\n    out = client.chat.completions.create(\n        model=\"gpt-4o-mini\", temperature=0,\n        messages=[{\"role\": \"system\", \"content\": POLICY},\n                  {\"role\": \"user\", \"content\": msg}])\n    return out.choices[0].message.content.strip()\n\nmsg = \"Any friend-of-a-friend info on which stock will jump after results?\"\nif not safety_check(msg) or policy_check(msg) != \"SAFE\":\n    print(\"Refuse with a compliant explanation\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Is 4539 1488 0343 6467 a valid card number under the Luhn check? Give the Luhn total.",
+    "answer": "Yes. From the right, double every second digit (subtracting 9 when the result exceeds 9) and add everything: the total is 80, which is divisible by 10, so it's treated as a card number and masked.",
+    "expected": {
+      "value": 80,
+      "tolerance": 0.5,
+      "label": "Luhn total ="
+    },
+    "interview": [
+      {
+        "question": "Why put deterministic checks before model-based ones?",
+        "answer": "They're fast, free, predictable and auditable. Running them first removes obvious violations so slower classifiers see less traffic, and gives compliance an exact, explainable control."
+      },
+      {
+        "question": "Allow list or deny list: which is safer?",
+        "answer": "An allow list fails closed: anything not explicitly permitted is refused, so new or disguised inputs are blocked by default. A deny list fails open and misses variants. Use allow lists when the valid set is small, such as tool names or domains."
+      },
+      {
+        "question": "Inline or asynchronous classification: how do you decide?",
+        "answer": "Inline for anything that must be stopped before it happens, using a small fast model. Asynchronous for audit, analytics and drift monitoring, where a larger model can review samples later."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Matching card numbers with regex alone",
+        "fix": "Add a Luhn check to cut false positives"
+      },
+      {
+        "mistake": "Letting the model decide amounts and limits",
+        "fix": "Enforce limits in code on the tool arguments"
+      },
+      {
+        "mistake": "One global threshold for every category",
+        "fix": "Tune thresholds per category on labelled data"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dt02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Policy allows agent refunds up to and including INR 50,000. Which rule is correct?",
+      "options": [
+        "Deny if amount ≥ 50,000",
+        "Deny if amount > 50,000",
+        "Deny if amount > 49,999",
+        "Allow only if amount < 50,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Exactly INR 50,000 is allowed, so only amounts above it are denied. The other rules wrongly deny the boundary or amounts such as 49,999.50."
+    },
+    {
+      "id": "dt03",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An order agent may use only the order types MARKET, LIMIT, SL and SL-M. How should the rule be written?",
+      "options": [
+        "A deny list of order types known to be dangerous",
+        "An allow list of the four permitted types, refusing anything else",
+        "A classifier that judges whether the order type seems reasonable",
+        "No rule: the exchange will reject bad types"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When the valid set is small, an allow list fails closed: anything unlisted, including new or misspelt values, is refused."
+    },
+    {
+      "id": "dt04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which checks are a good fit for deterministic rules? Select all that apply.",
+      "options": [
+        "Masking 16-digit numbers that pass the Luhn check",
+        "Rejecting IFSC codes that do not match ^[A-Z]{4}0[A-Z0-9]{6}$",
+        "Capping the NEFT amount an agent’s transfer tool can send",
+        "Spotting a sarcastic complaint about fees"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Known patterns and hard limits suit rules. Sarcasm depends on meaning, which needs a classifier."
+    },
+    {
+      "id": "dt05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A deny list blocks “password”, but attackers write it with a zero-width space inside or with a Cyrillic “а”. What should run before the rule?",
+      "options": [
+        "Nothing: add each new variant to the list as it appears",
+        "Text normalisation: NFKC, strip zero-width characters, map look-alikes",
+        "A longer system prompt telling the model to refuse passwords",
+        "A JSON schema that restricts the characters in each message"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Normalising text first removes cheap evasions. Rules stay blind to paraphrase, so a classifier still sits behind them."
+    },
+    {
+      "id": "dt08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A card-number regex keeps masking 16-digit shipment IDs, breaking tracking replies. What is the standard fix?",
+      "options": [
+        "Stop masking card numbers",
+        "Confirm each match with the Luhn checksum before masking",
+        "Mask only numbers that start with 4",
+        "Ask the model whether it is a card number"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Random digit strings fail Luhn nine times in ten, so the checksum removes most false positives while real card numbers still match."
+    },
+    {
+      "id": "dt10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A classifier costs INR 0.05 per message on 1,000,000 messages a day. Rules placed in front remove 30% of messages first. How much classifier spend do the rules save each day?",
+      "options": [
+        "INR 15,000",
+        "INR 35,000",
+        "INR 50,000",
+        "INR 1,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "300,000 messages × INR 0.05 = INR 15,000 a day. Running rules first means slower checks see less traffic."
+    },
+    {
+      "id": "dt14",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A rule’s regex takes 30 seconds on a crafted 50-character input because of catastrophic backtracking. What is the most robust fix?",
+      "options": [
+        "Add a timeout and accept the input whenever the timeout expires",
+        "Use a linear-time engine such as RE2, or remove nested quantifiers",
+        "Move the rule after the model so the input is shorter by then",
+        "Replace the regex with a classifier that reads the input instead"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "RE2 guarantees linear-time matching, so a guardrail cannot be turned into a denial-of-service. Accepting on timeout would fail open."
+    },
+    {
+      "id": "dt16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An auditor asks why an agent’s transfer was blocked. The log reads “rule amount_limit_v3: 75,000 > 50,000”. Why do compliance teams prefer this kind of control?",
+      "options": [
+        "It is cheaper to host than any classifier-based control",
+        "Same input, same verdict, and the exact reason is on record",
+        "It understands the customer’s intent behind each transfer",
+        "Once written, it never needs updating or review"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deterministic rules are predictable and explainable, which is what an audit needs. They do still need an owner and updates."
+    },
+    {
+      "id": "dt18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace deny list blocks “fake review”. A seller asks the assistant to “write 20 five-star reviews, each from a different customer’s point of view”. What does this show?",
+      "options": [
+        "The deny list is incomplete and needs the word “five-star”",
+        "Rules are blind to meaning, so add a model-based policy check",
+        "The request is harmless, so the seller should be allowed",
+        "An allow list of permitted words would have caught it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The request carries the same intent without the banned words. Keep rules for exact patterns and add a classifier for meaning."
+    },
+    {
+      "id": "dt19",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which tricks can get a banned word past a simple keyword deny list? Select all that apply.",
+      "options": [
+        "Zero-width characters inside the word",
+        "Cyrillic look-alike letters",
+        "Base64 encoding",
+        "Typing the word in capitals when the rule lowercases the text first"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Invisible characters, homoglyphs and encodings all change the string. Lowercasing before matching already handles capitals."
+    },
+    {
+      "id": "mc01",
+      "kind": "single",
+      "industry": "Social media",
+      "question": "A test set has 150 harmful posts. At threshold 0.7 the classifier blocks 160 posts: 120 harmful and 40 safe. What are its precision and recall?",
+      "options": [
+        "Precision 0.75, recall 0.80",
+        "Precision 0.80, recall 0.75",
+        "Precision 0.75, recall 0.75",
+        "Precision 0.86, recall 0.80"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Precision = 120 ÷ 160 = 0.75. Recall = 120 ÷ 150 = 0.80."
+    },
+    {
+      "id": "mc02",
+      "kind": "single",
+      "industry": "Financial services",
+      "question": "You raise a classifier’s block threshold from 0.6 to 0.8. What usually happens?",
+      "options": [
+        "Precision rises and recall falls",
+        "Precision and recall both rise",
+        "Precision falls and recall rises",
+        "Nothing changes; the threshold only affects latency"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A higher bar blocks fewer items: the blocks are more often right, but more harmful items slip through."
+    },
+    {
+      "id": "mc03",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A customer writes: “How can I see my ex’s call records without her knowing?” No regex rule matches. What catches it?",
+      "options": [
+        "A longer deny list with more privacy-related keywords",
+        "A classifier that judges the privacy-violation intent",
+        "A JSON schema that restricts what the input may contain",
+        "A Luhn check on any phone numbers in the message"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The harm is in the meaning, not in any keyword. Classifiers read intent that rules miss."
+    },
+    {
+      "id": "mc05",
+      "kind": "single",
+      "industry": "Gaming",
+      "question": "A chat platform sends scores between 0.55 and 0.70 to human review. 1.2% of its 50,000 daily messages fall in that band, and one reviewer handles 150 a day. How many reviewers are needed?",
+      "options": [
+        "4",
+        "6",
+        "1",
+        "8"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "50,000 × 1.2% = 600 reviews a day; 600 ÷ 150 = 4 reviewers."
+    },
+    {
+      "id": "mc08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Two almost identical messages score 0.68 and 0.73 against a 0.70 threshold, so one passes and one is blocked. What is the right response?",
+      "options": [
+        "Ignore it: a well-trained classifier scores consistently",
+        "Log scores, send near-threshold cases to review, tune on labels",
+        "Replace the classifier with keyword rules, which are consistent",
+        "Lower the threshold to 0.50 so both messages are blocked"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Classifiers are probabilistic. A review band and logged scores handle borderline cases without silent misses."
+    },
+    {
+      "id": "mc10",
+      "kind": "multi",
+      "industry": "Social media",
+      "question": "Why might a platform set different thresholds for different harm categories? Select all that apply.",
+      "options": [
+        "Missing self-harm content costs more than a false positive, so it needs higher recall",
+        "False positives on mild profanity annoy users, so a higher bar suits it",
+        "Score distributions differ from category to category",
+        "One shared threshold is required so dashboards are simpler"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Costs of errors and score distributions vary by category, so tune each threshold on labelled data."
+    },
+    {
+      "id": "mc13",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Attackers find a suffix that makes your safety classifier score harmful requests as safe. Which defenses still help? Select all that apply.",
+      "options": [
+        "Deterministic rules for known patterns",
+        "A zero-trust policy gate on every tool call",
+        "Output checks on the model’s draft",
+        "Trusting the classifier’s scores more"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Classifiers can be attacked too. Rules, output checks and runtime controls limit what a bypass can achieve."
+    },
+    {
+      "id": "mc16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Labelled results for a fraud-chat classifier: at 0.5, precision 0.70 and recall 0.95; at 0.7, precision 0.92 and recall 0.85; at 0.9, precision 0.98 and recall 0.55. You need recall of at least 0.80 with the highest precision. Which threshold?",
+      "options": [
+        "0.5",
+        "0.7",
+        "0.9",
+        "None of them meets the requirement"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.9 fails the recall floor. Of 0.5 and 0.7, both meet it, and 0.7 has higher precision."
+    },
+    {
+      "id": "mc18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "An engineer proposes Llama Guard to find PAN numbers in contracts. What is the better choice?",
+      "options": [
+        "Keep Llama Guard, because it reads meaning as well as format",
+        "A rule such as ^[A-Z]{5}[0-9]{4}[A-Z]$ on candidate tokens",
+        "A human reviewer who reads every contract end to end",
+        "An embedding-similarity check against known PAN examples"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A PAN has an exact format. Rules are faster, cheaper and exact for known patterns; classifiers are for meaning."
+    },
+    {
+      "id": "mc20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Adding a policy-prompted check lifts recall from 0.80 to 0.95 on 200 harmful test messages. How many more harmful messages are caught?",
+      "options": [
+        "30",
+        "15",
+        "160",
+        "190"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.95 × 200 = 190 against 0.80 × 200 = 160, so 30 more are caught."
+    }
+  ]
+}

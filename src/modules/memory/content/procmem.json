@@ -1,0 +1,923 @@
+{
+  "id": "procmem",
+  "moduleSlug": "memory",
+  "name": "Procedural Memory",
+  "shortName": "Procedural memory",
+  "question": "Has the agent done this kind of task before?",
+  "summary": "Procedural memory stores how to do things: workflows, checklists, scripts and skills distilled from past successful runs. Instead of rediscovering a multi-step routine every time, the agent retrieves a proven procedure and follows or adapts it, which cuts steps, tokens and errors. It applies to support playbooks and back-office routines as much as to code; research such as Voyager’s skill library and Agent Workflow Memory showed large gains from reusing learned routines.",
+  "useCases": [
+    "Routines the agent repeats: a KYC re-verification, a refund investigation, adding an API endpoint",
+    "Team conventions the agent keeps getting wrong",
+    "Long workflows with a stable sequence of tool calls"
+  ],
+  "keyFacts": {
+    "label": "Memory types",
+    "items": [
+      {
+        "term": "Procedural",
+        "detail": "how-to: workflows, scripts, tool sequences"
+      },
+      {
+        "term": "Semantic",
+        "detail": "facts about the codebase or domain"
+      },
+      {
+        "term": "Episodic",
+        "detail": "records of specific past runs"
+      },
+      {
+        "term": "Skill library",
+        "detail": "named, tested code the agent can call"
+      },
+      {
+        "term": "Instruction files",
+        "detail": "repo-level guides such as CLAUDE.md or AGENTS.md"
+      }
+    ]
+  },
+  "steps": [
+    "Log successful trajectories along with the task that triggered them",
+    "Distill repeated ones into reusable procedures or scripts, with tests",
+    "Index procedures by task description so the agent can retrieve them",
+    "Revise or retire procedures when the codebase changes"
+  ],
+  "pitfalls": [
+    "Stale procedures replay outdated steps with confidence",
+    "Retrieving the wrong procedure sends the agent the wrong way",
+    "Unreviewed memories can store mistakes or unsafe shortcuts"
+  ],
+  "tools": [
+    "Agent Skills and CLAUDE.md",
+    "Letta",
+    "Mem0",
+    "LangGraph memory store",
+    "Voyager (research)"
+  ],
+  "remember": "Solve once, reuse many times.",
+  "caption": "The second run skips exploration because the working procedure was saved.",
+  "comparison": {
+    "scope": "How-to knowledge",
+    "cost": 2,
+    "needs": "Verified runs to learn from",
+    "best": "Stale or wrong procedures"
+  },
+  "diagram": {
+    "file": "diagrams/procmem.svg"
+  },
+  "lesson": {
+    "file": "skill_memory.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "LOG = []",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "def record(task, steps, tests_passed):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if tests_passed:                  # keep only verified runs",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        LOG.append({\"kind\": task.kind, \"steps\": steps})",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def distill(kind, min_runs=3):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    runs = [r for r in LOG if r[\"kind\"] == kind]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if len(runs) < min_runs:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return None",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    best = min(runs, key=lambda r: len(r[\"steps\"]))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return Skill(name=kind, steps=best[\"steps\"], check=\"make test\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "skill = distill(\"add_api_endpoint\")",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "store.add(text=skill.description, item=skill,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "          meta={\"commit\": git_head(), \"failures\": 0})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "hit = store.search(new_task.text, k=1)[0]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "if hit.score >= 0.80:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    plan = hit.item.steps                  # reuse the skill",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "else:",
+        "steps": []
+      },
+      {
+        "text": "    plan = agent.explore(new_task)         # no match: explore",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "agent.follow(plan)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "if run(skill.check) != 0:                  # verify every reuse",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "    hit.meta[\"failures\"] += 1",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if hit.meta[\"failures\"] >= 2:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        store.retire(skill.name)           # stale after a refactor",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Log verified runs",
+        "text": "Record each successful trajectory with the kind of task it solved. Only runs whose tests passed are kept, so mistakes are not memorized."
+      },
+      {
+        "title": "Distill a repeated routine",
+        "text": "After three runs of the same kind, keep the shortest one as a named skill: four steps plus a check (make test) that proves it worked."
+      },
+      {
+        "title": "Index the skill",
+        "text": "Store the skill under its description, with the commit it was learned on and a failure counter, so it can be found and audited later."
+      },
+      {
+        "title": "Retrieve at the start of a task",
+        "text": "A new task, adding a /payouts endpoint, matches the skill with similarity 0.86, above the 0.80 threshold, so the agent loads the skill instead of exploring."
+      },
+      {
+        "title": "Follow it and verify",
+        "text": "The agent finishes in 4 steps instead of 9 and runs the skill’s check. Verification is what makes reuse safe."
+      },
+      {
+        "title": "Revise or retire",
+        "text": "After a refactor the skill fails its check twice, so it is retired and the next run explores and learns a fresh version."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"16\" style=\"--d:0s\">Run log (verified runs only)</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"22\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"37\" text-anchor=\"middle\">run 1 · add /refunds · 9 steps · tests ✓</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"48\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"63\" text-anchor=\"middle\">run 2 · add /invoices · 10 steps · tests ✓</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"8\" y=\"74\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"89\" text-anchor=\"middle\">run 3 · add /mandates · 9 steps · tests ✓</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M180 98L180 112\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"64\" y=\"114\" width=\"232\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"132\" text-anchor=\"middle\">skill: add_api_endpoint · 4 steps</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"162\" width=\"164\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"90\" y=\"180\">Skill index</text><text class=\"sb\" x=\"90\" y=\"195\">commit a1f3 · failures 0</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"188\" y=\"162\" width=\"164\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"270\" y=\"176\" text-anchor=\"middle\">new task: add /payouts</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"188\" y=\"186\" width=\"164\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"270\" y=\"200\" text-anchor=\"middle\">match 0.86 ≥ 0.80</text></g><g class=\"a\" style=\"--d:0.35s\"><path class=\"ln acc\" d=\"M188 196L174 188\" marker-end=\"url(#arrA)\"/></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"62\" y=\"227\" style=\"text-anchor:end;--d:0s\">explore</text><rect x=\"68\" y=\"218\" width=\"160\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"68\" y=\"218\" width=\"160\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"234\" y=\"228\" style=\"--d:0.2s\">9 steps</text><text class=\"tl a\" x=\"62\" y=\"245\" style=\"text-anchor:end;--d:0.2s\">skill</text><rect x=\"68\" y=\"236\" width=\"160\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"68\" y=\"236\" width=\"71.11111111111111\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.3s\"/><text class=\"mono l a\" x=\"234\" y=\"246\" style=\"--d:0.4s\">4 steps · check ✓</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"296\" cy=\"114\" r=\"9\" class=\"bd-fail\"/><path d=\"M292.5 110.5l7 7M299.5 110.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.15s\"><text class=\"tag-t fail\" x=\"180\" y=\"155\">after refactor: check fails twice → retire, re-learn</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Cuts steps, tokens and time on work the agent has done before",
+      "Encodes team conventions once instead of correcting them every run",
+      "Skills are plain files: reviewable, versioned and shareable",
+      "Pairs naturally with verification, so reuse can be checked automatically"
+    ],
+    "cons": [
+      "Stale skills replay outdated steps with confidence",
+      "A loose retrieval threshold loads the wrong procedure",
+      "Needs curation: someone must review and retire skills",
+      "Little benefit for one-off or highly novel tasks"
+    ],
+    "avoidWhen": [
+      "Tasks rarely repeat, so there is nothing to reuse",
+      "The codebase changes faster than skills can be revalidated"
+    ],
+    "tools": [
+      {
+        "name": "Claude Code skills",
+        "type": "Agent feature (Anthropic)",
+        "what": "SKILL.md folders the agent loads when a task matches",
+        "url": "https://code.claude.com/docs/en/skills"
+      },
+      {
+        "name": "AGENTS.md",
+        "type": "Open convention",
+        "what": "Repository instructions any coding agent can read",
+        "url": "https://agents.md"
+      },
+      {
+        "name": "Letta",
+        "type": "Open source",
+        "what": "Stateful agents with editable long-term memory",
+        "url": "https://github.com/letta-ai/letta"
+      },
+      {
+        "name": "Mem0",
+        "type": "Open source · hosted option",
+        "what": "A memory layer that stores and retrieves facts and preferences",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "name": "LangGraph memory store",
+        "type": "Open source",
+        "what": "Long-term memory namespaces for LangGraph agents",
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "name": "Agent Workflow Memory",
+        "type": "Research code",
+        "what": "Inducing reusable workflows from past trajectories",
+        "url": "https://github.com/zorazrw/agent-workflow-memory"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fintech team’s coding agent has saved one skill, add_api_endpoint, distilled from three verified runs. This week ten tasks arrive. Each has a similarity score between its description and the skill’s. Exploring a task from scratch takes 9 steps; following the skill takes 4; following the wrong skill takes 12, because the agent must backtrack. Each step costs about 3,000 tokens.",
+    "controls": [
+      "Turn the skill library on or off, and say whether the codebase was refactored after the skill was saved.",
+      "Choose whether the skill ends with a check (make test) that verifies every reuse.",
+      "Drag the retrieval threshold: tasks at or above it load the skill."
+    ],
+    "outputs": [
+      {
+        "name": "Steps per task",
+        "meaning": "Total steps ÷ 10 tasks, shown against 9 for exploring everything."
+      },
+      {
+        "name": "Tasks done correctly",
+        "meaning": "Tasks whose change passes its tests."
+      },
+      {
+        "name": "Tokens for the 10 tasks",
+        "meaning": "Total steps × 3,000 tokens."
+      },
+      {
+        "name": "Skill reused correctly",
+        "meaning": "Endpoint tasks that loaded the skill."
+      },
+      {
+        "name": "Wrong skill retrieved",
+        "meaning": "Non-endpoint tasks that loaded it anyway."
+      },
+      {
+        "name": "Matching tasks missed",
+        "meaning": "Endpoint tasks below the threshold, explored from scratch."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Loose threshold",
+        "expect": "Threshold 0.60: 6 correct reuses and 2 wrong retrievals. Expect 6.6 steps per task, 198k tokens and 10 of 10 correct."
+      },
+      {
+        "k": "tuned",
+        "name": "Tuned threshold",
+        "expect": "Threshold 0.70: 6 reuses and 1 wrong retrieval. Expect 6.3 steps per task and 189k tokens, the lowest possible here."
+      },
+      {
+        "k": "strict",
+        "name": "Too strict",
+        "expect": "Threshold 0.90: only 1 reuse and 5 endpoint tasks missed. Expect 8.5 steps per task, barely better than exploring."
+      },
+      {
+        "k": "stale",
+        "name": "Stale, unchecked skill",
+        "expect": "Refactored codebase, no check, threshold 0.75: 5 reuses at 4 steps look fast (6.5 steps per task), but only 5 of 10 tasks are correct."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Bring the average down to 6.3 steps per task with every task correct.",
+        "hint": "Wrong retrievals cost 12 steps and missed matches cost 9. Look for the threshold that admits 0.71 but not 0.66."
+      },
+      {
+        "k": "clean",
+        "text": "Reuse the skill at least 5 times with no wrong retrievals and every task correct.",
+        "hint": "The first non-endpoint task scores 0.74. Keep the threshold above it but not above 0.78."
+      },
+      {
+        "k": "stale",
+        "text": "After a refactor, keep every task correct while still saving steps over exploring.",
+        "hint": "Tick the refactor box and keep the skill’s check on: the first failure is caught and the skill is revised."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude Code skills",
+        "type": "Agent feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Folders with a SKILL.md file that the agent loads when a task matches the skill’s description.",
+        "ex": "A skill for adding an API endpoint lists the files to touch, the patterns to copy and ends with make test.",
+        "pros": [
+          "Plain Markdown, reviewed like code",
+          "Loaded only when relevant, so it costs no context otherwise"
+        ],
+        "cons": [
+          "Specific to Claude Code",
+          "Skills still need someone to keep them current"
+        ],
+        "url": "https://code.claude.com/docs/en/skills"
+      },
+      {
+        "n": "AGENTS.md",
+        "type": "Open convention",
+        "start": 3,
+        "prod": 2,
+        "best": "A repository-level instruction file that many coding agents read: build commands, conventions and gotchas.",
+        "ex": "One AGENTS.md at the repo root tells every agent to run make lint before committing.",
+        "pros": [
+          "Works across many agents",
+          "Zero infrastructure"
+        ],
+        "cons": [
+          "Always-on text, so it competes for context",
+          "No retrieval or versioning of individual procedures"
+        ],
+        "url": "https://agents.md"
+      },
+      {
+        "n": "Letta",
+        "type": "Open source · hosted option",
+        "start": 2,
+        "prod": 2,
+        "best": "Stateful agents whose memory blocks the agent can read and edit across sessions.",
+        "ex": "An operations agent keeps an editable runbook block and updates it after each incident.",
+        "pros": [
+          "Memory is a first-class part of the agent",
+          "Self-hostable"
+        ],
+        "cons": [
+          "An agent framework to adopt, not a drop-in library",
+          "Memory quality still depends on what the agent writes"
+        ],
+        "url": "https://github.com/letta-ai/letta"
+      },
+      {
+        "n": "Mem0",
+        "type": "Open source · hosted option",
+        "start": 3,
+        "prod": 2,
+        "best": "A memory layer that extracts, stores and retrieves facts and preferences for any agent.",
+        "ex": "A support agent recalls that a merchant settles via NEFT, not UPI, without being told again.",
+        "pros": [
+          "Quick to add to an existing agent",
+          "Works with many model providers"
+        ],
+        "cons": [
+          "Geared more to facts than step-by-step procedures",
+          "Retrieved memories need review for staleness"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "n": "LangGraph memory store",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Namespaced long-term memory for LangGraph agents, persisted alongside checkpoints.",
+        "ex": "Store a distilled workflow per task type and search it by description at the start of each run.",
+        "pros": [
+          "Integrates with LangGraph persistence",
+          "Pluggable storage backends"
+        ],
+        "cons": [
+          "Best inside the LangGraph ecosystem",
+          "You design the distillation logic yourself"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "n": "Agent Workflow Memory",
+        "type": "Research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Learning how workflows are induced from past trajectories and reused on new web tasks.",
+        "ex": "Reproduce the paper’s workflow induction on a few of your own logged trajectories.",
+        "pros": [
+          "Clear, published method",
+          "Shows measurable gains from reuse"
+        ],
+        "cons": [
+          "Research code, not a product",
+          "Built around web-navigation benchmarks"
+        ],
+        "url": "https://github.com/zorazrw/agent-workflow-memory"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Coding agent in one repository",
+        "tool": "Claude Code skills or AGENTS.md"
+      },
+      {
+        "need": "Memory inside your own agent framework",
+        "tool": "LangGraph memory store or Letta"
+      },
+      {
+        "need": "Understand the research",
+        "tool": "Agent Workflow Memory"
+      }
+    ],
+    "goals": [
+      "Explain how procedural memory differs from semantic and episodic memory",
+      "Choose a retrieval threshold by weighing wrong retrievals against missed matches",
+      "Explain why every reused procedure needs a verification step"
+    ]
+  },
+  "practice": {
+    "scenario": "A fintech team asks its coding agent to add a new REST endpoint almost every week: route, validation, service call, tests and API docs. After the first successful run, the steps are saved as a skill with a checklist, so later runs follow it instead of rediscovering the project layout.",
+    "industries": [
+      {
+        "industry": "Customer support",
+        "use": "A refund or KYC investigation saved as a checked playbook the agent reuses"
+      },
+      {
+        "industry": "Back-office operations",
+        "use": "Month-end reconciliation steps distilled from past successful runs"
+      },
+      {
+        "industry": "Software teams",
+        "use": "Adding an endpoint or a migration follows a saved, tested skill"
+      }
+    ],
+    "analogy": "A recipe card. The first time you cook a dish you experiment; after that you follow the card.",
+    "library": {
+      "name": "Claude Code skills",
+      "what": "A skill is a folder with a SKILL.md file: a name, a description the agent matches tasks against, and the steps.",
+      "install": "mkdir -p .claude/skills/add-api-endpoint"
+    },
+    "samples": [
+      {
+        "file": "SKILL.md",
+        "language": "markdown",
+        "code": "---\nname: add-api-endpoint\ndescription: Add a REST endpoint to the orders service using team conventions.\n---\n\n1. Add the route in `services/orders/routes.py`; copy the `/orders/{id}` pattern.\n2. Define request and response models in `schemas.py` with Pydantic.\n3. Call the service layer only. No database access inside routes.\n4. Add tests in `tests/test_routes.py`: one happy path, one 422 validation case.\n5. Run `make test` and `make openapi`. Both must pass before you finish."
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Without a skill a task takes 9 steps; with it, 4. The task runs 20 times a month at about 3k tokens per step. How many tokens does the skill save per month, in thousands?",
+    "answer": "(9 − 4) steps × 3k tokens × 20 runs = 300k tokens a month, plus fewer chances to go wrong.",
+    "expected": {
+      "value": 300,
+      "tolerance": 1,
+      "label": "k tokens ="
+    },
+    "interview": [
+      {
+        "question": "What's the difference between procedural, semantic and episodic memory for agents?",
+        "answer": "Procedural memory stores how to do things (workflows, skills). Semantic memory stores facts (codebase conventions, domain knowledge). Episodic memory stores specific past runs. Procedural mostly cuts steps; semantic cuts lookups."
+      },
+      {
+        "question": "How do you keep procedural memories from going stale?",
+        "answer": "Tie each procedure to tests or checks, record its source and date, re-validate it when related code changes, and retire procedures that start failing."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Saving every trajectory as memory",
+        "fix": "Save only repeated, successful, reviewed procedures"
+      },
+      {
+        "mistake": "Skills with no verification step",
+        "fix": "End every skill with a check such as tests passing"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pm01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Every Monday a coding agent spends 20 minutes rediscovering how the team deploys a hotfix: which branch, which checks, which approvals. What is the most direct fix?",
+      "options": [
+        "Switch to a model with a larger context window",
+        "Save the verified deployment routine as a skill the agent retrieves when the task matches",
+        "Add more tools to the agent",
+        "Lower the model temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The routine is stable and repeated, which is exactly what procedural memory is for: solve once, reuse many times."
+    },
+    {
+      "id": "pm02",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "You are writing a skill for “add an API endpoint to the payments service”. What belongs in it? Select all that apply.",
+      "options": [
+        "The files to touch and the patterns to copy",
+        "A final check, such as make test, that proves it worked",
+        "A specific description of when the skill applies",
+        "The full transcripts of every past run"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A skill is a concise, reusable procedure with a check and a description for retrieval. Raw transcripts are episodic records and waste context."
+    },
+    {
+      "id": "pm03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Without a skill a catalogue-import task takes 11 steps; with it, 5. It runs 30 times a month at about 2,500 tokens per step. How many tokens does the skill save per month?",
+      "options": [
+        "450,000",
+        "375,000",
+        "825,000",
+        "150,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(11 − 5) steps × 2,500 tokens × 30 runs = 450,000 tokens a month."
+    },
+    {
+      "id": "pm04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "After a database schema migration, the claims team’s coding agent keeps producing migrations that fail review, always using the same saved procedure. What is the most likely cause?",
+      "options": [
+        "The model has become less capable",
+        "The saved procedure is stale and still encodes the old schema",
+        "The retrieval threshold is too high",
+        "Prefix caching is serving old outputs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stale procedures replay outdated steps with confidence. Track failures per skill and revise or retire it."
+    },
+    {
+      "id": "pm05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "At a retrieval threshold of 0.60, the agent loads the “add endpoint” skill for a task about rotating API keys, then wastes steps backtracking. What should you change first?",
+      "options": [
+        "Remove the skill library",
+        "Raise the threshold and sharpen the skill’s description, then measure on real tasks",
+        "Lower the threshold further",
+        "Add the rotation steps to the endpoint skill"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A loose threshold causes wrong retrievals. Tune it on labelled tasks and make descriptions specific about when the skill applies."
+    },
+    {
+      "id": "pm06",
+      "kind": "multi",
+      "industry": "Healthcare IT",
+      "question": "Which details should be stored with each saved skill so it can be audited later? Select all that apply.",
+      "options": [
+        "The commit or date it was learned on",
+        "How many times its check has failed",
+        "Who reviewed or owns it",
+        "Patient records that appeared in the run it came from"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Provenance and failure counts show when a skill may be stale. Never store sensitive data such as patient records in memory."
+    },
+    {
+      "id": "pm07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A support agent “knows” that the billing service is written in Go and owned by the payments team. Which kind of memory is this?",
+      "options": [
+        "Procedural",
+        "Semantic",
+        "Episodic",
+        "Working"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Facts about the world or codebase are semantic memory. Procedural memory is how to do something."
+    },
+    {
+      "id": "pm08",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An agent recalls that on 3 March it failed to reconcile an exchange trade file because of a time-zone bug. Which kind of memory is this?",
+      "options": [
+        "Episodic",
+        "Procedural",
+        "Semantic",
+        "Parametric"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A record of a specific past event is episodic memory. Distilled into a rule or routine, it could become procedural."
+    },
+    {
+      "id": "pm09",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "In the Voyager research agent, what does the skill library contain?",
+      "options": [
+        "Executable programs, retrieved by matching their descriptions to the current task",
+        "Fine-tuned copies of the model",
+        "Screenshots of past games",
+        "A SQL table of rewards"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Voyager stores working code as skills, indexed by description, and composes them for new tasks."
+    },
+    {
+      "id": "pm10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A Claude Code skill lives in a folder with a SKILL.md file. What mainly decides whether the agent loads it for a task?",
+      "options": [
+        "The size of the folder",
+        "The skill’s description matching the task, or the user invoking it by name",
+        "The alphabetical order of skills",
+        "The time of day"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The description is what the agent matches against; a skill’s body loads only when it is used."
+    },
+    {
+      "id": "pm11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Exploring takes 9 steps, following the right skill 4, following a wrong skill 12. Of 10 tasks, 6 reuse correctly, 2 load the wrong skill and 2 are explored. What is the average steps per task?",
+      "options": [
+        "6.6",
+        "5.8",
+        "7.2",
+        "4.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(6 × 4 + 2 × 12 + 2 × 9) ÷ 10 = (24 + 24 + 18) ÷ 10 = 6.6."
+    },
+    {
+      "id": "pm12",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which are signs that a saved procedure should be revised or retired? Select all that apply.",
+      "options": [
+        "Its check has failed on the last few reuses",
+        "An API it calls has been deprecated",
+        "It has been reused 200 times successfully",
+        "The part of the codebase it touches was refactored"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Failures, deprecations and refactors signal staleness. Many successful reuses are a reason to keep it."
+    },
+    {
+      "id": "pm13",
+      "kind": "single",
+      "industry": "Legal tech",
+      "question": "A team proposes saving every agent trajectory as memory “so nothing is lost”. What is the better policy?",
+      "options": [
+        "Save everything; retrieval will sort it out",
+        "Save only repeated routines from verified, successful runs, after review",
+        "Save only failed runs, to learn from them",
+        "Save nothing and rely on the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Saving everything memorizes mistakes and floods retrieval. Keep verified, reviewed procedures."
+    },
+    {
+      "id": "pm14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When is a repository instruction file such as AGENTS.md or CLAUDE.md enough, without separate skills?",
+      "options": [
+        "For short conventions that apply to almost every task, such as “run make lint before committing”",
+        "For long, rarely needed procedures",
+        "For storing customer data",
+        "Never; skills are always better"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Always-on files suit short, universal rules. Long procedures belong in skills that load only when relevant."
+    },
+    {
+      "id": "pm15",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A skill cuts a task from 8 steps to 3, and it applies to 40% of tasks; the rest still take 8. What is the new average steps per task?",
+      "options": [
+        "6.0",
+        "5.5",
+        "3.0",
+        "7.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.4 × 3 + 0.6 × 8 = 1.2 + 4.8 = 6.0 steps."
+    },
+    {
+      "id": "pm16",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What can go wrong with procedural memory that nobody reviews? Select all that apply.",
+      "options": [
+        "It can store unsafe shortcuts, such as skipping tests",
+        "It can replay a mistake on every future run",
+        "It can capture secrets that appeared during a run",
+        "It makes the model’s weights larger"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Memory is data the agent trusts. Review it like code. It does not change model weights."
+    },
+    {
+      "id": "pm17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What does the Agent Workflow Memory approach do?",
+      "options": [
+        "Induces reusable workflows from past trajectories and gives them to the agent on new tasks",
+        "Compresses the KV cache",
+        "Fine-tunes the model on every run",
+        "Runs tools in parallel"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It extracts common sub-routines from past runs and supplies them as guidance, improving success on web-navigation tasks."
+    },
+    {
+      "id": "pm18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Skill descriptions such as “helper for backend stuff” cause poor retrieval. What fixes it?",
+      "options": [
+        "Longer skill bodies",
+        "Specific descriptions of what the skill does and when to use it",
+        "Randomizing skill order",
+        "Removing descriptions entirely"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieval matches the task against the description, so it must say precisely what the skill is for."
+    },
+    {
+      "id": "pm19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A successful run that added a UPI payment method took 14 steps, including a 5-step dead end. What should the saved skill contain?",
+      "options": [
+        "All 14 steps, exactly as they happened",
+        "The cleaned-up 9 steps that mattered, plus a check",
+        "Only the dead end, as a warning",
+        "Nothing; one run is not enough to save"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Distil the working path without detours and end with a check. The dead end can be a one-line warning."
+    },
+    {
+      "id": "pm20",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which metrics show whether a skill library is actually helping? Select all that apply.",
+      "options": [
+        "Average steps per task",
+        "Token cost per task",
+        "Task success rate",
+        "Number of skills stored"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Outcomes and costs matter. The number of stored skills is a vanity metric."
+    }
+  ]
+}

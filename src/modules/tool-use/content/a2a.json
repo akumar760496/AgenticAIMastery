@@ -1,0 +1,897 @@
+{
+  "id": "a2a",
+  "moduleSlug": "tool-use",
+  "name": "Agent-to-Agent Protocols (A2A)",
+  "shortName": "A2A",
+  "question": "How does my agent hand work to another agent?",
+  "summary": "A2A lets one agent delegate a task to an opaque remote agent, usually one run by another organisation. The client discovers the remote agent through its Agent Card, sends messages, and tracks a Task through states such as working, input required and completed, by polling, streaming or push notifications, then collects the artifacts it returns. MCP connects an agent to tools; A2A connects agents as peers.",
+  "useCases": [
+    "Handing a whole goal to a partner’s agent: rebooking, claims, estimates",
+    "Long-running work with questions back to the requester",
+    "Agents built on different frameworks or by different companies"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Agent Card",
+        "detail": "/.well-known/agent-card.json: identity, skills, capabilities, security schemes, signatures"
+      },
+      {
+        "term": "Task lifecycle",
+        "detail": "WORKING, INPUT_REQUIRED, AUTH_REQUIRED, COMPLETED, FAILED, CANCELED, REJECTED"
+      },
+      {
+        "term": "Delivery",
+        "detail": "poll with GetTask, stream updates, or push notifications"
+      },
+      {
+        "term": "Bindings",
+        "detail": "JSON-RPC 2.0, gRPC, HTTP+JSON/REST"
+      },
+      {
+        "term": "Version",
+        "detail": "v1.0.0 (March 2026) adds signed Agent Cards"
+      },
+      {
+        "term": "Governance",
+        "detail": "Linux Foundation project since June 2025; joined the Agentic AI Foundation in August 2026"
+      }
+    ]
+  },
+  "steps": [
+    "Decide whether you need a tool (one function) or an agent (a goal with judgment)",
+    "Publish an Agent Card with skills, capabilities and security schemes, and sign it",
+    "Discover and verify the remote card, then send a message and receive a Task",
+    "Handle INPUT_REQUIRED, stream or push updates, and collect artifacts; map failures to your retry policy"
+  ],
+  "pitfalls": [
+    "Treating INPUT_REQUIRED as a failure: it is an interrupted state waiting for your answer",
+    "Delegating a deterministic lookup that should be an API or MCP tool",
+    "Trusting an unsigned or unverified card from an unknown domain"
+  ],
+  "tools": [
+    "A2A Python SDK",
+    "A2A specification",
+    "Google ADK",
+    "A2A Inspector"
+  ],
+  "remember": "Tools get calls. Agents get tasks.",
+  "caption": "Illustrative flight rebooking. The task pauses once for a question, then completes with an artifact.",
+  "comparison": {
+    "scope": "Agent to agent",
+    "cost": 4,
+    "needs": "High: cards, auth, task handling",
+    "best": "Delegating what a tool could do"
+  },
+  "diagram": {
+    "file": "diagrams/a2a.svg"
+  },
+  "lesson": {
+    "file": "delegate_estimate.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import time, uuid, httpx",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# A tool is one function with a schema. An agent takes a goal and uses judgment.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# Our claims agent delegates estimate negotiation to the garage chain's agent.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "MY_CARD = {\"name\": \"Claims agent\", \"version\": \"1.0.0\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "           \"supportedInterfaces\": [{\"url\": \"https://agents.example-ins.in/a2a\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                    \"protocolBinding\": \"JSONRPC\"}],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "           \"capabilities\": {\"streaming\": True, \"pushNotifications\": False},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "           \"skills\": [{\"id\": \"claim_status\", \"name\": \"Claim status\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                       \"description\": \"Status of a motor claim\"}]}   # signed at publish",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "BASE = \"https://agents.example-garage.in\"",
+        "steps": []
+      },
+      {
+        "text": "card = httpx.get(f\"{BASE}/.well-known/agent-card.json\").json()",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "verify_card_signature(card, trusted_keys)          # reject unsigned cards",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "assert any(s[\"id\"] == \"negotiate_estimate\" for s in card[\"skills\"])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "task = rpc(\"SendMessage\", msg(\"Agree a repair estimate for CLM-88412 within ₹62,000.\"))[\"task\"]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "TERMINAL = {\"TASK_STATE_COMPLETED\", \"TASK_STATE_FAILED\",",
+        "steps": [
+          4,
+          6
+        ]
+      },
+      {
+        "text": "            \"TASK_STATE_CANCELED\", \"TASK_STATE_REJECTED\"}",
+        "steps": [
+          4,
+          6
+        ]
+      },
+      {
+        "text": "for event in stream(task[\"id\"]):                   # SubscribeToTask: no polling",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    task = event.get(\"task\", task) if \"task\" in event else apply(task, event)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    state = task[\"status\"][\"state\"]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if state == \"TASK_STATE_INPUT_REQUIRED\":       # interrupted, not failed",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        answer = ask_claims_handler(task[\"status\"][\"message\"])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        rpc(\"SendMessage\", msg(answer, taskId=task[\"id\"], contextId=task[\"contextId\"]))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    elif state in TERMINAL:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        break",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "if state != \"TASK_STATE_COMPLETED\":",
+        "steps": []
+      },
+      {
+        "text": "    raise DelegationFailed(state)                  # your retry policy decides",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "estimate = task[\"artifacts\"][0][\"parts\"]           # the approved estimate",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Tool or agent?",
+        "text": "A status lookup is one function: offer a tool or an API. Negotiating an estimate needs judgment, questions back and time, so it is delegated to an agent."
+      },
+      {
+        "title": "Publish your Agent Card",
+        "text": "The card names the agent, where to reach it, what it can do (streaming, push), its skills and security schemes. Version 1.0 lets you sign it."
+      },
+      {
+        "title": "Discover and verify the remote card",
+        "text": "Fetch the garage agent’s card from its well-known path, check the signature against keys you trust, and confirm the skill you need is listed."
+      },
+      {
+        "title": "Send a message, get a Task",
+        "text": "SendMessage starts the work and returns a Task with an id and a state, usually TASK_STATE_WORKING. The remote agent stays opaque: you see states and results, not its tools."
+      },
+      {
+        "title": "Follow states; answer questions",
+        "text": "Streaming delivers each state change as it happens. INPUT_REQUIRED is an interrupted state: answer it in a new message on the same task and work resumes."
+      },
+      {
+        "title": "Collect artifacts; map failures",
+        "text": "COMPLETED carries the artifacts, here the approved estimate. FAILED, CANCELED or REJECTED are terminal: hand them to your own retry or escalation policy."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"168\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"22\" text-anchor=\"middle\">tool: get_claim_status</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx acc\" x=\"184\" y=\"8\" width=\"168\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"22\" text-anchor=\"middle\">agent: negotiate</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"38\" width=\"130\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"73\" y=\"53\">Claims agent</text><text class=\"sb\" x=\"73\" y=\"68\">card · signed</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln acc\" d=\"M140 50L220 50\" marker-end=\"url(#arrA)\"/></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"222\" y=\"38\" width=\"130\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"287\" y=\"53\">Garage agent</text><text class=\"sb\" x=\"287\" y=\"68\">card ✓ signature</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"222\" y=\"78\" width=\"130\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"287\" y=\"91\" text-anchor=\"middle\">negotiate_estimate</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M220 66L140 66\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"104\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"118\" text-anchor=\"middle\">SendMessage → Task t-51 · TASK_STATE_WORKING</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"134\" width=\"100\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"58\" y=\"149\" text-anchor=\"middle\">WORKING</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"112\" y=\"134\" width=\"130\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"177\" y=\"149\" text-anchor=\"middle\">INPUT_REQUIRED</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx \" x=\"246\" y=\"134\" width=\"106\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"149\" text-anchor=\"middle\">WORKING</text></g><text class=\"sb a\" x=\"180\" y=\"174\" style=\"--d:0.4s\">“Approve OEM parts or aftermarket?” → “OEM”</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"188\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"204\" text-anchor=\"middle\">COMPLETED</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"134\" y=\"188\" width=\"218\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"243\" y=\"204\" text-anchor=\"middle\">artifact: estimate ₹58,400</text></g><text class=\"sb a\" x=\"180\" y=\"236\" style=\"--d:0.3s\">FAILED · CANCELED · REJECTED → your retry policy</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Delegates whole goals across frameworks and organisations",
+      "Long-running tasks with questions back, streaming and push",
+      "Agent Cards make discovery and security explicit",
+      "Remote agents stay opaque: no need to expose their tools"
+    ],
+    "cons": [
+      "Heavier than a tool call: cards, auth, task state handling",
+      "Less predictable than a deterministic API",
+      "Trust and signing must be managed across organisations",
+      "Fewer production deployments than MCP so far"
+    ],
+    "avoidWhen": [
+      "A deterministic lookup or action: expose an API or MCP tool",
+      "Agents you own in one process: coordinate them with a graph"
+    ],
+    "tools": [
+      {
+        "name": "A2A Python SDK",
+        "type": "Open source",
+        "what": "Client and server libraries for the A2A protocol",
+        "url": "https://github.com/a2aproject/a2a-python"
+      },
+      {
+        "name": "A2A specification",
+        "type": "Open standard",
+        "what": "Agent Cards, task states, bindings and security",
+        "url": "https://a2a-protocol.org/latest/specification/"
+      },
+      {
+        "name": "Google ADK",
+        "type": "Open source",
+        "what": "Building agents and exposing or consuming them over A2A",
+        "url": "https://adk.dev/a2a/"
+      },
+      {
+        "name": "A2A Inspector",
+        "type": "Open source",
+        "what": "Validating Agent Cards and testing A2A servers",
+        "url": "https://github.com/a2aproject/a2a-inspector"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An insurer’s claims agent delegates work to a garage chain’s agent over A2A. The task can be a 2 s status lookup, an estimate negotiation that pauses once to ask “Approve OEM parts or aftermarket?” (6 s of work, then 8 s more), or a 42 s survey. A polling client calls GetTask every 5 s.",
+    "controls": [
+      "Choose the task and the delivery mode: polling, streaming or push notifications.",
+      "Choose how the client handles INPUT_REQUIRED.",
+      "Set what the remote Agent Card offers (signature, streaming, push) and whether the client verifies the signature."
+    ],
+    "outputs": [
+      {
+        "name": "State timeline",
+        "meaning": "The task states the client sees, in order."
+      },
+      {
+        "name": "Card verified",
+        "meaning": "Whether the card’s signature was checked against a trusted key."
+      },
+      {
+        "name": "Messages sent",
+        "meaning": "SendMessage calls, including answers to questions."
+      },
+      {
+        "name": "GetTask polls",
+        "meaning": "Polling calls made before the final state was seen."
+      },
+      {
+        "name": "Result seen after",
+        "meaning": "Seconds until the client sees the final state."
+      },
+      {
+        "name": "Use MCP or an API instead?",
+        "meaning": "Shown when the task is a single stateless lookup."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Question treated as failure",
+        "expect": "The negotiation pauses for input after 6 s; the client, polling, sees it at 10 s after 2 polls and wrongly marks the task failed."
+      },
+      {
+        "k": "unsigned",
+        "name": "Unverified card",
+        "expect": "An unsigned card that nobody checks: the 2 s lookup completes after 1 poll, but nothing proved who you were talking to."
+      },
+      {
+        "k": "long",
+        "name": "Long task, polling",
+        "expect": "The 42 s survey completes, but polling takes 9 GetTask calls and sees the result at 45 s. This card does not advertise streaming."
+      },
+      {
+        "k": "quick",
+        "name": "A lookup, delegated",
+        "expect": "The 2 s status lookup completes after 1 poll. It works, but one stateless function is better offered as an API or MCP tool."
+      }
+    ],
+    "missions": [
+      {
+        "k": "input",
+        "text": "Complete the negotiation, which passes through INPUT_REQUIRED.",
+        "hint": "INPUT_REQUIRED is an interrupted state. Answer the question on the same task."
+      },
+      {
+        "k": "nopoll",
+        "text": "Finish the 42 s survey with zero GetTask polls.",
+        "hint": "Choose streaming or push, and make sure the card advertises that capability."
+      },
+      {
+        "k": "reject",
+        "text": "Refuse an unsigned Agent Card before any claim data is sent.",
+        "hint": "Untick the signature and turn verification on."
+      }
+    ],
+    "tools": [
+      {
+        "n": "A2A Python SDK",
+        "type": "Open source · official SDK",
+        "start": 2,
+        "prod": 2,
+        "best": "Building A2A clients and servers in Python.",
+        "ex": "Expose a claims-status agent with an Agent Card and handle incoming tasks.",
+        "pros": [
+          "Maintained with the specification",
+          "Client and server helpers"
+        ],
+        "cons": [
+          "APIs change between protocol versions",
+          "Fewer examples than MCP SDKs"
+        ],
+        "url": "https://github.com/a2aproject/a2a-python"
+      },
+      {
+        "n": "A2A specification",
+        "type": "Open standard · Linux Foundation",
+        "start": 2,
+        "prod": 3,
+        "best": "The definitive reference for Agent Cards, task states, bindings and security.",
+        "ex": "Check which task states are terminal before writing your client loop.",
+        "pros": [
+          "Normative definitions",
+          "Covers JSON-RPC, gRPC and HTTP+JSON bindings"
+        ],
+        "cons": [
+          "Dense to read",
+          "Implementations may lag behind it"
+        ],
+        "url": "https://a2a-protocol.org/latest/specification/"
+      },
+      {
+        "n": "Google ADK",
+        "type": "Open source · by Google",
+        "start": 3,
+        "prod": 2,
+        "best": "Building agents and exposing or consuming them over A2A.",
+        "ex": "An ADK travel agent calls an airline’s remote agent as a sub-agent over A2A.",
+        "pros": [
+          "A2A support built into the framework",
+          "Good tutorials"
+        ],
+        "cons": [
+          "ADK conventions to adopt",
+          "Best fit inside Google’s ecosystem"
+        ],
+        "url": "https://adk.dev/a2a/"
+      },
+      {
+        "n": "A2A Inspector",
+        "type": "Open source · developer tool",
+        "start": 3,
+        "prod": 1,
+        "best": "Validating an Agent Card and exchanging test messages with an A2A server.",
+        "ex": "Point it at your agent’s URL and check that the card and a test task are well formed.",
+        "pros": [
+          "Quick conformance checks",
+          "Shows raw messages"
+        ],
+        "cons": [
+          "Manual testing only",
+          "Not a load or security test"
+        ],
+        "url": "https://github.com/a2aproject/a2a-inspector"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Build an A2A agent in Python",
+        "tool": "A2A Python SDK or Google ADK"
+      },
+      {
+        "need": "Check a card and a test task",
+        "tool": "A2A Inspector"
+      },
+      {
+        "need": "Settle a protocol question",
+        "tool": "The A2A specification"
+      }
+    ],
+    "goals": [
+      "Decide when to delegate to an agent rather than call a tool",
+      "Trace a task through WORKING, INPUT_REQUIRED and COMPLETED",
+      "Explain Agent Card discovery and why signature checks matter"
+    ]
+  },
+  "practice": {
+    "scenario": "An insurer’s claims agent needs a repair estimate agreed for a damaged car. Rather than calling a single garage API, it delegates the whole negotiation to the garage chain’s own agent over A2A: it reads the garage’s Agent Card, sends a task, answers one question (“Approve OEM parts or aftermarket?”) when the task pauses in INPUT_REQUIRED, and receives the approved estimate as an artifact.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Claims agents delegating estimates and surveys to partner agents"
+      },
+      {
+        "industry": "Travel",
+        "use": "An agency’s agent handing rebooking to an airline’s own agent"
+      },
+      {
+        "industry": "Logistics",
+        "use": "A shipper’s agent asking a carrier’s agent to arrange a pickup and report back"
+      }
+    ],
+    "analogy": "Hiring a contractor rather than buying a tool. You describe the job, answer their questions as they come up, and receive the finished work, without seeing how they did it.",
+    "library": {
+      "name": "A2A Python SDK (a2a-sdk)",
+      "what": "Client and server libraries for the A2A protocol. The example shows the underlying JSON-RPC calls so every field is visible.",
+      "install": "pip install a2a-sdk httpx"
+    },
+    "note": "Raw JSON-RPC against A2A v1.0. verify_card_signature, token and ask_claims_handler stand for your own code; check field names against the specification.",
+    "samples": [
+      {
+        "file": "delegate_estimate.py",
+        "language": "python",
+        "code": "import time, uuid, httpx\n\nBASE = \"https://agents.example-garage.in\"\ncard = httpx.get(f\"{BASE}/.well-known/agent-card.json\").json()\nverify_card_signature(card)                           # reject unsigned or unverifiable cards\nassert any(s[\"id\"] == \"negotiate_estimate\" for s in card[\"skills\"])\nA2A_URL = f\"{BASE}/a2a\"                               # the JSON-RPC endpoint the card lists\n\ndef rpc(method: str, params: dict) -> dict:\n    r = httpx.post(A2A_URL, timeout=30, headers={\"A2A-Version\": \"1.0\", \"Authorization\": f\"Bearer {token}\"},\n                   json={\"jsonrpc\": \"2.0\", \"id\": str(uuid.uuid4()), \"method\": method, \"params\": params})\n    r.raise_for_status()\n    body = r.json()\n    if \"error\" in body:\n        raise RuntimeError(body[\"error\"])\n    return body[\"result\"]\n\ndef msg(text: str, **ids) -> dict:\n    return {\"message\": {\"messageId\": str(uuid.uuid4()), \"role\": \"ROLE_USER\", \"parts\": [{\"text\": text}], **ids}}\n\nres = rpc(\"SendMessage\", msg(\"Agree a repair estimate for claim CLM-88412 within ₹62,000.\"))\ntask = res.get(\"task\", res)\nDONE = {\"TASK_STATE_COMPLETED\", \"TASK_STATE_FAILED\", \"TASK_STATE_CANCELED\", \"TASK_STATE_REJECTED\"}\nwhile task[\"status\"][\"state\"] not in DONE:\n    if task[\"status\"][\"state\"] == \"TASK_STATE_INPUT_REQUIRED\":   # interrupted, not failed\n        question = task[\"status\"][\"message\"][\"parts\"][0][\"text\"]\n        res = rpc(\"SendMessage\", msg(ask_claims_handler(question),\n                                     taskId=task[\"id\"], contextId=task[\"contextId\"]))\n        task = res.get(\"task\", res)\n    else:\n        time.sleep(5)\n        task = rpc(\"GetTask\", {\"id\": task[\"id\"]})\nestimate = task.get(\"artifacts\", [])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A remote agent’s task takes 42 s. Your client polls GetTask every 5 s, starting 5 s after sending the message, until it sees the final state. How many GetTask calls does it make? (With streaming it would make none.)",
+    "answer": "Polls at 5, 10, 15, 20, 25, 30, 35 and 40 s still see WORKING; the poll at 45 s sees COMPLETED. That is 9 GetTask calls, and the result arrives up to 3 s late. Streaming or push notifications deliver it when it happens.",
+    "expected": {
+      "value": 9,
+      "tolerance": 0,
+      "label": "GetTask calls ="
+    },
+    "interview": [
+      {
+        "question": "When would you use A2A rather than MCP?",
+        "answer": "MCP connects an agent to tools and data it controls: deterministic functions with schemas. A2A is for delegating a goal to another agent, often another organisation’s, that plans for itself, may ask questions, runs for a long time and returns artifacts. If the job is one stateless function, such as a status lookup, offer an API or MCP tool instead."
+      },
+      {
+        "question": "How does an A2A client handle a long task that needs input?",
+        "answer": "It sends a message and gets a Task. It follows state changes by polling GetTask, streaming, or push notifications. If the state becomes INPUT_REQUIRED, it reads the question, gets the answer, and sends a new message with the same taskId and contextId; the task returns to WORKING. It stops on a terminal state and collects artifacts."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Treating INPUT_REQUIRED as terminal and marking the task failed",
+        "fix": "Answer the question in a new message on the same task"
+      },
+      {
+        "mistake": "Accepting any Agent Card fetched over the network",
+        "fix": "Verify the card’s signature and domain before sending data"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "aa01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer’s claims agent wants a garage chain’s own agent to negotiate a repair estimate. Which protocol fits?",
+      "options": [
+        "MCP tools/call on a garage API",
+        "A2A: delegate a task to the remote agent",
+        "A shared database",
+        "SMTP"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Delegating a goal to another organisation’s agent is what A2A is for."
+    },
+    {
+      "id": "aa02",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Where does an A2A client look for a remote agent’s card by convention?",
+      "options": [
+        "/robots.txt",
+        "/.well-known/agent-card.json",
+        "/api/v1/tools",
+        "/mcp"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Agent Cards are published at /.well-known/agent-card.json."
+    },
+    {
+      "id": "aa03",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A task’s state becomes INPUT_REQUIRED. What does it mean?",
+      "options": [
+        "The task failed",
+        "The task is interrupted and waiting for input from the client",
+        "The task was cancelled",
+        "The card is invalid"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "INPUT_REQUIRED is an interrupted state; answer it and work resumes."
+    },
+    {
+      "id": "aa04",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are terminal task states in A2A? Select all that apply.",
+      "options": [
+        "COMPLETED",
+        "FAILED",
+        "CANCELED",
+        "INPUT_REQUIRED"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "COMPLETED, FAILED, CANCELED and REJECTED are terminal; INPUT_REQUIRED and AUTH_REQUIRED are interrupted."
+    },
+    {
+      "id": "aa05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A partner bank wants only a refund status by UTR number. What should you offer?",
+      "options": [
+        "An A2A agent with an Agent Card",
+        "An authenticated API or a read-only MCP tool",
+        "A shared spreadsheet",
+        "An email inbox"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A deterministic lookup is a function, not a task to delegate."
+    },
+    {
+      "id": "aa06",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A remote task takes 42 s and the client polls GetTask every 5 s, starting 5 s after sending. How many polls until it sees the final state?",
+      "options": [
+        "8",
+        "9",
+        "10",
+        "42"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Polls at 5–40 s see WORKING; the 45 s poll sees COMPLETED: 9 polls."
+    },
+    {
+      "id": "aa07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How does A2A describe its relationship to MCP?",
+      "options": [
+        "They are the same protocol",
+        "MCP is vertical (agent to tools); A2A is horizontal (agent to agent)",
+        "A2A replaces MCP",
+        "MCP is for agents, A2A for tools"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A2A presents MCP as vertical and itself as horizontal; they complement each other."
+    },
+    {
+      "id": "aa08",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "What does an Agent Card include? Select all that apply.",
+      "options": [
+        "Identity and version",
+        "Skills",
+        "Capabilities such as streaming",
+        "The agent’s private system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Cards describe identity, skills, capabilities and security; internals stay opaque."
+    },
+    {
+      "id": "aa09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A client receives a Task in INPUT_REQUIRED. How does it answer?",
+      "options": [
+        "Start a new task",
+        "Send a new message with the same taskId and contextId",
+        "Call CancelTask",
+        "Wait for the task to time out"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The answer goes on the same task, which then returns to WORKING."
+    },
+    {
+      "id": "aa10",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Which A2A version added signed Agent Cards?",
+      "options": [
+        "v0.1",
+        "v0.2",
+        "v1.0.0",
+        "v2.0"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "v1.0.0, released in March 2026, adds signed Agent Cards."
+    },
+    {
+      "id": "aa11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why verify an Agent Card’s signature before sending claim data?",
+      "options": [
+        "It makes the task faster",
+        "It proves the card was published by a key you trust, not an impostor",
+        "It is required for polling",
+        "It compresses the payload"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Signature checks guard against spoofed cards."
+    },
+    {
+      "id": "aa12",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "Which delivery modes can a client use to follow a long task? Select all that apply.",
+      "options": [
+        "Polling GetTask",
+        "Streaming updates",
+        "Push notifications to a webhook",
+        "Reading the remote agent’s database"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A2A supports polling, streaming and push; the remote agent’s internals are opaque."
+    },
+    {
+      "id": "aa13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When did Google announce A2A?",
+      "options": [
+        "9 April 2025",
+        "23 June 2025",
+        "9 December 2025",
+        "27 August 2026"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Google announced A2A on 9 April 2025; it moved to the Linux Foundation on 23 June 2025."
+    },
+    {
+      "id": "aa14",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which bindings does the A2A specification define? Select all that apply.",
+      "options": [
+        "JSON-RPC 2.0",
+        "gRPC",
+        "SOAP",
+        "FTP"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The bindings are JSON-RPC 2.0, gRPC and HTTP+JSON/REST."
+    },
+    {
+      "id": "aa15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A client treats INPUT_REQUIRED as terminal and marks tasks failed. What is the effect?",
+      "options": [
+        "Nothing changes",
+        "Healthy tasks that need one answer are abandoned",
+        "Tasks finish faster",
+        "Artifacts arrive twice"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The task was waiting for input, not failing."
+    },
+    {
+      "id": "aa16",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A streamed task completes after 14 s. Polling every 5 s instead, when would the client see completion at the earliest?",
+      "options": [
+        "14 s",
+        "15 s",
+        "19 s",
+        "20 s"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Polls at 5, 10 and 15 s; the 15 s poll is the first after 14 s."
+    },
+    {
+      "id": "aa17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is A2A a better fit than a tool call? Select all that apply.",
+      "options": [
+        "The work is long-running and may ask questions back",
+        "The remote side is another organisation’s agent that plans for itself",
+        "The job is one stateless lookup",
+        "You need the lowest possible latency for a single read"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Delegation suits goals that need judgment and time; single lookups belong in tools or APIs."
+    },
+    {
+      "id": "aa18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does a completed A2A task return its outputs as?",
+      "options": [
+        "Artifacts",
+        "Cookies",
+        "Tool definitions",
+        "Agent Cards"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Outputs such as documents or estimates come back as artifacts."
+    },
+    {
+      "id": "aa19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When did A2A join the Agentic AI Foundation?",
+      "options": [
+        "April 2025",
+        "June 2025",
+        "December 2025",
+        "August 2026"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "A2A joined the Agentic AI Foundation as a Growth Stage project on 27 August 2026."
+    },
+    {
+      "id": "aa20",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "Which tools help you build or test A2A agents? Select all that apply.",
+      "options": [
+        "A2A Python SDK",
+        "Google ADK",
+        "A2A Inspector",
+        "A spreadsheet macro"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The SDK and ADK build agents; A2A Inspector validates cards and test tasks."
+    }
+  ]
+}

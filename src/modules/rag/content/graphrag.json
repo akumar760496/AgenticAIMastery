@@ -1,0 +1,815 @@
+{
+  "id": "graphrag",
+  "moduleSlug": "rag",
+  "name": "GraphRAG",
+  "shortName": "GraphRAG",
+  "question": "Can retrieval answer questions about the whole corpus?",
+  "summary": "GraphRAG builds a knowledge graph from the documents before any question arrives. An LLM extracts entities and relationships from every chunk, a clustering algorithm (Leiden) groups them into communities, and the LLM writes a summary of each community. Local search starts from entities named in the question and gathers their neighbours and source chunks, which helps multi-hop questions. Global search combines community summaries in a map-reduce step to answer questions about the whole corpus, such as the main themes, which vector search over single chunks answers poorly. Indexing costs far more than embedding, so many teams route only multi-hop and whole-corpus questions to the graph. This is corpus retrieval; a temporal graph of what an agent learns about users is Graph Memory in module 9.",
+  "useCases": [
+    "Whole-corpus questions: themes, trends, “what are the main issues”",
+    "Multi-hop questions that join facts across documents",
+    "Investigations over reports, complaints or case files"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Extraction",
+        "detail": "LLM pass over every chunk: entities, relationships, claims; the main indexing cost"
+      },
+      {
+        "term": "Communities",
+        "detail": "Leiden clustering at several levels, each with an LLM-written summary"
+      },
+      {
+        "term": "Local search",
+        "detail": "entities in the question → neighbours, relationships and source text"
+      },
+      {
+        "term": "Global search",
+        "detail": "map over community summaries, reduce into one answer"
+      },
+      {
+        "term": "Lazy variants",
+        "detail": "defer summarisation to query time to cut indexing cost"
+      },
+      {
+        "term": "Routing",
+        "detail": "send fact questions to vector RAG and only multi-hop or global ones to the graph"
+      }
+    ]
+  },
+  "steps": [
+    "Collect the questions vector RAG fails: multi-hop and whole-corpus",
+    "Index a sample with GraphRAG and inspect extracted entities for quality",
+    "Route: facts to vector search, multi-hop to local, themes to global",
+    "Compare answer quality and cost per 1,000 queries against vector RAG"
+  ],
+  "pitfalls": [
+    "Indexing the full corpus before checking extraction quality on a sample",
+    "Sending every question to global search and paying map-reduce costs for simple facts",
+    "Letting the graph go stale when documents change, with no incremental update"
+  ],
+  "tools": [
+    "Microsoft GraphRAG",
+    "LazyGraphRAG",
+    "LightRAG",
+    "Neo4j GraphRAG",
+    "LlamaIndex PropertyGraphIndex"
+  ],
+  "remember": "Extract, cluster, summarise; route only the hard questions to the graph.",
+  "caption": "Illustrative: Sahayak Telecom, a fictional operator, asks questions across 5,000 outage and complaint reports.",
+  "comparison": {
+    "scope": "Indexing + retrieval",
+    "cost": 3,
+    "needs": "Multi-hop and whole-corpus questions",
+    "best": "Indexing cost; stale graphs"
+  },
+  "diagram": {
+    "file": "diagrams/graphrag.svg"
+  },
+  "lesson": {
+    "file": "graphrag_route.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import subprocess",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ROOT = \"./sahayak\"          # settings.yaml + input/ with 5,000 reports",
+        "steps": []
+      },
+      {
+        "text": "subprocess.run([\"graphrag\", \"init\", \"--root\", ROOT], check=True)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# settings.yaml: chat model, embedding model, chunk size, entity types",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "subprocess.run([\"graphrag\", \"index\", \"--root\", ROOT], check=True)",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "# output/: entities, relationships, communities, community_reports",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(q, kind):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if kind == \"fact\":",
+        "steps": []
+      },
+      {
+        "text": "        return vector_rag(q)                    # cheapest path",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    method = \"local\" if kind == \"multi_hop\" else \"global\"",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    out = subprocess.run([\"graphrag\", \"query\", \"--root\", ROOT,",
+        "steps": []
+      },
+      {
+        "text": "                          \"--method\", method, \"--query\", q],",
+        "steps": []
+      },
+      {
+        "text": "                         capture_output=True, text=True, check=True)",
+        "steps": []
+      },
+      {
+        "text": "    return out.stdout",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "kind = classify(\"What are the main causes of complaints in Pune this quarter?\")",
+        "steps": []
+      },
+      {
+        "text": "print(ask(\"What are the main causes of complaints in Pune this quarter?\", kind))",
+        "steps": []
+      },
+      {
+        "text": "# eval on 300 questions: vector 59%, routed GraphRAG 82%",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Set up a project",
+        "text": "Sahayak Telecom, a fictional operator, puts 5,000 outage and complaint reports into a GraphRAG project. The settings choose the chat and embedding models and the entity types: tower, vendor, circle, fault."
+      },
+      {
+        "title": "Extract the graph",
+        "text": "Indexing sends every chunk to the LLM to pull out entities and relationships. This is the costly step, about ₹18,000 for this corpus, so it is tried on a 200-report sample first."
+      },
+      {
+        "title": "Cluster and summarise",
+        "text": "Leiden clustering groups related entities into communities at several levels, and the LLM writes a report for each: “Pune circle, vendor X, repeated power faults”."
+      },
+      {
+        "title": "Route by question type",
+        "text": "A small classifier sends simple fact questions to vector RAG, which is cheaper and just as good for them."
+      },
+      {
+        "title": "Local or global",
+        "text": "Multi-hop questions go to local search, which walks entity neighbours. Whole-corpus questions go to global search, which maps over community reports and reduces the partial answers."
+      },
+      {
+        "title": "Measure",
+        "text": "On 300 test questions, 30% of them about themes, vector RAG alone scores 59%; the routed setup scores 82%, at about ₹1,370 per 1,000 queries."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"24\" text-anchor=\"middle\">5,000 reports · entity types: tower, vendor, circle</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">LLM extraction</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">≈ ₹18,000 once</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"72\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"88\" text-anchor=\"middle\">Leiden communities + reports</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"104\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"119\" text-anchor=\"middle\">fact → vector RAG</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"184\" y=\"104\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"119\" text-anchor=\"middle\">multi-hop → local</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"130\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"145\" text-anchor=\"middle\">themes → global</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"178\" text-anchor=\"middle\">vector 59%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"178\" text-anchor=\"middle\">routed 82%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Answers whole-corpus questions vector RAG cannot",
+      "Better multi-hop answers through entity relationships",
+      "Community reports are useful summaries on their own",
+      "Graph can be inspected and corrected"
+    ],
+    "cons": [
+      "Indexing needs an LLM pass over every chunk",
+      "Global queries are slow and costly",
+      "Extraction errors spread into answers",
+      "Incremental updates are harder than re-embedding"
+    ],
+    "avoidWhen": [
+      "Mostly single-fact lookups that vector RAG already answers",
+      "Fast-changing corpora with no budget to re-index"
+    ],
+    "tools": [
+      {
+        "name": "Microsoft GraphRAG",
+        "type": "Open source",
+        "what": "Extraction, Leiden communities, local and global search",
+        "url": "https://microsoft.github.io/graphrag/"
+      },
+      {
+        "name": "LazyGraphRAG",
+        "type": "Microsoft Research",
+        "what": "Defers summarisation to query time to cut indexing cost",
+        "url": "https://www.microsoft.com/en-us/research/blog/lazygraphrag-setting-a-new-standard-for-quality-and-cost/"
+      },
+      {
+        "name": "LightRAG",
+        "type": "Open source",
+        "what": "Lighter graph index with dual-level retrieval",
+        "url": "https://github.com/HKUDS/LightRAG"
+      },
+      {
+        "name": "Neo4j GraphRAG",
+        "type": "Open source · Neo4j",
+        "what": "Build and query knowledge graphs for RAG in Neo4j",
+        "url": "https://neo4j.com/docs/neo4j-graphrag-python/current/"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "PropertyGraphIndex for graph extraction and retrieval",
+        "url": "https://docs.llamaindex.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Sahayak Telecom, a fictional operator, asks questions across 5,000 outage and complaint reports: simple facts, multi-hop joins and themes across everything.",
+    "controls": [
+      "Choose retrieval: vector RAG, GraphRAG local, GraphRAG global, or a router by question type.",
+      "Set the share of questions that ask about themes across the corpus.",
+      "Switch on lazy indexing, which defers summaries to query time."
+    ],
+    "outputs": [
+      {
+        "name": "Answer quality",
+        "meaning": "Overall and for fact, multi-hop and theme questions."
+      },
+      {
+        "name": "Indexing, once",
+        "meaning": "Cost to build the index."
+      },
+      {
+        "name": "Per 1,000 queries",
+        "meaning": "Query-time cost."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Vector RAG only",
+        "expect": "Quality 59% (themes 30%), index ₹300, ₹250 per 1,000 queries."
+      },
+      {
+        "k": "local",
+        "name": "Local search for all",
+        "expect": "Quality 70%, index ₹18,000, ₹600."
+      },
+      {
+        "k": "global",
+        "name": "Global search for all",
+        "expect": "Quality 65%, facts drop to 60%, ₹3,000."
+      },
+      {
+        "k": "route",
+        "name": "Router",
+        "expect": "Quality 82%, index ₹18,000, ₹1,370."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 80% quality with indexing of ₹20,000 or less and ₹1,500 or less per 1,000 queries.",
+        "hint": "Send each question type to its own path."
+      },
+      {
+        "k": "cheap",
+        "text": "With the router and lazy indexing, reach 79% quality with indexing of ₹2,000 or less.",
+        "hint": "Lazy indexing costs a little quality."
+      },
+      {
+        "k": "themes",
+        "text": "With 60% theme questions, reach 80% on theme questions.",
+        "hint": "Community summaries answer themes."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Microsoft GraphRAG",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "The reference pipeline with local and global search.",
+        "ex": "Themes across 5,000 complaint reports.",
+        "pros": [
+          "Complete pipeline",
+          "Well documented"
+        ],
+        "cons": [
+          "Costly indexing",
+          "Batch-oriented"
+        ],
+        "url": "https://microsoft.github.io/graphrag/"
+      },
+      {
+        "n": "LightRAG",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "A lighter graph index with incremental inserts.",
+        "ex": "A graph over a growing policy library.",
+        "pros": [
+          "Cheaper to build",
+          "Simple API"
+        ],
+        "cons": [
+          "Younger project"
+        ],
+        "url": "https://github.com/HKUDS/LightRAG"
+      },
+      {
+        "n": "Neo4j GraphRAG",
+        "type": "Open source · Neo4j",
+        "start": 2,
+        "prod": 3,
+        "best": "Teams already running Neo4j.",
+        "ex": "Fraud rings across claims, garages and agents.",
+        "pros": [
+          "Mature graph database",
+          "Cypher queries"
+        ],
+        "cons": [
+          "Graph modelling effort"
+        ],
+        "url": "https://neo4j.com/docs/neo4j-graphrag-python/current/"
+      },
+      {
+        "n": "LlamaIndex PropertyGraphIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Graph retrieval inside a LlamaIndex app.",
+        "ex": "Extract a property graph from product manuals.",
+        "pros": [
+          "Fits existing pipelines",
+          "Pluggable stores"
+        ],
+        "cons": [
+          "You tune extraction"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Mostly facts",
+        "tool": "Stay with vector RAG"
+      },
+      {
+        "need": "Themes across a corpus",
+        "tool": "GraphRAG global search"
+      },
+      {
+        "need": "Tight indexing budget",
+        "tool": "Lazy variants or LightRAG"
+      }
+    ],
+    "goals": [
+      "Explain extraction, communities and local versus global search",
+      "Route questions to the right path",
+      "Weigh indexing and query cost against quality"
+    ]
+  },
+  "practice": {
+    "scenario": "Sahayak Telecom, a fictional operator, has 5,000 outage and complaint reports. Vector RAG answers single facts but fails on “what are the main causes of complaints in Pune this quarter?” and on joins such as “which vendors are linked to repeated tower outages?”. It builds a GraphRAG index once for about ₹18,000, then routes facts to vector RAG, multi-hop questions to local search and theme questions to global search. Answer quality on 300 test questions rises from 59% to 82%.",
+    "industries": [
+      {
+        "industry": "Telecom",
+        "use": "Themes and root causes across outage and complaint reports"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Links between claimants, garages, hospitals and agents in fraud reviews"
+      },
+      {
+        "industry": "Policy research",
+        "use": "Main positions across hundreds of consultation responses"
+      }
+    ],
+    "analogy": "Instead of searching a pile of case files for a sentence, you first draw the map of who is connected to whom, write a one-page brief for each cluster, and read the briefs to answer big-picture questions.",
+    "library": {
+      "name": "graphrag",
+      "what": "Microsoft’s open-source GraphRAG: indexing pipeline plus local and global search, driven by a CLI and settings.yaml.",
+      "install": "pip install graphrag"
+    },
+    "note": "Set your model API key in the .env file created by init. Indexing calls the LLM for every chunk, so try a small sample first. Command options can change between versions; check graphrag --help.",
+    "samples": [
+      {
+        "file": "run_graphrag.py",
+        "language": "python",
+        "code": "import subprocess, pathlib\n\nroot = pathlib.Path(\"sahayak\")\n(root / \"input\").mkdir(parents=True, exist_ok=True)\nfor p in sorted(pathlib.Path(\"reports\").glob(\"*.txt\"))[:200]:      # sample first\n    (root / \"input\" / p.name).write_text(p.read_text(encoding=\"utf-8\"), encoding=\"utf-8\")\n\nsubprocess.run([\"graphrag\", \"init\", \"--root\", str(root)], check=True)\nsubprocess.run([\"graphrag\", \"index\", \"--root\", str(root)], check=True)\n\nfor method, q in [(\"local\", \"Which vendors are linked to repeated outages in Pune circle?\"),\n                  (\"global\", \"What are the main causes of customer complaints?\")]:\n    r = subprocess.run([\"graphrag\", \"query\", \"--root\", str(root), \"--method\", method, \"--query\", q],\n                       capture_output=True, text=True, check=True)\n    print(method.upper(), r.stdout[:600], sep=\"\\n\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "70% of questions go to local search at ₹600 per 1,000 and 30% to global at ₹3,000 per 1,000, plus ₹50 per 1,000 for the router. What is the cost per 1,000 queries in ₹?",
+    "answer": "0.7 × 600 + 0.3 × 3,000 + 50 = 420 + 900 + 50 = ₹1,370 per 1,000 queries.",
+    "expected": {
+      "value": 1370,
+      "tolerance": 10,
+      "label": "₹ ="
+    },
+    "interview": [
+      {
+        "question": "How does GraphRAG differ from vector RAG?",
+        "answer": "Vector RAG retrieves chunks similar to the question. GraphRAG first extracts entities and relationships into a graph, clusters it into communities with summaries, and answers multi-hop questions by walking the graph and whole-corpus questions by combining community summaries."
+      },
+      {
+        "question": "When is GraphRAG not worth it?",
+        "answer": "When most questions are single-fact lookups that vector RAG already answers, or the corpus changes too fast to re-index affordably."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Sending every question to global search",
+        "fix": "Route simple facts to vector RAG"
+      },
+      {
+        "mistake": "Indexing everything before checking extraction",
+        "fix": "Inspect entities on a sample first"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "gr01",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What does GraphRAG build before any question arrives?",
+      "options": [
+        "Only embeddings",
+        "A graph of entities and relationships with community summaries",
+        "A fine-tuned model",
+        "A keyword index only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Extraction, clustering and summaries."
+    },
+    {
+      "id": "gr02",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which question suits global search?",
+      "options": [
+        "What is the SLA for ticket 4471?",
+        "What are the main causes of complaints this quarter?",
+        "Who owns tower T-19?",
+        "What is the refund limit?"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Themes span the corpus."
+    },
+    {
+      "id": "gr03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which question suits local search?",
+      "options": [
+        "Which garages are linked to claimants who share an agent?",
+        "Summarise all claims",
+        "What is 2+2?",
+        "List all policies"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Multi-hop joins via entity neighbours."
+    },
+    {
+      "id": "gr04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the most expensive part of GraphRAG indexing?",
+      "options": [
+        "Embedding",
+        "LLM extraction over every chunk",
+        "Disk storage",
+        "Tokenising"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One LLM call per chunk, often more."
+    },
+    {
+      "id": "gr05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which algorithm groups entities into communities in Microsoft GraphRAG?",
+      "options": [
+        "k-means",
+        "Leiden",
+        "PageRank",
+        "BM25"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hierarchical Leiden clustering."
+    },
+    {
+      "id": "gr06",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are drawbacks of GraphRAG? Select all that apply.",
+      "options": [
+        "Costly indexing",
+        "Global queries are slow",
+        "Extraction errors spread into answers",
+        "It cannot answer any fact questions"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "It can answer facts, but vector RAG is cheaper."
+    },
+    {
+      "id": "gr07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "70% at ₹600 and 30% at ₹3,000 per 1,000 queries. Blended cost before routing overhead?",
+      "options": [
+        "₹1,320",
+        "₹1,800",
+        "₹3,600",
+        "₹900"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "420 + 900."
+    },
+    {
+      "id": "gr08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why route fact questions to vector RAG?",
+      "options": [
+        "It is cheaper and just as good for them",
+        "Graphs cannot store facts",
+        "Required by law",
+        "Vector RAG is always better"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Cheapest path that answers well."
+    },
+    {
+      "id": "gr09",
+      "kind": "single",
+      "industry": "Policy",
+      "question": "What does global search do with community summaries?",
+      "options": [
+        "Ignores them",
+        "Maps over them and reduces partial answers",
+        "Embeds them only",
+        "Deletes them"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Map-reduce over reports."
+    },
+    {
+      "id": "gr10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Quality rises from 59% to 82%. Gain in points?",
+      "options": [
+        "13",
+        "23",
+        "41",
+        "82"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "82 − 59."
+    },
+    {
+      "id": "gr11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What do lazy variants such as LazyGraphRAG change?",
+      "options": [
+        "Defer summarisation to query time to cut indexing cost",
+        "Remove the graph",
+        "Use no LLM at all at any point",
+        "Only change the UI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Cheaper indexing."
+    },
+    {
+      "id": "gr12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Before indexing 50 lakh documents, you should?",
+      "options": [
+        "Index a sample and inspect extraction quality",
+        "Index all at once",
+        "Skip evaluation",
+        "Delete old documents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Catch extraction problems cheaply."
+    },
+    {
+      "id": "gr13",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which settings shape a GraphRAG index? Select all that apply.",
+      "options": [
+        "Chat model for extraction",
+        "Entity types to extract",
+        "Chunk size",
+        "Screen resolution"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All but the last."
+    },
+    {
+      "id": "gr14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "How is GraphRAG different from Graph Memory in module 9?",
+      "options": [
+        "GraphRAG indexes a document corpus; Graph Memory tracks what an agent learns about users over time",
+        "They are identical",
+        "Graph Memory is for images",
+        "GraphRAG only stores embeddings"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Corpus retrieval versus agent memory."
+    },
+    {
+      "id": "gr15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Indexing costs ₹18,000 once and saves 20 analyst hours a month at ₹900 an hour. Months to pay back?",
+      "options": [
+        "1",
+        "2",
+        "10",
+        "20"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "20 × 900 = ₹18,000 a month."
+    },
+    {
+      "id": "gr16",
+      "kind": "single",
+      "industry": "Policy",
+      "question": "A corpus changes hourly and has no budget for re-indexing. Best choice?",
+      "options": [
+        "Full GraphRAG re-index hourly",
+        "Vector RAG, perhaps with a lighter incremental graph",
+        "No retrieval",
+        "Global search only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stale graphs give stale answers."
+    },
+    {
+      "id": "gr17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Local search starts from?",
+      "options": [
+        "Entities named in the question",
+        "A random community",
+        "The largest document",
+        "The last query"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Then gathers neighbours and source text."
+    },
+    {
+      "id": "gr18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which outputs does Microsoft GraphRAG indexing produce? Select all that apply.",
+      "options": [
+        "Entities",
+        "Relationships",
+        "Community reports",
+        "A fine-tuned model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "No model is trained."
+    },
+    {
+      "id": "gr19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "With 60% theme questions, which mode is most important?",
+      "options": [
+        "Global search",
+        "Keyword search",
+        "None",
+        "Local only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Themes need community summaries."
+    },
+    {
+      "id": "gr20",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What should the evaluation compare?",
+      "options": [
+        "GraphRAG and vector RAG on the same questions, with cost",
+        "Only indexing speed",
+        "Only the graph’s size",
+        "Font sizes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Quality and cost side by side."
+    }
+  ]
+}

@@ -1,0 +1,831 @@
+{
+  "id": "finreg",
+  "moduleSlug": "governance",
+  "name": "RBI and SEBI Expectations for AI",
+  "shortName": "RBI and SEBI",
+  "question": "What will my financial regulator ask about our AI?",
+  "summary": "RBI’s FREE-AI framework (August 2025) sets seven sutras and recommendations for banks and NBFCs: a board-approved AI policy, an AI inventory, audits, customer disclosure and grievance routes, and incident reporting. RBI’s draft model risk guidance (June 2026) extends model governance to AI, including third-party models, kill switches and human oversight. SEBI’s Regulation 16C (February 2025) makes intermediaries solely responsible for AI output, data and compliance, and SEBI has announced guidelines with kill switches and human-in-the-loop controls.",
+  "useCases": [
+    "Banks, NBFCs, brokers and other regulated entities using AI",
+    "Before a customer-facing AI launch",
+    "When a vendor supplies the model"
+  ],
+  "keyFacts": {
+    "label": "What regulators converge on",
+    "items": [
+      {
+        "term": "Policy",
+        "detail": "board-approved, covering the AI life cycle"
+      },
+      {
+        "term": "Inventory",
+        "detail": "every AI use, tiered by risk"
+      },
+      {
+        "term": "Accountability",
+        "detail": "you own outputs, including a vendor’s"
+      },
+      {
+        "term": "Validation",
+        "detail": "independent testing before and after launch"
+      },
+      {
+        "term": "Oversight",
+        "detail": "human in the loop for high-impact decisions; kill switch"
+      },
+      {
+        "term": "Customers",
+        "detail": "disclosure, a human option, grievance redress"
+      }
+    ]
+  },
+  "steps": [
+    "List every AI use and tier it by customer impact",
+    "Adopt a board-approved AI policy with named owners",
+    "Validate each model, including vendor models, before launch",
+    "Add kill switches, human review for high-impact decisions and customer disclosure"
+  ],
+  "pitfalls": [
+    "Assuming the vendor is responsible for the vendor’s model",
+    "Treating a customer-facing agent like an internal tool",
+    "Waiting for final SEBI guidelines before building basic controls"
+  ],
+  "tools": [
+    "A GRC platform for the AI inventory",
+    "Model risk management tooling (validation reports)",
+    "Feature flags for kill switches",
+    "Ticketing for grievance and incident routes"
+  ],
+  "remember": "Inventory it, own it, test it, stop it, tell the customer.",
+  "caption": "Status as of 26 Sep 2026: RBI MRM guidance is a draft; SEBI guidelines are announced, not final.",
+  "comparison": {
+    "scope": "Regulated Indian finance",
+    "cost": 2,
+    "needs": "Board policy and an inventory",
+    "best": "Relying on vendor assurances"
+  },
+  "diagram": {
+    "file": "diagrams/finreg.svg"
+  },
+  "lesson": {
+    "file": "ai_inventory.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "TIER_CONTROLS = {",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"internal\": {\"owner\", \"validation\", \"vendor_contract\"},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"customer\": {\"owner\", \"validation\", \"vendor_contract\", \"disclosure\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                 \"grievance\", \"incident_route\", \"kill_switch\"},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"decision\": {..., \"human_review\"},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@dataclass",
+        "steps": []
+      },
+      {
+        "text": "class AISystem:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    name: str; owner: str; tier: str",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    vendor_model: str | None",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    controls: set",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    def gaps(self): return TIER_CONTROLS[self.tier] - self.controls",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_agent(system, request):",
+        "steps": []
+      },
+      {
+        "text": "    if not flags.get_boolean_value(f\"ai.{system.name}.enabled\", False):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return hand_to_human(request, reason=\"kill switch\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    answer = system_agent(system).run(request)",
+        "steps": []
+      },
+      {
+        "text": "    if system.tier == \"decision\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return queue_for_review(answer)          # a human decides",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return answer + AI_DISCLOSURE                # say it is AI",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Register every AI use",
+        "text": "Name, owner, purpose, model and vendor. Sahyog Securities expected 6 uses and found 23."
+      },
+      {
+        "title": "Tier by customer impact",
+        "text": "Internal tools, customer-facing agents and agents that decide about customers need different controls. The gaps function shows what each system still lacks."
+      },
+      {
+        "title": "A vendor model is still yours",
+        "text": "SEBI’s Regulation 16C makes the intermediary solely responsible for AI output and data; RBI’s draft model guidance expects vendor models to be validated too."
+      },
+      {
+        "title": "A kill switch without a deploy",
+        "text": "A feature flag per system lets operations stop it in seconds and hand requests to people. Both regulators have signalled kill switches."
+      },
+      {
+        "title": "Humans decide the high-impact cases",
+        "text": "For decision-tier systems such as KYC rejection or credit, the agent recommends and a person decides."
+      },
+      {
+        "title": "Tell the customer",
+        "text": "Customer-facing answers say AI is involved and offer a route to a human and to grievance redress, as FREE-AI recommends."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"17\" style=\"text-anchor:end;--d:0s\">expected</text><rect x=\"118\" y=\"7\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"7\" width=\"39.130434782608695\" height=\"13\" rx=\"3\" style=\"fill:var(--soft);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"17\" style=\"text-anchor:start;--d:0.2s\">6 AI uses</text><text class=\"tl a\" x=\"112\" y=\"39\" style=\"text-anchor:end;--d:0.1s\">found</text><rect x=\"118\" y=\"29\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"29\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"39\" style=\"text-anchor:start;--d:0.30000000000000004s\">23 AI uses</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"56\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"62\" y=\"71\" text-anchor=\"middle\">internal · 3</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"122\" y=\"56\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"177\" y=\"71\" text-anchor=\"middle\">customer · 7</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"238\" y=\"56\" width=\"114\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"295\" y=\"71\" text-anchor=\"middle\">decision · 8</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"86\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"101\" text-anchor=\"middle\">vendor model → your responsibility (16C)</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"116\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"131\" text-anchor=\"middle\">ai.kyc.enabled = off</text></g><text class=\"tl a\" x=\"186\" y=\"131\" style=\"text-anchor:start;--d:0.1s\">→ humans take over</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"146\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"161\" text-anchor=\"middle\">agent recommends · reviewer decides</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"176\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"191\" text-anchor=\"middle\">“This answer was prepared with AI. Talk to a person.”</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"226\" style=\"text-anchor:middle;fill:var(--ink-2)\">SEBI guidelines announced, not final (Sep 2026)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Answers the questions RBI and SEBI will ask",
+      "Tiering keeps controls proportionate",
+      "Kill switches reduce incident impact",
+      "Customer disclosure builds trust"
+    ],
+    "cons": [
+      "Inventory and validation take ongoing effort",
+      "Final SEBI guidelines and RBI directions may change details",
+      "Human review adds cost and delay",
+      "Vendor contracts need renegotiation"
+    ],
+    "avoidWhen": [
+      "Treating internal tools like customer-facing ones",
+      "Treating customer-facing agents like internal tools"
+    ],
+    "tools": [
+      {
+        "name": "RBI FREE-AI Committee Report",
+        "type": "Regulator report",
+        "what": "Seven sutras and recommendations",
+        "url": "https://www.rbi.org.in"
+      },
+      {
+        "name": "SEBI Intermediaries (Amendment) Regulations, 2025",
+        "type": "Regulation",
+        "what": "Regulation 16C on AI accountability",
+        "url": "https://www.sebi.gov.in"
+      },
+      {
+        "name": "SEBI consultation paper on AI/ML (June 2025)",
+        "type": "Consultation",
+        "what": "Proposed guidelines for securities markets",
+        "url": "https://www.sebi.gov.in/reports-and-statistics/reports/jun-2025/consultation-paper-on-guidelines-for-responsible-usage-of-ai-ml-in-indian-securities-markets_94687.html"
+      },
+      {
+        "name": "OpenFeature",
+        "type": "Open source",
+        "what": "Feature flags for kill switches",
+        "url": "https://openfeature.dev"
+      },
+      {
+        "name": "GRC platforms",
+        "type": "Commercial",
+        "what": "AI inventory and control evidence",
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Sahyog Securities, a fictional broker with an NBFC arm, is preparing for a regulator’s review of its AI. Pick the entity and the risk tier of one AI use, tick the controls in place, and see readiness against the sources that apply: RBI’s FREE-AI framework and draft model risk guidance for the NBFC, or SEBI’s Regulation 16C and announced AI guidelines for the broker.",
+    "controls": [
+      "Choose a bank or NBFC regulated by RBI, or a broker regulated by SEBI.",
+      "Choose the AI use: an internal tool, a customer-facing agent, or one that decides about customers.",
+      "Tick the controls in place, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Readiness per source",
+        "meaning": "Share of the controls each source expects, for this tier, that are in place."
+      },
+      {
+        "name": "Controls this tier needs · built",
+        "meaning": "Controls required for this risk tier against those built."
+      },
+      {
+        "name": "Who answers for a vendor model",
+        "meaning": "Always the regulated entity."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Ready, not ready, or more than the tier needs."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Broker support agent, tested only",
+        "expect": "SEBI 16C 1 of 3, SEBI guidelines 1 of 4: not ready."
+      },
+      {
+        "k": "vendor",
+        "name": "Customer controls, no vendor checks",
+        "expect": "Six of eight controls, but the vendor model is neither validated nor contracted."
+      },
+      {
+        "k": "bank",
+        "name": "Bank KYC agent, no human review",
+        "expect": "6 of 7 for both RBI sources: no human decides about customers."
+      },
+      {
+        "k": "heavy",
+        "name": "Internal tool with every control",
+        "expect": "Ready, but five controls more than an internal tool needs."
+      }
+    ],
+    "missions": [
+      {
+        "k": "broker",
+        "text": "Make a broker’s customer-facing agent fully ready.",
+        "hint": "Eight controls, including the vendor contract and kill switch."
+      },
+      {
+        "k": "bank",
+        "text": "Make a bank’s decision-making agent fully ready.",
+        "hint": "Decision tier adds human review."
+      },
+      {
+        "k": "lean",
+        "text": "Make an internal tool ready with no more than four controls.",
+        "hint": "Tier the controls to the risk."
+      }
+    ],
+    "tools": [
+      {
+        "n": "RBI FREE-AI Committee Report",
+        "type": "Regulator report",
+        "start": 3,
+        "prod": 3,
+        "best": "Seven sutras and recommendations for regulated entities using AI.",
+        "ex": "Use its recommendations as the checklist for a board AI policy.",
+        "pros": [
+          "Direct from the regulator",
+          "Covers governance to consumer protection"
+        ],
+        "cons": [
+          "A framework report, not directions",
+          "Details may change in final directions"
+        ],
+        "url": "https://www.rbi.org.in"
+      },
+      {
+        "n": "SEBI Regulation 16C",
+        "type": "Regulation",
+        "start": 3,
+        "prod": 3,
+        "best": "The rule that intermediaries are solely responsible for AI output and data.",
+        "ex": "Cite it when negotiating audit rights with a model vendor.",
+        "pros": [
+          "In force",
+          "Short and clear"
+        ],
+        "cons": [
+          "Principle-level",
+          "Guidelines still to come"
+        ],
+        "url": "https://www.sebi.gov.in"
+      },
+      {
+        "n": "OpenFeature",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Vendor-neutral feature flags for kill switches.",
+        "ex": "A flag per AI system that operations can switch off in seconds.",
+        "pros": [
+          "Standard API",
+          "Works with many flag providers"
+        ],
+        "cons": [
+          "Needs an operational owner",
+          "Flags must be tested"
+        ],
+        "url": "https://openfeature.dev"
+      },
+      {
+        "n": "GRC platform",
+        "type": "Commercial",
+        "start": 2,
+        "prod": 3,
+        "best": "An AI inventory with owners, tiers and control evidence.",
+        "ex": "Register all 23 AI uses with their risk tier and gaps.",
+        "pros": [
+          "Audit-ready evidence",
+          "Workflow and reminders"
+        ],
+        "cons": [
+          "Cost",
+          "Only as good as its upkeep"
+        ],
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We are a broker using a vendor LLM",
+        "tool": "Regulation 16C: you own the output; validate and contract"
+      },
+      {
+        "need": "We have many AI tools and no list",
+        "tool": "Build a risk-tiered inventory first"
+      },
+      {
+        "need": "A customer-facing agent launches next month",
+        "tool": "Kill switch, disclosure, grievance route and incident reporting"
+      }
+    ],
+    "goals": [
+      "See what RBI and SEBI expect of AI",
+      "Scale controls to the risk tier",
+      "Understand accountability for vendor models"
+    ]
+  },
+  "practice": {
+    "scenario": "Sahyog Securities, a fictional broker with an NBFC arm, prepared for a regulator’s review of its AI use. Its first inventory found 23 AI uses, not the 6 the team expected. Four were customer-facing, and two ran on a vendor model with no audit rights in the contract. It adopted a board-approved AI policy, tiered every use by customer impact, validated the vendor models itself, and put kill switches and customer disclosure on the four customer-facing agents.",
+    "industries": [
+      {
+        "industry": "Stockbroking",
+        "use": "Support, KYC and research assistants under SEBI Regulation 16C"
+      },
+      {
+        "industry": "Banking",
+        "use": "Customer agents under RBI’s FREE-AI framework and model risk rules"
+      },
+      {
+        "industry": "NBFC lending",
+        "use": "Credit and collections agents with human review of decisions"
+      }
+    ],
+    "analogy": "A hospital’s register of every medical device: what it does, who owns it, when it was last checked, and how to switch it off. The manufacturer does not answer for a patient harmed on your ward.",
+    "library": {
+      "name": "OpenFeature",
+      "what": "A vendor-neutral feature-flag standard; a flag per AI system gives operations a kill switch that works without a deploy.",
+      "install": "pip install openfeature-sdk"
+    },
+    "note": "Regulation 16C makes the intermediary solely responsible for AI output even when a vendor supplies the model. Track the final SEBI guidelines and RBI model risk directions, which were not final on 26 Sep 2026.",
+    "samples": [
+      {
+        "file": "ai_inventory.py",
+        "language": "python",
+        "code": "from dataclasses import dataclass, field\nfrom openfeature import api\n\nTIER_CONTROLS = {\n    \"internal\": {\"owner\", \"validation\", \"vendor_contract\"},\n    \"customer\": {\"owner\", \"validation\", \"vendor_contract\", \"disclosure\",\n                 \"grievance\", \"incident_route\", \"kill_switch\"},\n    \"decision\": {\"owner\", \"validation\", \"vendor_contract\", \"disclosure\",\n                 \"grievance\", \"incident_route\", \"kill_switch\", \"human_review\"},\n}\n\n@dataclass\nclass AISystem:\n    name: str\n    owner: str\n    tier: str                      # internal, customer or decision\n    vendor_model: str | None\n    controls: set = field(default_factory=set)\n\n    def gaps(self) -> set:\n        return TIER_CONTROLS[self.tier] - self.controls\n\nflags = api.get_client()\n\ndef run_agent(system: AISystem, request):\n    if not flags.get_boolean_value(f\"ai.{system.name}.enabled\", False):\n        return hand_to_human(request, reason=\"kill switch\")     # stops without a deploy\n    answer = system_agent(system).run(request)\n    if system.tier == \"decision\":\n        return queue_for_review(answer)                        # a human decides\n    return answer + AI_DISCLOSURE"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A broker has 20 internal AI tools, 3 customer-facing agents and 2 agents that make decisions about customers. If the controls required per system are 3 for internal, 7 for customer-facing and 8 for decision tiers, how many control instances must it evidence?",
+    "answer": "20 × 3 + 3 × 7 + 2 × 8 = 60 + 21 + 16 = 97. Tiering matters: treating all 25 as decision-tier would mean 200, and treating all as internal would leave the customer-facing agents short of kill switches, disclosure and review.",
+    "expected": {
+      "value": 97,
+      "tolerance": 1,
+      "label": "control instances ="
+    },
+    "interview": [
+      {
+        "question": "What does SEBI Regulation 16C mean for a broker using a vendor’s LLM?",
+        "answer": "It makes the regulated entity solely responsible for the privacy and security of investor data, for the output of the AI tools it relies on, and for compliance with law, whether the tool is built in-house or bought. Vendor assurances do not transfer that responsibility, so the broker must validate the model, control the data it receives and keep audit rights in the contract."
+      },
+      {
+        "question": "What does RBI’s FREE-AI framework ask of a bank deploying an agent?",
+        "answer": "It sets seven principles, or sutras, and recommendations under six pillars. For a deployment that means a board-approved AI policy, an inventory of AI uses by risk, independent testing and audit, telling customers when AI is involved and giving them a way to contest outcomes, incident reporting, and accountability that does not shrink as the system becomes more autonomous."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "One set of controls for every AI use",
+        "fix": "Tier by customer impact and scale the controls"
+      },
+      {
+        "mistake": "Waiting for final guidelines",
+        "fix": "Build inventory, validation, kill switches and disclosure now"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fr01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What does SEBI Regulation 16C make intermediaries solely responsible for when using AI tools?",
+      "options": [
+        "Only the vendor’s pricing",
+        "Data privacy and security, the output, and legal compliance",
+        "Nothing if the tool is bought",
+        "Only model training"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "All three, whether the tool is built or bought."
+    },
+    {
+      "id": "fr02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is RBI’s FREE-AI?",
+      "options": [
+        "A free model from RBI",
+        "A framework for responsible and ethical enablement of AI",
+        "A payments system",
+        "A tax rule"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "RBI’s August 2025 framework."
+    },
+    {
+      "id": "fr03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How many sutras does FREE-AI set out?",
+      "options": [
+        "Three",
+        "Five",
+        "Seven",
+        "Ten"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Seven sutras under six pillars."
+    },
+    {
+      "id": "fr04",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which controls has SEBI signalled for its AI guidelines? Select all that apply.",
+      "options": [
+        "Kill switches",
+        "Human-in-the-loop controls",
+        "Mandatory use of foreign models",
+        "Removing all logs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Announced in August 2026, not yet final."
+    },
+    {
+      "id": "fr05",
+      "kind": "single",
+      "industry": "NBFC",
+      "question": "What was the status of RBI’s model risk guidance covering AI as of September 2026?",
+      "options": [
+        "Final master direction",
+        "A draft for consultation (June 2026)",
+        "Withdrawn",
+        "Not yet proposed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Draft issued June 2026, comments to July 2026."
+    },
+    {
+      "id": "fr06",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A vendor says its model is “fully compliant”. Does that transfer accountability?",
+      "options": [
+        "Yes",
+        "No: the broker remains responsible",
+        "Only for internal tools",
+        "Only if in writing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Regulation 16C keeps it with the intermediary."
+    },
+    {
+      "id": "fr07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should a kill switch do if the flag service is unreachable?",
+      "options": [
+        "Keep the agent running",
+        "Fail closed: hand requests to people",
+        "Crash silently",
+        "Retry forever"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Fail closed."
+    },
+    {
+      "id": "fr08",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which does FREE-AI recommend? Select all that apply.",
+      "options": [
+        "A board-approved AI policy",
+        "An inventory of AI uses",
+        "Hiding AI use from customers",
+        "No audits"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Policy, inventory, audits and disclosure."
+    },
+    {
+      "id": "fr09",
+      "kind": "single",
+      "industry": "NBFC",
+      "question": "An agent decides whether to reject KYC applications. What control is most important beyond a support agent’s?",
+      "options": [
+        "A bigger model",
+        "Human review of decisions",
+        "Shorter prompts",
+        "More languages"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Decisions about customers need human oversight."
+    },
+    {
+      "id": "fr10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Why keep an AI inventory?",
+      "options": [
+        "It is decoration",
+        "You cannot govern, validate or report on uses you do not know about",
+        "To slow teams down",
+        "Only for marketing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The first step to control."
+    },
+    {
+      "id": "fr11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which FREE-AI sutra says customers should know about AI and be able to override it?",
+      "options": [
+        "Disclosure and the right to override",
+        "Responsible innovation",
+        "Safety and resilience",
+        "Public trust"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Sutra on disclosure and the right to override."
+    },
+    {
+      "id": "fr12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Why tier AI uses by customer impact?",
+      "options": [
+        "To make all tools identical",
+        "To scale controls to risk",
+        "To avoid inventories",
+        "To skip validation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Proportionate controls."
+    },
+    {
+      "id": "fr13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should a vendor contract for an AI model include?",
+      "options": [
+        "Nothing special",
+        "Audit rights, data terms and exit arrangements",
+        "Only price",
+        "Only uptime"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "You must be able to verify and leave."
+    },
+    {
+      "id": "fr14",
+      "kind": "single",
+      "industry": "NBFC",
+      "question": "Which FREE-AI sutra holds firms responsible however autonomous the AI is?",
+      "options": [
+        "Accountability regardless of autonomy",
+        "Understandability",
+        "Fairness",
+        "Public trust"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Accountability does not shrink with autonomy."
+    },
+    {
+      "id": "fr15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A customer disputes an AI-driven outcome. What should exist?",
+      "options": [
+        "Nothing",
+        "A grievance route that can reach a human",
+        "A chatbot loop",
+        "A legal notice"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Grievance and redress for AI outcomes."
+    },
+    {
+      "id": "fr16",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "When was Regulation 16C notified?",
+      "options": [
+        "February 2025",
+        "August 2026",
+        "2019",
+        "It is a draft"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "February 2025."
+    },
+    {
+      "id": "fr17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does independent validation of an AI model check?",
+      "options": [
+        "That it performs as intended on your data and risks",
+        "That the vendor is famous",
+        "The price",
+        "The logo"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Validation tests fitness for use."
+    },
+    {
+      "id": "fr18",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Should a broker wait for final SEBI AI guidelines before adding controls?",
+      "options": [
+        "Yes",
+        "No: 16C already applies and the direction is clear",
+        "Only for internal tools",
+        "Only after an incident"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Build the basics now."
+    },
+    {
+      "id": "fr19",
+      "kind": "single",
+      "industry": "NBFC",
+      "question": "RBI’s draft model risk guidance treats third-party AI models how?",
+      "options": [
+        "Exempt",
+        "Subject to validation, with the entity fully accountable",
+        "Only the vendor validates",
+        "Banned"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The entity remains accountable."
+    },
+    {
+      "id": "fr20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should a customer-facing AI answer tell the customer?",
+      "options": [
+        "Nothing",
+        "That AI is involved, and how to reach a person",
+        "The model’s weights",
+        "The system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Disclosure and a human option."
+    }
+  ]
+}

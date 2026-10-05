@@ -1,0 +1,104 @@
+
+
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" class="arr"/>
+    </marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" style="fill:var(--accent)"/>
+    </marker>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <div class="crumbs"><span class="eyebrow">Agentic AI Mastery</span><span>Interview practice · 18 scenarios</span><span class="verified">Facts checked 26 Sep 2026</span><a class="back" href="#practise">← Practise</a></div>
+    <h1>Interview Room</h1>
+    <p class="lede">Practise agentic-AI system-design interviews. Drills take about eight minutes: rank three candidate answers and mark what each one misses. Mock interviews let you answer an interviewer yourself, in writing, and get a scorecard. Spoken mocks run in any Claude chat with the interview skill.</p>
+    <p class="status-line" id="status">Loading your practice history…</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Practice modes" id="tabs">
+    <button class="tab" role="tab" id="tab-drill" data-t="drill" aria-controls="drill">Drill</button>
+    <button class="tab" role="tab" id="tab-mock" data-t="mock" aria-controls="mock">Mock interview</button>
+    <button class="tab" role="tab" id="tab-spoken" data-t="spoken" aria-controls="spoken">Spoken mock</button>
+    <button class="tab" role="tab" id="tab-progress" data-t="progress" aria-controls="progress">Your progress</button>
+  </div>
+
+  <section class="panel" id="drill" role="tabpanel" aria-labelledby="tab-drill">
+    <div class="pick"><label class="visually-hidden" for="spick">Scenario</label><select id="spick"></select><button class="btn" type="button" id="snext">Suggested next</button></div>
+    <p class="sugg" id="sugg"></p>
+    <div class="brief" id="brief"></div>
+    <div class="steps3"><span><b>1</b>Rank the three answers from strongest to weakest.</span><span><b>2</b>Tap the checklist ideas each answer misses.</span><span><b>3</b>Check your calls.</span></div>
+    <div class="answers" id="answers"></div>
+    <div class="bar"><button class="btn primary" type="button" id="check" disabled>Check my answers</button><span class="hint" id="checkhint"></span></div>
+    <section class="result" id="result" hidden aria-live="polite"></section>
+  </section>
+
+  <section class="panel" id="mock" role="tabpanel" aria-labelledby="tab-mock" hidden>
+    <form class="box msetup" id="msetup" onsubmit="return false">
+      <h3>Set up a mock</h3>
+      <p>Answer an interviewer in writing, stage by stage, then get a scorecard on seven areas.</p>
+      <label class="fl" for="mspick">Scenario</label><select id="mspick"></select>
+      <fieldset><legend>Level</legend><div class="seg"><label><input type="radio" name="mlvl" id="mlvl1" value="SDE-2">SDE-2</label><label><input type="radio" name="mlvl" id="mlvl2" value="Senior" checked>Senior</label><label><input type="radio" name="mlvl" id="mlvl3" value="Staff">Staff</label></div></fieldset>
+      <fieldset><legend>Length</legend><div class="seg"><label><input type="radio" name="mlen" id="mlen1" value="Quick" checked>Quick, about 15 minutes</label><label><input type="radio" name="mlen" id="mlen2" value="Full">Full, about 45 minutes</label></div></fieldset>
+      <fieldset><legend>Interviewer</legend><div class="seg"><label><input type="radio" name="miv" id="mclaude" value="claude" checked>Claude</label><label><input type="radio" name="miv" id="moffline" value="offline">Offline</label></div></fieldset>
+      <p class="hint" id="mnote"></p>
+      <div class="bar"><button class="btn primary" type="button" id="mstart">Start the mock</button></div>
+    </form>
+    <div class="msession" id="msession" hidden>
+      <div class="brief" id="mhead"></div>
+      <div class="mgrid">
+        <div class="mmain">
+          <p class="mclock" id="mclock" aria-live="off"></p>
+          <div class="mlog" id="mlog" aria-live="polite"></div>
+          <p class="mthink" id="mthink" hidden>Interviewer is thinking…</p>
+          <label class="visually-hidden" for="mtext">Your answer</label>
+          <textarea id="mtext" rows="6"></textarea>
+          <div class="bar"><button class="btn primary" type="button" id="msend">Send</button><button class="btn" type="button" id="mready">I'm ready to design</button><button class="btn" type="button" id="mhint">Hint</button><button class="btn" type="button" id="mnextst">Next stage</button><button class="btn" type="button" id="mend">End and score</button><span class="hint">Ctrl + Enter sends.</span></div>
+        </div>
+        <aside class="mside">
+          <div class="box"><h3>Stages</h3><ol class="mstages" id="mstages"></ol></div>
+          <div class="box"><h3>Checklist so far</h3><div class="mtags" id="mtags"></div><p class="hint">Ideas light up as you mention them. It is a rough guide, not your score.</p></div>
+        </aside>
+      </div>
+    </div>
+    <section class="result" id="mresult" hidden aria-live="polite"></section>
+  </section>
+
+  <section class="panel" id="spoken" role="tabpanel" aria-labelledby="tab-spoken" hidden>
+    <div class="cols">
+      <div class="box"><h3>Run a spoken mock</h3>
+        <p>The <b>agentic-interview</b> skill turns any Claude chat into an interviewer. It uses the same 18 scenarios and the same checklist as the drills, then scores you on seven areas.</p>
+        <ol><li>Open a new Claude chat. On your phone you can switch to voice mode.</li><li>Say or paste one of the openers below.</li><li>Answer the interviewer's questions. Say <b>hint</b>, <b>skip</b> or <b>stop</b> at any time.</li><li>At the end you get a scorecard, three fixes with links to the right modules, and a result block.</li></ol>
+        <p class="hint">If the chat does not pick up the skill, start with “use the agentic-interview skill” and then give the opener.</p></div>
+      <div class="box"><h3>Openers</h3>
+        <div class="copyrow"><code>mock interview, senior, broking</code><button class="btn" type="button" data-copy="mock interview, senior, broking">Copy</button></div>
+        <div class="copyrow"><code>quick mock, SDE-2, UPI</code><button class="btn" type="button" data-copy="quick mock, SDE-2, UPI">Copy</button></div>
+        <div class="copyrow"><code>full mock, staff, surprise me</code><button class="btn" type="button" data-copy="full mock, staff, surprise me">Copy</button></div>
+        <p class="hint"><b>Levels:</b> SDE-2, Senior (default), Staff. <b>Length:</b> Quick, about 15 minutes, or Full, about 45 minutes.</p>
+        </div>
+    </div>
+    <div class="box"><h3>Save a spoken mock</h3>
+      <p>Paste the result block from the end of the chat. It starts with <code>=== INTERVIEW ROOM RESULT v1 ===</code>. You can also paste the whole chat and have Claude score it with the same rubric.</p>
+      <label class="visually-hidden" for="ptext">Result block or chat</label><textarea id="ptext" rows="7" placeholder="Paste the result block or the whole chat here"></textarea>
+      <div class="pick"><label class="visually-hidden" for="pspick">Scenario for chat scoring</label><select id="pspick"></select><label class="visually-hidden" for="plvl">Level</label><select id="plvl"><option>SDE-2</option><option selected>Senior</option><option>Staff</option></select></div>
+      <div class="bar"><button class="btn primary" type="button" id="pbtn">Save result block</button><button class="btn" type="button" id="pscore" hidden>Score chat with Claude</button></div>
+      <p class="hint" id="pmsg" aria-live="polite"></p></div>
+  </section>
+
+  <section class="panel" id="progress" role="tabpanel" aria-labelledby="tab-progress" hidden>
+    <div class="stats" id="pstats"></div>
+    <div class="cols">
+      <div class="box"><h3>How well you spot each idea</h3><div class="tbars" id="tbars"></div><p class="hint" id="tnote"></p></div>
+      <div class="box"><h3>Recent drills</h3><div id="hist"></div></div>
+    </div>
+    <div class="box"><h3>Mock interviews by area</h3><div id="mhist"></div></div>
+    <div class="box"><h3>All scenarios</h3><div class="sgrid" id="sgrid"></div></div>
+  </section>
+
+  <footer class="foot"><span>Agentic AI Mastery · Interview Room</span><span>All companies are fictional. Regulatory facts are for learning, not legal advice.</span></footer>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>

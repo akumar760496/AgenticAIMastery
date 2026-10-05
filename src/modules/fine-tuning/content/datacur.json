@@ -1,0 +1,946 @@
+{
+  "id": "datacur",
+  "moduleSlug": "fine-tuning",
+  "name": "Training Data Curation and Synthetic Data",
+  "shortName": "Data curation",
+  "question": "Is my fine-tuning data clean, balanced and safe to train on?",
+  "summary": "Curation builds the fine-tuning dataset itself: source examples from logs and experts, put them in one label set and one format, remove exact and near duplicates, fix wrong labels, balance intents and languages, scrub personal data, drop anything that overlaps the eval set, and fill thin intents with synthetic examples from a stronger model that are checked before use. A small, clean, consistent set usually beats a large noisy one. The training methods live in SFT, DPO and distillation; proving the result lives in Before and after.",
+  "useCases": [
+    "Turning support, chat or call-centre logs into training data",
+    "A task where a few intents dominate and rare ones matter most",
+    "Any dataset that may hold customers’ personal data"
+  ],
+  "keyFacts": {
+    "label": "Pipeline",
+    "items": [
+      {
+        "term": "Sourcing",
+        "detail": "production logs for realism, experts for rare and hard cases; one label set, one format"
+      },
+      {
+        "term": "Deduplication",
+        "detail": "exact hashes first, then MinHash with LSH for near-copies (Jaccard ≈ 0.8)"
+      },
+      {
+        "term": "Label cleaning",
+        "detail": "confident learning ranks likely errors; people review the hardest ones"
+      },
+      {
+        "term": "Balance",
+        "detail": "cap dominant intents; cover every language and channel you serve"
+      },
+      {
+        "term": "PII and decontamination",
+        "detail": "scrub identifiers before training; drop rows that match the eval set"
+      },
+      {
+        "term": "Synthetic data",
+        "detail": "written by a stronger model, then filtered, verified and spot-checked"
+      }
+    ]
+  },
+  "steps": [
+    "Pull logs and expert examples into one label set and one format",
+    "Deduplicate, then decontaminate against the eval set",
+    "Clean labels with model help and human review; scrub PII; rebalance",
+    "Fill thin intents with verified synthetic rows, and version the dataset"
+  ],
+  "pitfalls": [
+    "Training on raw logs, so copies, wrong labels and personal data go straight into the weights",
+    "Deduplicating within the training data only, leaving eval items in it",
+    "Unchecked synthetic rows that repeat the generator’s mistakes and sameness"
+  ],
+  "tools": [
+    "datasketch",
+    "cleanlab",
+    "Microsoft Presidio",
+    "Argilla",
+    "distilabel",
+    "Hugging Face datatrove"
+  ],
+  "remember": "Fewer, cleaner, balanced rows: dedup, decontaminate, fix labels, scrub PII, verify the synthetic ones.",
+  "caption": "Illustrative: 50,000 logged loan queries at Udaan Lend, a fictional NBFC, curated to 37,480 rows.",
+  "comparison": {
+    "scope": "The training dataset",
+    "cost": 2,
+    "needs": "Logs, reviewers, a stronger model",
+    "best": "Contaminated evals and copied noise"
+  },
+  "diagram": {
+    "file": "diagrams/datacur.svg"
+  },
+  "lesson": {
+    "file": "curate.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import hashlib",
+        "steps": []
+      },
+      {
+        "text": "from datasketch import MinHash, MinHashLSH",
+        "steps": []
+      },
+      {
+        "text": "from cleanlab.filter import find_label_issues",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "rows = load_logs(\"loan_queries.jsonl\") + load_expert_examples()   # 50,000",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "rows = [normalise(r) for r in rows]      # one intent set, one chat format",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def sig(text, n=5):",
+        "steps": []
+      },
+      {
+        "text": "    m = MinHash(num_perm=128)",
+        "steps": []
+      },
+      {
+        "text": "    for i in range(max(1, len(text) - n + 1)):",
+        "steps": []
+      },
+      {
+        "text": "        m.update(text[i:i + n].encode(\"utf-8\"))",
+        "steps": []
+      },
+      {
+        "text": "    return m",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "lsh, seen, kept = MinHashLSH(threshold=0.8, num_perm=128), set(), []",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "for i, r in enumerate(rows):",
+        "steps": []
+      },
+      {
+        "text": "    text = r[\"text\"].lower()",
+        "steps": []
+      },
+      {
+        "text": "    h, m = hashlib.sha256(text.encode()).hexdigest(), sig(text)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if h in seen or lsh.query(m):",
+        "steps": []
+      },
+      {
+        "text": "        continue                         # exact or near copy: 9,000 dropped",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    seen.add(h); lsh.insert(str(i), m); kept.append((r, m))",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "evl = MinHashLSH(threshold=0.8, num_perm=128)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "for j, e in enumerate(load_eval(\"eval_2000.jsonl\")):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    evl.insert(f\"eval-{j}\", sig(e[\"text\"].lower()))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "kept = [r for r, m in kept if not evl.query(m)]      # 400 dropped: 40,600",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "issues = find_label_issues(labels=[INTENTS.index(r[\"intent\"]) for r in kept],",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                           pred_probs=cross_val_probs(kept),",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                           return_indices_ranked_by=\"self_confidence\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "kept = apply_fixes(kept, human_review(kept, issues[:2000]))   # 2,000 × ₹40",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "kept = apply_fixes(kept, relabel_clear_cases(kept, issues[2000:]))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "kept = [scrub_pii(r) for r in kept]      # Aadhaar, PAN, mobile, loan a/c",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "kept = cap_intent(kept, \"emi_due_date\", keep=1/3)       # 30% → 12.5%",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "synth = generate(teacher, RARE_INTENTS, n=8000, langs=[\"en\", \"hi\", \"hinglish\"])",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "synth = [s for s in synth if verified(s, kept, evl)]    # 5,000 kept",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "write_jsonl(\"train_v3.jsonl\", kept + synth)             # 37,480 rows",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Source and normalise",
+        "text": "Udaan Lend, a fictional NBFC, pulls 50,000 loan queries from 14 months of chat and call-centre logs, plus a few hundred replies written by collections and grievance experts. normalise() maps old label spellings onto one set of 12 intents and puts every row in the same chat format, so the model never sees “EMI date” and “emi_due_date” as two different answers."
+      },
+      {
+        "title": "Remove exact and near duplicates",
+        "text": "A SHA-256 hash catches exact copies. MinHash signatures on 5-character shingles, indexed with LSH, catch near-copies at Jaccard similarity 0.8, such as the same template with a different name. 9,000 rows, 18%, go. Copies over-weight a few phrasings and waste review effort."
+      },
+      {
+        "title": "Decontaminate against the eval set",
+        "text": "The same signatures are checked against the 2,000-item eval set. 400 training rows are near-copies of eval items. Left in, the model memorises them: on the raw data the full eval set reports 84.9% while its 1,600 clean items show 81.4%. Removing them leaves 40,600 rows."
+      },
+      {
+        "title": "Find and fix wrong labels",
+        "text": "find_label_issues compares each logged intent with cross-validated predictions and ranks the likely errors. The 2,000 hardest go to trained reviewers at ₹40 each, ₹80,000 in all; clear-cut ones are relabelled by a stronger model. Wrong labels fall from 9% to about 1.5%."
+      },
+      {
+        "title": "Scrub PII, then rebalance",
+        "text": "12% of rows carry Aadhaar or PAN numbers, mobile numbers, names or loan account numbers. A model can repeat what it was trained on, and India’s DPDP Act expects personal data to be used only for a stated purpose, so scrub_pii() swaps them for typed placeholders such as [PAN], catching 98%. Then the EMI-due-date intent, 30% of rows, is cut to one in three: 8,120 rows go and 32,480 remain."
+      },
+      {
+        "title": "Add verified synthetic rows",
+        "text": "Three rare intents, foreclosure quotes, restructuring requests and grievance escalation, have about 1,200 real rows. A stronger model writes 8,000 more in English, Hindi and Hinglish; checks keep 5,000 where an independent classifier agrees, facts match the policy sheet and nothing copies a real or eval row, and reviewers spot-check 500 for ₹20,000. Rare-intent accuracy rises from 58% to 87%, and overall to 90.6% on 37,480 rows."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">50,000 queries · 12 intents · 1 format</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"45\" style=\"text-anchor:end;--d:0s\">raw</text><rect x=\"118\" y=\"35\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"35\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"45\" style=\"text-anchor:start;--d:0.2s\">50,000</text><text class=\"tl a\" x=\"112\" y=\"65\" style=\"text-anchor:end;--d:0.15s\">deduped</text><rect x=\"118\" y=\"55\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"55\" width=\"155.79999999999998\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.25s\"/><text class=\"mono a\" x=\"314\" y=\"65\" style=\"text-anchor:start;--d:0.35s\">41,000</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"80\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"95\" text-anchor=\"middle\">400 near-copies of eval items out → 40,600</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"110\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"88\" y=\"125\" text-anchor=\"middle\">wrong labels 9%</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M170 121L190 121\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"192\" y=\"110\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"272\" y=\"125\" text-anchor=\"middle\">after review 1.5%</text></g><text class=\"sb a\" x=\"8\" y=\"148\" style=\"text-anchor:start;--d:0.3s\">2,000 reviewed × ₹40 = ₹80,000</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"158\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"173\" text-anchor=\"middle\">PII 98% scrubbed</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"158\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"173\" text-anchor=\"middle\">EMI 30% → 12.5%</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"199\" style=\"text-anchor:end;--d:0s\">rare before</text><rect x=\"118\" y=\"189\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"189\" width=\"110.19999999999999\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"199\" style=\"text-anchor:start;--d:0.2s\">58%</text><text class=\"tl a\" x=\"112\" y=\"219\" style=\"text-anchor:end;--d:0.15s\">rare after</text><rect x=\"118\" y=\"209\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"209\" width=\"165.3\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.25s\"/><text class=\"mono a\" x=\"314\" y=\"219\" style=\"text-anchor:start;--d:0.35s\">87%</text><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"180\" y=\"248\" style=\"text-anchor:middle;fill:var(--pass)\">37,480 rows · honest accuracy 90.6%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Fewer, cleaner rows often beat many noisy ones, and train faster",
+      "Decontamination keeps eval scores honest",
+      "Scrubbing keeps customers’ personal data out of the weights",
+      "Verified synthetic rows fill intents the logs barely cover"
+    ],
+    "cons": [
+      "Human review costs money and time: ₹80,000 for 2,000 rows here",
+      "Thresholds for near-duplicates and label issues need tuning",
+      "Synthetic rows can carry the generator’s errors and sameness",
+      "Every new log batch needs the same pipeline again"
+    ],
+    "avoidWhen": [
+      "A prompt or retrieval already meets the bar, so there is nothing to train (see Decide)",
+      "You have no held-out eval set yet, so you cannot tell whether curation helped"
+    ],
+    "tools": [
+      {
+        "name": "datasketch",
+        "type": "Open source",
+        "what": "MinHash and MinHash LSH for near-duplicate detection and decontamination",
+        "url": "https://ekzhu.com/datasketch/"
+      },
+      {
+        "name": "cleanlab",
+        "type": "Open source, commercial studio",
+        "what": "Confident learning: ranks rows whose labels are probably wrong",
+        "url": "https://docs.cleanlab.ai"
+      },
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source (Microsoft)",
+        "what": "Detects and anonymises PII with built-in and custom recognisers",
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "name": "Argilla",
+        "type": "Open source (Hugging Face)",
+        "what": "Review queues where people check and correct flagged rows",
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "name": "distilabel",
+        "type": "Open source (Argilla)",
+        "what": "Pipelines that generate synthetic data with a model and score it with another",
+        "url": "https://distilabel.argilla.io"
+      },
+      {
+        "name": "Hugging Face datatrove",
+        "type": "Open source (Hugging Face)",
+        "what": "Large-scale filtering and deduplication pipelines",
+        "url": "https://github.com/huggingface/datatrove"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Udaan Lend, a fictional NBFC, is tuning a small model to classify and answer loan queries from 50,000 logged examples. 18% are copies, 9% carry the wrong intent, 30% are one intent (EMI due date), 12% hold PII, and 400 are near-copies of items in the 2,000-item eval set. Choose how to curate them, and compare the dataset size, honest and reported accuracy, rare-intent accuracy, PII left and review cost.",
+    "controls": [
+      "Deduplication: off, within the training data, or also against the eval set.",
+      "Label cleaning: none, or model-assisted with 2,000 rows reviewed by people; and whether to rebalance the EMI-date intent.",
+      "Scrub PII, and fill rare intents with 5,000 synthetic rows, unchecked or verified."
+    ],
+    "outputs": [
+      {
+        "name": "Final dataset",
+        "meaning": "Rows used for training: real rows after curation plus any synthetic rows."
+      },
+      {
+        "name": "Honest eval accuracy",
+        "meaning": "Accuracy on eval items that are not in the training data."
+      },
+      {
+        "name": "Reported on the full eval set",
+        "meaning": "What the 2,000-item eval set says; higher than honest when eval items leaked into training."
+      },
+      {
+        "name": "Rare-intent accuracy",
+        "meaning": "Foreclosure quotes, restructuring requests and grievance escalation."
+      },
+      {
+        "name": "Rows still holding PII",
+        "meaning": "Rows with Aadhaar, PAN, mobile or account numbers left in the training data."
+      },
+      {
+        "name": "Human review cost",
+        "meaning": "₹40 for each row a person reviews."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Raw logs",
+        "expect": "50,000 rows: 81.4% honest but 84.9% reported, rare intents 58%, 6,000 rows with PII, ₹0."
+      },
+      {
+        "k": "tidy",
+        "name": "Clean labels, dedup within training only",
+        "expect": "41,000 rows: 87.5% honest, 89.8% reported, rare 65%, 98 PII rows, ₹80,000."
+      },
+      {
+        "k": "rawsyn",
+        "name": "Unchecked synthetic rows",
+        "expect": "37,480 rows: 85.7% honest and reported, rare 74%, 78 PII rows, ₹0."
+      },
+      {
+        "k": "curated",
+        "name": "Fully curated",
+        "expect": "37,480 rows: 90.6% honest and reported, rare 87%, 78 PII rows, ₹1,00,000."
+      }
+    ],
+    "missions": [
+      {
+        "k": "honest",
+        "text": "Make the reported score honest: no eval overlap, and at least 87% on clean items.",
+        "hint": "Deduplicate against the eval set as well, and fix the labels."
+      },
+      {
+        "k": "rare",
+        "text": "Get rare intents to at least 85% with no more than 100 rows holding PII.",
+        "hint": "Thin intents need balance, clean labels and verified extra rows."
+      },
+      {
+        "k": "lean",
+        "text": "Beat the raw 50,000 rows with at most 38,000: at least 90% honest and no more than 100 PII rows.",
+        "hint": "Removing rows can raise accuracy."
+      }
+    ],
+    "tools": [
+      {
+        "n": "datasketch",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "MinHash LSH for near-duplicates and eval decontamination.",
+        "ex": "Drop training rows at Jaccard 0.8 or above against each other and the eval set.",
+        "pros": [
+          "Simple API",
+          "Fast on millions of rows"
+        ],
+        "cons": [
+          "Threshold needs choosing",
+          "Surface text only, not meaning"
+        ],
+        "url": "https://ekzhu.com/datasketch/"
+      },
+      {
+        "n": "cleanlab",
+        "type": "Open source, commercial studio",
+        "start": 2,
+        "prod": 3,
+        "best": "Ranking likely label errors with confident learning.",
+        "ex": "Send the 2,000 most suspicious intent labels to reviewers.",
+        "pros": [
+          "Works with any classifier’s probabilities",
+          "Ranks issues for review"
+        ],
+        "cons": [
+          "Needs out-of-sample probabilities",
+          "Flags need a person to confirm"
+        ],
+        "url": "https://docs.cleanlab.ai"
+      },
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Detecting and anonymising PII with built-in and custom recognisers.",
+        "ex": "Replace names, phone and PAN numbers with typed placeholders.",
+        "pros": [
+          "Extensible recognisers",
+          "Analyser and anonymiser are separate"
+        ],
+        "cons": [
+          "Indian formats need checking or custom patterns",
+          "Misses need a sample review"
+        ],
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "n": "distilabel",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Generating synthetic rows with one model and scoring them with another.",
+        "ex": "Write 8,000 rare-intent queries in English, Hindi and Hinglish, keep the verified ones.",
+        "pros": [
+          "Pipelines with generation and judging",
+          "Works with many model providers"
+        ],
+        "cons": [
+          "Judges have their own biases",
+          "Costs grow with generations"
+        ],
+        "url": "https://distilabel.argilla.io"
+      },
+      {
+        "n": "Argilla",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Human review queues for flagged and synthetic rows.",
+        "ex": "Reviewers confirm or correct 2,000 flagged labels and spot-check 500 synthetic rows.",
+        "pros": [
+          "Review interface out of the box",
+          "Exports to Hugging Face datasets"
+        ],
+        "cons": [
+          "Needs hosting",
+          "Reviewer guidelines are on you"
+        ],
+        "url": "https://docs.argilla.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Many copies and templates in the logs",
+        "tool": "MinHash deduplication (datasketch)"
+      },
+      {
+        "need": "Labels look inconsistent",
+        "tool": "cleanlab plus a human review queue"
+      },
+      {
+        "need": "A rare intent has few examples",
+        "tool": "Verified synthetic rows (distilabel + review)"
+      }
+    ],
+    "goals": [
+      "See how eval overlap inflates a score",
+      "See how fewer, cleaner rows can train a better model",
+      "See why synthetic data must be verified before use"
+    ]
+  },
+  "practice": {
+    "scenario": "Udaan Lend, a fictional NBFC, wanted a small model to classify and answer loan queries. Its first tuning run used 50,000 raw chat and call-centre logs and scored 84.9% on the eval set, which looked fine until an audit found 400 eval items copied in the training data; on clean items the score was 81.4%, and foreclosure and grievance queries were right only 58% of the time. The team deduplicated with MinHash, removed the eval overlap, fixed labels with cleanlab and 2,000 human reviews, scrubbed PII, capped the EMI-date intent and added 5,000 verified synthetic rows for rare intents. The new set had 37,480 rows, and the model scored 90.6% honestly, with 87% on rare intents.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Loan-query logs deduplicated, relabelled and scrubbed before tuning an intent classifier"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims emails rebalanced so rare claim types are not drowned out by status checks"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Hindi and Hinglish support chats balanced by language, with synthetic rows for new plans"
+      }
+    ],
+    "analogy": "Preparing a revision guide from a year of class notes: throw out the photocopies of the same page, correct the wrong answers, black out classmates’ phone numbers, remove the actual exam questions, and write a few extra worked examples for the chapters nobody took notes on.",
+    "library": {
+      "name": "datasketch and cleanlab",
+      "what": "MinHash LSH finds near-duplicates and eval overlap; confident learning ranks rows whose labels are probably wrong.",
+      "install": "pip install datasketch cleanlab"
+    },
+    "note": "scrub_pii() is a regex sketch; names and addresses need an NER-based tool such as Microsoft Presidio, plus a human check on a sample. The loan account format UL followed by 10 digits is invented for this example. Label-issue ranking uses cleanlab.filter.find_label_issues with cross-validated probabilities. This is educational material, not legal advice on the DPDP Act.",
+    "samples": [
+      {
+        "file": "curate.py",
+        "language": "python",
+        "code": "import hashlib\nimport re\nfrom datasketch import MinHash, MinHashLSH\n\ndef sig(text, n=5, num_perm=128):\n    \"\"\"MinHash signature over character 5-grams of normalised text.\"\"\"\n    text = \" \".join(text.lower().split())\n    m = MinHash(num_perm=num_perm)\n    for i in range(max(1, len(text) - n + 1)):\n        m.update(text[i:i + n].encode(\"utf-8\"))\n    return m\n\ndef dedupe(rows, threshold=0.8):\n    lsh, seen, kept = MinHashLSH(threshold=threshold, num_perm=128), set(), []\n    for i, r in enumerate(rows):\n        h = hashlib.sha256(\" \".join(r[\"text\"].lower().split()).encode()).hexdigest()\n        m = sig(r[\"text\"])\n        if h in seen or lsh.query(m):\n            continue                       # exact or near copy\n        seen.add(h)\n        lsh.insert(f\"row-{i}\", m)\n        kept.append(r)\n    return kept\n\ndef decontaminate(rows, eval_rows, threshold=0.8):\n    lsh = MinHashLSH(threshold=threshold, num_perm=128)\n    for j, e in enumerate(eval_rows):\n        lsh.insert(f\"eval-{j}\", sig(e[\"text\"]))\n    return [r for r in rows if not lsh.query(sig(r[\"text\"]))]\n\nPII = [(\"AADHAAR\", re.compile(r\"\\b\\d{4}\\s?\\d{4}\\s?\\d{4}\\b\")),\n       (\"PAN\", re.compile(r\"\\b[A-Z]{5}\\d{4}[A-Z]\\b\")),\n       (\"MOBILE\", re.compile(r\"(?:\\+91[\\s-]?)?\\b[6-9]\\d{9}\\b\")),\n       (\"EMAIL\", re.compile(r\"\\b[\\w.+-]+@[\\w-]+\\.[\\w.]+\\b\")),\n       (\"LOAN_AC\", re.compile(r\"\\bUL\\d{10}\\b\"))]\n\ndef scrub_pii(text):\n    for tag, pattern in PII:\n        text = pattern.sub(f\"[{tag}]\", text)\n    return text\n\ndef cap_intent(rows, intent, keep_every=3):\n    out, n = [], 0\n    for r in rows:\n        if r[\"intent\"] == intent:\n            n += 1\n            if n % keep_every:\n                continue                   # keep 1 in 3\n        out.append(r)\n    return out"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Udaan Lend has 50,000 logged loan queries. Deduplication removes 18% of them, decontamination then removes 400 rows that match the eval set, and the EMI-date intent, 30% of what remains, is cut to one row in three. Finally 5,000 verified synthetic rows are added. How many rows is the final training set?",
+    "answer": "50,000 × 0.82 = 41,000 after deduplication; 41,000 − 400 = 40,600. The EMI-date intent is 0.3 × 40,600 = 12,180 rows; keeping one in three leaves 4,060, so 8,120 go and 32,480 remain. Adding 5,000 synthetic rows gives 37,480, fewer than the 50,000 raw rows but a better model.",
+    "expected": {
+      "value": 37480,
+      "tolerance": 10,
+      "label": "rows ="
+    },
+    "interview": [
+      {
+        "question": "How would you build a fine-tuning dataset from production logs?",
+        "answer": "Pull logs and expert-written examples into one label set and one format. Deduplicate exactly and with MinHash for near-copies, and remove anything that overlaps the eval set. Rank likely label errors with a tool like cleanlab and have people review the hardest ones. Scrub personal data, rebalance dominant intents and languages, and fill thin intents with synthetic rows from a stronger model that are filtered and spot-checked. Version the dataset and measure every change on a clean held-out set."
+      },
+      {
+        "question": "When is synthetic data a good idea, and what can go wrong?",
+        "answer": "It helps when real examples of an intent, language or edge case are scarce, or cannot be used for privacy reasons. It goes wrong when rows are used unchecked: the generator’s factual errors, a narrow style that differs from real users, and copies of eval items all pass into training, and repeated rounds of training on generated data can narrow what a model produces. Generate from a stronger model, verify with an independent classifier, rules and a human sample, deduplicate against real and eval data, and keep real data as the backbone."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Deduplicating the training data but never checking it against the eval set",
+        "fix": "Run the same near-duplicate check between training rows and eval items, and drop the overlaps from training"
+      },
+      {
+        "mistake": "Adding generated rows straight from the model",
+        "fix": "Filter with independent checks and a human spot-check, and track how many are rejected"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cu01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC has 50,000 logged loan queries, and 18% are exact or near copies. How many rows remain after deduplication?",
+      "options": [
+        "9,000",
+        "41,000",
+        "45,500",
+        "49,100"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "50,000 × (1 − 0.18) = 41,000."
+    },
+    {
+      "id": "cu02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique finds near-duplicate messages, such as the same template with a different customer name, without comparing every pair?",
+      "options": [
+        "SHA-256 hashing only",
+        "MinHash signatures with locality-sensitive hashing",
+        "Sorting by message length",
+        "Removing stop words"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hashes only catch exact copies; MinHash with LSH estimates Jaccard similarity and finds near-copies efficiently."
+    },
+    {
+      "id": "cu03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A tuned claims classifier scores 92% on the eval set, but 300 eval items also appear in the training data. What is the most likely effect?",
+      "options": [
+        "The score is inflated because the model memorised those items",
+        "The score is deflated",
+        "No effect, because the eval set is stored separately",
+        "The model will refuse those items"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Contamination rewards memorisation; score the model on clean items and remove the overlap from training."
+    },
+    {
+      "id": "cu04",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "400 of 2,000 eval items were in training and are answered 99% correctly; the other 1,600 score 81.4%. What does the full eval set report?",
+      "options": [
+        "81.4%",
+        "84.9%",
+        "90.2%",
+        "99.0%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(1,600 × 81.4 + 400 × 99) ÷ 2,000 = 0.8 × 81.4 + 19.8 = 84.92%, about 84.9%."
+    },
+    {
+      "id": "cu05",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A UPI help-desk dataset will be used for fine-tuning. Which should be scrubbed or replaced with placeholders? Select all that apply.",
+      "options": [
+        "Mobile numbers",
+        "Full bank account numbers",
+        "The intent label, such as refund_status",
+        "UPI IDs that identify a person"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Identifiers of people and accounts are personal data; the intent label is what the model must learn."
+    },
+    {
+      "id": "cu06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why is it risky to fine-tune on patient messages that still contain names and phone numbers?",
+      "options": [
+        "It makes training slower",
+        "A model can reproduce training text, so personal data can leak in its outputs",
+        "Names confuse the tokenizer",
+        "It lowers accuracy on every task"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Models can memorise and repeat rare strings from training data; remove identifiers first."
+    },
+    {
+      "id": "cu07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A label-issue tool flags 6,000 rows, and the budget allows people to review 2,000 at ₹40 each. What does the review cost?",
+      "options": [
+        "₹8,000",
+        "₹24,000",
+        "₹80,000",
+        "₹2,40,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2,000 × ₹40 = ₹80,000."
+    },
+    {
+      "id": "cu08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does confident learning, as in cleanlab, use to find probable label errors?",
+      "options": [
+        "The length of each example",
+        "Out-of-sample predicted probabilities compared with the given labels",
+        "The order rows were logged in",
+        "Random sampling only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Where a model trained on other folds is confidently in disagreement with the label, the label is probably wrong."
+    },
+    {
+      "id": "cu09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "30% of 40,600 support rows are one intent. If you keep one in three of that intent, how many rows remain in total?",
+      "options": [
+        "28,420",
+        "32,480",
+        "36,540",
+        "40,600"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The intent has 12,180 rows; keeping 4,060 removes 8,120, leaving 32,480."
+    },
+    {
+      "id": "cu10",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which checks make generated rows safe to add for rare loan intents? Select all that apply.",
+      "options": [
+        "An independent classifier agrees with the intent",
+        "Facts are checked against the current policy sheet",
+        "Near-copies of real or eval rows are removed",
+        "The generator rates its own rows as correct"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Self-rating by the same model is not independent; use separate checks and a human spot-check."
+    },
+    {
+      "id": "cu11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A stronger model generates 8,000 rows and checks keep 5,000. What is the rejection rate?",
+      "options": [
+        "12.5%",
+        "37.5%",
+        "62.5%",
+        "60%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 rejected ÷ 8,000 = 37.5%."
+    },
+    {
+      "id": "cu12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A team has 50,000 noisy rows or 37,480 curated rows. What does experience, such as the LIMA study, suggest?",
+      "options": [
+        "More rows always win",
+        "A smaller, cleaner, well-chosen set often matches or beats a larger noisy one",
+        "Row count does not matter at all",
+        "Only synthetic rows matter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Quality and diversity matter more than raw volume for teaching behaviour and format."
+    },
+    {
+      "id": "cu13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A Hindi and Hinglish chatbot’s training data is 90% English. What is the best curation step?",
+      "options": [
+        "Delete the Hindi rows",
+        "Balance languages to match the users served, adding verified Hindi and Hinglish rows if needed",
+        "Translate everything into English",
+        "Nothing: the model will generalise"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The dataset should cover every language and channel the model will serve."
+    },
+    {
+      "id": "cu14",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Deduplication is run within the training data only. What problem remains?",
+      "options": [
+        "Exact copies in training",
+        "Near-copies between training and the eval set",
+        "Wrong labels are removed",
+        "PII is scrubbed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Decontamination is a separate check against the eval set, using the same signatures."
+    },
+    {
+      "id": "cu15",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are signs a fine-tuning dataset needs curation before training? Select all that apply.",
+      "options": [
+        "One intent is 30% of the rows",
+        "The same template appears thousands of times",
+        "Two teams used different label names for the same intent",
+        "Every intent has a similar number of clean examples"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Skew, copies and inconsistent labels are all curation problems; balanced, clean intents are the goal."
+    },
+    {
+      "id": "cu16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The same intent is labelled refund_status, RefundStatus and ‘refund status’ in three log sources. What should happen first?",
+      "options": [
+        "Train on them as three intents",
+        "Map them onto one label before any other step",
+        "Drop two of the sources",
+        "Let the model learn the variants"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Label and format consistency comes first; otherwise the model learns three answers for one question."
+    },
+    {
+      "id": "cu17",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "12% of 40,600 rows hold PII, and a scrubber catches 98%. About how many rows still hold PII?",
+      "options": [
+        "49",
+        "97",
+        "487",
+        "4,872"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40,600 × 0.12 = 4,872; 2% of 4,872 ≈ 97. A second pass or a sample review catches the rest."
+    },
+    {
+      "id": "cu18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A model is trained repeatedly on its own generated product answers, round after round. What is the known risk?",
+      "options": [
+        "Model collapse: outputs grow narrower and rare cases fade",
+        "The model becomes too creative",
+        "Training becomes free",
+        "Nothing, if the model is large"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keep real data as the backbone and verify generated rows."
+    },
+    {
+      "id": "cu19",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which belong in a dataset card for a curated fine-tuning set? Select all that apply.",
+      "options": [
+        "Sources and time period",
+        "Deduplication and decontamination thresholds",
+        "Share of synthetic rows and how they were verified",
+        "The reviewers’ personal phone numbers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Record how the set was built so it can be rebuilt and audited; never personal data of reviewers."
+    },
+    {
+      "id": "cu20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Rare-intent accuracy rises from 58% to 87% after curation. By how many percentage points did it improve?",
+      "options": [
+        "19",
+        "29",
+        "50",
+        "87"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "87 − 58 = 29 percentage points."
+    }
+  ]
+}

@@ -1,0 +1,803 @@
+{
+  "id": "voice",
+  "moduleSlug": "computer-use",
+  "name": "Realtime Voice Agents and Latency Budgets",
+  "shortName": "Voice agents",
+  "question": "How fast must a voice agent answer, and in which language?",
+  "summary": "A voice agent either chains speech-to-text, an LLM and text-to-speech, or uses a speech-to-speech model. Callers expect a reply within about 600 ms of finishing; beyond 1.5 s the call feels broken. Every stage streams, turn detection decides when the caller has finished, and callers must be able to interrupt. In India the harder problem is language: accuracy in Hindi is far better than in Bhojpuri or Maithili, code-mixed Hinglish is the norm, and phone audio degrades recognition further.",
+  "useCases": [
+    "Customer-service helplines in Hindi and regional languages",
+    "Outbound reminders and collections calls",
+    "Voice interfaces in apps"
+  ],
+  "keyFacts": {
+    "label": "Latency budget (illustrative)",
+    "items": [
+      {
+        "term": "Network",
+        "detail": "30–80 ms"
+      },
+      {
+        "term": "End of turn",
+        "detail": "150–300 ms with smart detection"
+      },
+      {
+        "term": "Speech-to-text",
+        "detail": "streams while the caller speaks"
+      },
+      {
+        "term": "LLM first token",
+        "detail": "150–400 ms"
+      },
+      {
+        "term": "First audio",
+        "detail": "100–200 ms with streaming TTS"
+      },
+      {
+        "term": "Target",
+        "detail": "~600 ms; over 1.5 s feels broken"
+      }
+    ]
+  },
+  "steps": [
+    "Measure latency from the end of the caller’s speech to first audio",
+    "Use smart turn detection and streaming at every stage",
+    "Choose speech models evaluated on your callers’ languages and phone audio",
+    "Allow barge-in and hand over to a person when confidence is low"
+  ],
+  "pitfalls": [
+    "Silence-based turn detection that waits 800 ms",
+    "Choosing speech-to-text on clean benchmarks rather than real calls",
+    "No human fallback for low-resource languages"
+  ],
+  "tools": [
+    "Pipecat and LiveKit Agents",
+    "OpenAI Realtime API and Gemini Live API",
+    "Sarvam (Saaras, Bulbul) and AI4Bharat models",
+    "Bhashini for Indian-language services"
+  ],
+  "remember": "Stream everything, detect turns smartly, test on real callers.",
+  "caption": "Illustrative budget; WER figures from the Voice of India benchmark (2026).",
+  "comparison": {
+    "scope": "Spoken conversations",
+    "cost": 3,
+    "needs": "Streaming stack, language data",
+    "best": "Latency and regional accuracy"
+  },
+  "diagram": {
+    "file": "diagrams/voice.svg"
+  },
+  "lesson": {
+    "file": "helpline_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "class Helpline(Agent):",
+        "steps": []
+      },
+      {
+        "text": "    def __init__(self):",
+        "steps": []
+      },
+      {
+        "text": "        super().__init__(instructions=(",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            \"Reply in the caller's language and register in one or two \"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            \"short sentences. If unsure what they said, ask once, then \"",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            \"transfer to a person.\"))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def entrypoint(ctx):",
+        "steps": []
+      },
+      {
+        "text": "    session = AgentSession(",
+        "steps": []
+      },
+      {
+        "text": "        stt=sarvam.STT(language=\"hi-IN\"),        # tested on phone audio",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        llm=openai.LLM(model=\"gpt-4.1-mini\"),    # fast first token",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        tts=sarvam.TTS(target_language_code=\"hi-IN\"),",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        vad=silero.VAD.load(),",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        turn_detection=MultilingualModel())      # not just silence",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    await session.start(room=ctx.room, agent=Helpline())",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    await session.generate_reply(instructions=\"Greet the caller in Hindi.\")",
+        "steps": [
+          1
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Measure the right gap",
+        "text": "Latency is timed from the end of the caller’s speech to the first audio back. The pilot took about 1.9 seconds, and 1 in 6 callers hung up."
+      },
+      {
+        "title": "Stream every stage",
+        "text": "Speech-to-text runs while the caller talks, the model streams tokens, and synthesis starts on the first words. A fast model keeps the first token quick."
+      },
+      {
+        "title": "Choose speech models on real calls",
+        "text": "A general model got 1 word in 5 wrong on Hinglish phone calls; an India-tuned model tested on recorded calls did far better."
+      },
+      {
+        "title": "Detect turns smartly",
+        "text": "Waiting for 800 ms of silence adds most of a second. A turn-detection model decides sooner and lets callers interrupt."
+      },
+      {
+        "title": "Short, natural replies",
+        "text": "One or two short sentences in the caller’s own mix of Hindi and English sound natural and finish sooner."
+      },
+      {
+        "title": "Know when to hand over",
+        "text": "Recognition is much weaker in Bhojpuri and Maithili. When confidence is low, the agent asks once, then transfers to a person."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"17\" style=\"text-anchor:end;--d:0s\">pilot</text><rect x=\"118\" y=\"7\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"7\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"17\" style=\"text-anchor:start;--d:0.2s\">1.9 s</text><text class=\"tl a\" x=\"112\" y=\"39\" style=\"text-anchor:end;--d:0.1s\">target</text><rect x=\"118\" y=\"29\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"29\" width=\"55.5\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"39\" style=\"text-anchor:start;--d:0.30000000000000004s\">≤ 0.8 s</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"56\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"62\" y=\"71\" text-anchor=\"middle\">STT streams</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx acc\" x=\"126\" y=\"56\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"71\" text-anchor=\"middle\">LLM streams</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx acc\" x=\"244\" y=\"56\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"298\" y=\"71\" text-anchor=\"middle\">TTS streams</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"99\" style=\"text-anchor:end;--d:0s\">general model</text><rect x=\"118\" y=\"89\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"89\" width=\"135\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"99\" style=\"text-anchor:start;--d:0.2s\">19% WER</text><text class=\"tl a\" x=\"112\" y=\"121\" style=\"text-anchor:end;--d:0.1s\">India-tuned</text><rect x=\"118\" y=\"111\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"111\" width=\"82.5\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"121\" style=\"text-anchor:start;--d:0.30000000000000004s\">12% WER</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"138\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"153\" text-anchor=\"middle\">silence 800 ms</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"184\" y=\"138\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"153\" text-anchor=\"middle\">turn model ~200 ms</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"166\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"181\" text-anchor=\"middle\">“Aapka card block ho gaya hai. Aur kuch?”</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"194\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"209\" text-anchor=\"middle\">Bhojpuri, Maithili: offer a person</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"236\" style=\"text-anchor:middle;fill:var(--ink-2)\">Hinglish phone calls, illustrative figures</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Serves callers who prefer speaking",
+      "Hindi and regional-language reach",
+      "24×7 without queues",
+      "Scales for peaks"
+    ],
+    "cons": [
+      "Tight latency budget",
+      "Accuracy varies widely by language",
+      "Telephony audio degrades recognition",
+      "Recordings are personal data"
+    ],
+    "avoidWhen": [
+      "Complex disputes needing judgement and empathy",
+      "Languages where recognition is too weak, without a fallback"
+    ],
+    "tools": [
+      {
+        "name": "LiveKit Agents",
+        "type": "Open source",
+        "what": "Realtime voice agents and telephony",
+        "url": "https://docs.livekit.io/agents/"
+      },
+      {
+        "name": "Pipecat",
+        "type": "Open source",
+        "what": "Composable voice pipelines",
+        "url": "https://docs.pipecat.ai"
+      },
+      {
+        "name": "OpenAI Realtime API",
+        "type": "Model API",
+        "what": "Speech-to-speech over WebRTC and SIP",
+        "url": "https://platform.openai.com/docs/guides/realtime"
+      },
+      {
+        "name": "Sarvam AI",
+        "type": "Commercial",
+        "what": "Indian-language speech recognition and synthesis",
+        "url": "https://www.sarvam.ai"
+      },
+      {
+        "name": "Bhashini",
+        "type": "Government platform",
+        "what": "Indian-language AI services",
+        "url": "https://bhashini.gov.in"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional bank is building a Hindi helpline agent for card blocking and UPI dispute status. Choose the architecture, speech recognition, the callers’ language, turn detection, model size, audio channel and streaming, and watch latency, recognition errors, calls resolved and cost per minute.",
+    "controls": [
+      "Choose a cascaded pipeline or a speech-to-speech model.",
+      "Choose speech recognition, turn detection, model size and streaming (cascade only for some).",
+      "Choose the callers’ language and phone or app audio, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Reply latency",
+        "meaning": "From the end of the caller’s speech to the first audio back."
+      },
+      {
+        "name": "Words recognised wrongly (WER)",
+        "meaning": "Illustrative word error rate for this language and channel."
+      },
+      {
+        "name": "Calls resolved without a person",
+        "meaning": "Completion falls with recognition errors and slow replies."
+      },
+      {
+        "name": "Hang-ups · cost per minute",
+        "meaning": "Callers who give up, and running cost."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "First pilot",
+        "expect": "1,460 ms, 20% of words misheard, 78% resolved."
+      },
+      {
+        "k": "s2s",
+        "name": "Speech-to-speech",
+        "expect": "560 ms, but 21% of Hinglish words misheard on phone lines: 80% resolved."
+      },
+      {
+        "k": "tuned",
+        "name": "India-tuned cascade",
+        "expect": "880 ms, 12% misheard, 86% resolved."
+      },
+      {
+        "k": "regional",
+        "name": "Bhojpuri callers, general model",
+        "expect": "42% misheard: only 56% resolved."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fast",
+        "text": "Serve Hinglish phone callers in 800 ms or less with at least 85% resolved.",
+        "hint": "India-tuned recognition, a turn model, a fast model, streaming."
+      },
+      {
+        "k": "regional",
+        "text": "Show that even India-tuned recognition leaves Bhojpuri or Maithili below 80% resolved.",
+        "hint": "Plan a human fallback."
+      },
+      {
+        "k": "broken",
+        "text": "Show a configuration that feels broken: over 1.5 seconds.",
+        "hint": "Turn off streaming synthesis."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LiveKit Agents",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Realtime voice agents with plugins, turn detection and telephony.",
+        "ex": "Build the helpline with India-tuned speech plugins and a multilingual turn detector.",
+        "pros": [
+          "Production WebRTC and SIP",
+          "Many plugins"
+        ],
+        "cons": [
+          "Infrastructure to run",
+          "Learning curve"
+        ],
+        "url": "https://docs.livekit.io/agents/"
+      },
+      {
+        "n": "Pipecat",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Composable pipelines for voice and multimodal agents.",
+        "ex": "Chain speech-to-text, an LLM and synthesis with interruption handling.",
+        "pros": [
+          "Flexible",
+          "Vendor-neutral"
+        ],
+        "cons": [
+          "You assemble more pieces",
+          "Ops overhead"
+        ],
+        "url": "https://docs.pipecat.ai"
+      },
+      {
+        "n": "OpenAI Realtime API",
+        "type": "Model API",
+        "start": 3,
+        "prod": 3,
+        "best": "Speech-to-speech with low latency over WebRTC and SIP.",
+        "ex": "Prototype a natural-sounding English and Hindi agent.",
+        "pros": [
+          "Very low latency",
+          "Handles interruptions"
+        ],
+        "cons": [
+          "Less control over recognition",
+          "Higher cost per minute"
+        ],
+        "url": "https://platform.openai.com/docs/guides/realtime"
+      },
+      {
+        "n": "Sarvam AI",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Speech recognition and synthesis for Indian languages, including code-mixed speech.",
+        "ex": "Recognise Hinglish phone calls and reply in natural Hindi.",
+        "pros": [
+          "22 Indian languages",
+          "Tuned for Indian audio"
+        ],
+        "cons": [
+          "Evaluate on your own calls",
+          "Vendor dependency"
+        ],
+        "url": "https://www.sarvam.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Replies feel slow",
+        "tool": "Smart turn detection and streaming everywhere"
+      },
+      {
+        "need": "Callers mix Hindi and English",
+        "tool": "India-tuned recognition tested on real calls"
+      },
+      {
+        "need": "Low-resource languages",
+        "tool": "Offer a person"
+      }
+    ],
+    "goals": [
+      "Build a latency budget stage by stage",
+      "See how language and channel drive errors",
+      "Plan a human fallback"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional bank piloted a Hindi and Hinglish voice agent for card blocking and UPI dispute status. The first build waited for 800 ms of silence, used a general speech model and did not stream speech synthesis: replies took almost 2 seconds and 1 in 6 callers hung up. Smart turn detection, an India-tuned speech model tested on real phone calls and streaming at every stage brought replies to about 700 ms. Callers speaking Bhojpuri or Maithili are offered a person.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Card blocking, balance and dispute-status helplines"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claim-status calls in regional languages"
+      },
+      {
+        "industry": "Lending",
+        "use": "Payment reminders and collections calls"
+      }
+    ],
+    "analogy": "A good phone operator: answers quickly, lets you interrupt, understands how you actually speak, and hands you to a colleague who speaks your language when needed.",
+    "library": {
+      "name": "LiveKit Agents",
+      "what": "A realtime voice framework: pluggable speech-to-text, LLM and speech synthesis, voice activity detection, a multilingual turn detector and telephony.",
+      "install": "pip install \"livekit-agents[openai,sarvam,silero,turn-detector]\""
+    },
+    "note": "Plugin and model names are examples; check current docs. Measure latency from the end of the caller’s speech to first audio on real calls.",
+    "samples": [
+      {
+        "file": "helpline_agent.py",
+        "language": "python",
+        "code": "from livekit import agents\nfrom livekit.agents import Agent, AgentSession\nfrom livekit.plugins import openai, sarvam, silero\nfrom livekit.plugins.turn_detector.multilingual import MultilingualModel\n\nclass Helpline(Agent):\n    def __init__(self):\n        super().__init__(instructions=(\n            \"You are a bank helpline agent. Reply in the caller's language and \"\n            \"register (Hindi, Hinglish or English) in one or two short sentences. \"\n            \"Never read out full card or account numbers. If you are not sure \"\n            \"what the caller said, ask once, then transfer to a person.\"))\n\nasync def entrypoint(ctx: agents.JobContext):\n    session = AgentSession(\n        stt=sarvam.STT(language=\"hi-IN\"),        # tested on real phone audio\n        llm=openai.LLM(model=\"gpt-4.1-mini\"),    # a fast model; example name\n        tts=sarvam.TTS(target_language_code=\"hi-IN\"),\n        vad=silero.VAD.load(),\n        turn_detection=MultilingualModel())      # smarter than silence alone\n    await session.start(room=ctx.room, agent=Helpline())\n    await session.generate_reply(instructions=\"Greet the caller in Hindi.\")\n\nif __name__ == \"__main__\":\n    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A cascaded voice agent has network 60 ms, end-of-turn detection 250 ms, speech-to-text finalisation 120 ms, LLM first token 200 ms and speech synthesis first audio 150 ms. What is the total from the end of the caller’s speech to first audio, in ms?",
+    "answer": "60 + 250 + 120 + 200 + 150 = 780 ms, inside the acceptable 500–800 ms range. Waiting for 800 ms of silence instead of smart turn detection would add 550 ms and push it past 1.3 seconds.",
+    "expected": {
+      "value": 780,
+      "tolerance": 1,
+      "label": "ms ="
+    },
+    "interview": [
+      {
+        "question": "How do you get a voice agent under 800 ms?",
+        "answer": "Stream every stage so speech-to-text runs while the caller talks and synthesis starts on the first words of the reply; use smart turn detection rather than long silence timeouts; pick a fast model for the first response; keep servers close to the telephony provider; and consider speech-to-speech models where their language coverage is good enough."
+      },
+      {
+        "question": "What is different about voice agents for Indian customers?",
+        "answer": "Callers mix Hindi and English, switch languages mid-sentence and call over narrowband phone lines. Recognition is far better for Hindi than for Bhojpuri, Maithili and other lower-resource languages. Evaluate speech models on real calls in each language, handle code-mixed text, and route callers to a person when recognition confidence is low."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Silence-based end-of-turn detection",
+        "fix": "Use a turn-detection model and allow barge-in"
+      },
+      {
+        "mistake": "Choosing speech models on clean benchmarks",
+        "fix": "Test on real phone calls in each language"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "vo01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "From when is voice-agent latency measured?",
+      "options": [
+        "From dialling",
+        "From the end of the caller’s speech to first audio",
+        "From the model’s first token",
+        "From the end of the reply"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The pause the caller feels."
+    },
+    {
+      "id": "vo02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Network 60, turn 250, STT 120, LLM 200, TTS 150 ms. Total?",
+      "options": [
+        "580 ms",
+        "780 ms",
+        "980 ms",
+        "1,180 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sum of the stages."
+    },
+    {
+      "id": "vo03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Above about what latency does a call feel broken?",
+      "options": [
+        "300 ms",
+        "500 ms",
+        "1.5 s",
+        "5 s"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Over 1.5 seconds."
+    },
+    {
+      "id": "vo04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which cut voice latency? Select all that apply.",
+      "options": [
+        "Streaming speech synthesis",
+        "A turn-detection model instead of long silence waits",
+        "Waiting for the full reply before speaking",
+        "Larger models for every turn"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Stream and detect turns smartly."
+    },
+    {
+      "id": "vo05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is barge-in?",
+      "options": [
+        "The caller interrupting and the agent stopping to listen",
+        "A network error",
+        "A billing term",
+        "Call recording"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Interruption handling."
+    },
+    {
+      "id": "vo06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Hindi WER is about 5–8% for top systems. Bhojpuri and Maithili are…",
+      "options": [
+        "Lower",
+        "Similar",
+        "Above 20%",
+        "Zero"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Low-resource languages are much harder."
+    },
+    {
+      "id": "vo07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How should you choose speech recognition for a Hinglish helpline?",
+      "options": [
+        "The best score on clean benchmarks",
+        "Test on recorded real phone calls",
+        "The cheapest",
+        "The one with most languages listed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Real conditions differ."
+    },
+    {
+      "id": "vo08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Phone lines are typically 8 kHz. Effect on recognition?",
+      "options": [
+        "Improves it",
+        "Degrades it",
+        "None",
+        "Only affects English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Narrowband audio loses detail."
+    },
+    {
+      "id": "vo09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in a Hindi helpline design? Select all that apply.",
+      "options": [
+        "A route to a person for low-confidence calls",
+        "Short replies in the caller’s register",
+        "Reading full card numbers aloud",
+        "One-minute monologues"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fallbacks and natural replies."
+    },
+    {
+      "id": "vo10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A speech-to-speech model mainly offers…",
+      "options": [
+        "Lower latency and natural turn-taking",
+        "Cheaper storage",
+        "Better OCR",
+        "Offline training"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fewer hops."
+    },
+    {
+      "id": "vo11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A cascaded pipeline mainly offers…",
+      "options": [
+        "Choice of components and inspectable transcripts",
+        "No latency",
+        "No cost",
+        "No need for a model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Control and visibility."
+    },
+    {
+      "id": "vo12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Waiting for 800 ms of silence to end a turn adds roughly how much versus a turn model at ~200 ms?",
+      "options": [
+        "60 ms",
+        "600 ms",
+        "6 s",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "About 600 ms per turn."
+    },
+    {
+      "id": "vo13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Code-mixing means…",
+      "options": [
+        "Switching languages within a sentence",
+        "Mixing codecs",
+        "Encryption",
+        "Compression"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Hindi and English together."
+    },
+    {
+      "id": "vo14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Sarvam’s Saaras V4 (Sep 2026) supports how many Indian languages plus English?",
+      "options": [
+        "5",
+        "12",
+        "22",
+        "100"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "22 Indian languages and English."
+    },
+    {
+      "id": "vo15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which open-source framework builds realtime voice agents with telephony?",
+      "options": [
+        "LiveKit Agents",
+        "Pandas",
+        "Django",
+        "Kafka"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Also Pipecat."
+    },
+    {
+      "id": "vo16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Call recordings and transcripts are…",
+      "options": [
+        "Personal data needing notice and retention rules",
+        "Not regulated",
+        "Public",
+        "Only metadata"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DPDP applies (Panel 15)."
+    },
+    {
+      "id": "vo17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should replies look like on a voice channel?",
+      "options": [
+        "One or two short sentences",
+        "Long paragraphs",
+        "Bullet lists",
+        "Tables"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Short and natural."
+    },
+    {
+      "id": "vo18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why keep voice servers close to the telephony provider?",
+      "options": [
+        "To cut network latency",
+        "For tax reasons",
+        "To save disk",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Every hop adds delay."
+    },
+    {
+      "id": "vo19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does the Voice of India benchmark use?",
+      "options": [
+        "Unscripted telephone conversations",
+        "Studio readings",
+        "Synthetic speech",
+        "Song lyrics"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Real-world calls."
+    },
+    {
+      "id": "vo20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A caller’s language has high WER. Best design?",
+      "options": [
+        "Offer a person",
+        "Keep guessing",
+        "Hang up",
+        "Switch to English silently"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Human fallback."
+    }
+  ]
+}

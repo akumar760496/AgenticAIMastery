@@ -1,0 +1,303 @@
+{
+  "slug": "performance",
+  "number": 6,
+  "techniqueOrder": [
+    "ast",
+    "specdec",
+    "prefix",
+    "disagg",
+    "graphs",
+    "latbudget",
+    "serving",
+    "quant"
+  ],
+  "glossary": [
+    {
+      "term": "KV cache",
+      "definition": "Stored attention keys and values for processed tokens, so they aren't recomputed."
+    },
+    {
+      "term": "prefill",
+      "definition": "Processing the whole prompt before the first output token; limited by compute."
+    },
+    {
+      "term": "decode",
+      "definition": "Generating output one token at a time; limited by memory bandwidth."
+    },
+    {
+      "term": "TTFT",
+      "definition": "Time to first token: how long until the first output token appears."
+    },
+    {
+      "term": "TPOT",
+      "definition": "Time per output token after the first; sets streaming speed."
+    },
+    {
+      "term": "draft model",
+      "definition": "A small, fast model that proposes tokens for a larger model to verify."
+    },
+    {
+      "term": "acceptance rate",
+      "definition": "Share of drafted tokens the target model accepts in speculative decoding."
+    },
+    {
+      "term": "AST",
+      "definition": "Abstract syntax tree: the structured parse of source code."
+    },
+    {
+      "term": "repo map",
+      "definition": "A compact list of a repository's files, classes and function signatures."
+    },
+    {
+      "term": "LSP",
+      "definition": "Language Server Protocol: editor tooling for definitions, references and symbols."
+    },
+    {
+      "term": "DAG",
+      "definition": "Directed acyclic graph: steps with one-way dependencies and no cycles."
+    },
+    {
+      "term": "critical path",
+      "definition": "The longest chain of dependent steps; it sets total latency."
+    },
+    {
+      "term": "procedural memory",
+      "definition": "Stored know-how, such as workflows and skills, that an agent can reuse."
+    },
+    {
+      "term": "latency budget",
+      "definition": "A written target for how long a user-facing request may take, usually at p95, split into shares for each stage."
+    },
+    {
+      "term": "perceived latency",
+      "definition": "How long a wait feels to the user; early status lines and streamed words shorten it even when total time is unchanged."
+    },
+    {
+      "term": "LLM hop",
+      "definition": "One sequential model call on the path to an answer; each adds its own time to first token and generation time."
+    },
+    {
+      "term": "continuous batching",
+      "definition": "Adding and removing requests from the running batch at every decoding step."
+    },
+    {
+      "term": "PagedAttention",
+      "definition": "Storing the KV cache in fixed-size pages so memory is not wasted and more sequences fit."
+    },
+    {
+      "term": "KV cache",
+      "definition": "Stored attention keys and values for tokens already processed, reused at each new step."
+    },
+    {
+      "term": "FP8",
+      "definition": "An 8-bit floating-point format for weights and activations, supported on recent GPUs."
+    },
+    {
+      "term": "AWQ",
+      "definition": "Activation-aware weight quantisation: a 4-bit weight-only method that protects the most important weights."
+    },
+    {
+      "term": "calibration set",
+      "definition": "Representative prompts used to set quantisation scales."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Voyager: an open-ended embodied agent with a skill library (Wang et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.16291"
+    },
+    {
+      "id": "S2",
+      "title": "Agent Workflow Memory (Wang et al., 2024)",
+      "url": "https://arxiv.org/abs/2409.07429"
+    },
+    {
+      "id": "S3",
+      "title": "Cognitive Architectures for Language Agents, CoALA (Sumers et al., 2023)",
+      "url": "https://arxiv.org/abs/2309.02427"
+    },
+    {
+      "id": "S4",
+      "title": "Agentless: demystifying LLM-based software engineering agents (Xia et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.01489"
+    },
+    {
+      "id": "S5",
+      "title": "SWE-agent: agent-computer interfaces (Yang et al., 2024)",
+      "url": "https://arxiv.org/abs/2405.15793"
+    },
+    {
+      "id": "S6",
+      "title": "tree-sitter documentation",
+      "url": "https://tree-sitter.github.io/tree-sitter/"
+    },
+    {
+      "id": "S7",
+      "title": "Fast inference from transformers via speculative decoding (Leviathan et al., 2022)",
+      "url": "https://arxiv.org/abs/2211.17192"
+    },
+    {
+      "id": "S8",
+      "title": "Accelerating LLM decoding with speculative sampling (Chen et al., 2023)",
+      "url": "https://arxiv.org/abs/2302.01318"
+    },
+    {
+      "id": "S9",
+      "title": "EAGLE: speculative sampling requires rethinking feature uncertainty (Li et al., 2024)",
+      "url": "https://arxiv.org/abs/2401.15077"
+    },
+    {
+      "id": "S10",
+      "title": "vLLM documentation: speculative decoding",
+      "url": "https://docs.vllm.ai/en/latest/features/speculative_decoding/"
+    },
+    {
+      "id": "S11",
+      "title": "Efficient memory management for LLM serving with PagedAttention (Kwon et al., 2023)",
+      "url": "https://arxiv.org/abs/2309.06180"
+    },
+    {
+      "id": "S12",
+      "title": "vLLM documentation: automatic prefix caching",
+      "url": "https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/"
+    },
+    {
+      "id": "S13",
+      "title": "SGLang: efficient execution of structured language model programs (Zheng et al., 2023)",
+      "url": "https://arxiv.org/abs/2312.07104"
+    },
+    {
+      "id": "S14",
+      "title": "DistServe: disaggregating prefill and decoding (Zhong et al., 2024)",
+      "url": "https://arxiv.org/abs/2401.09670"
+    },
+    {
+      "id": "S15",
+      "title": "Splitwise: efficient generative LLM inference using phase splitting (Patel et al., 2023)",
+      "url": "https://arxiv.org/abs/2311.18677"
+    },
+    {
+      "id": "S16",
+      "title": "Mooncake: a KVCache-centric disaggregated architecture (Qin et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.00079"
+    },
+    {
+      "id": "S17",
+      "title": "NVIDIA Dynamo (GitHub)",
+      "url": "https://github.com/ai-dynamo/dynamo"
+    },
+    {
+      "id": "S18",
+      "title": "An LLM compiler for parallel function calling (Kim et al., 2023)",
+      "url": "https://arxiv.org/abs/2312.04511"
+    },
+    {
+      "id": "S19",
+      "title": "LangGraph (GitHub)",
+      "url": "https://github.com/langchain-ai/langgraph"
+    },
+    {
+      "id": "S20",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "id": "S21",
+      "title": "Anthropic docs: Streaming messages",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/streaming"
+    },
+    {
+      "id": "S22",
+      "title": "OpenTelemetry: Semantic conventions for generative AI",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+    },
+    {
+      "id": "S23",
+      "title": "The tail at scale (Dean and Barroso, 2013)",
+      "url": "https://research.google/pubs/the-tail-at-scale/"
+    },
+    {
+      "id": "S24",
+      "title": "Google SRE book: Service level objectives",
+      "url": "https://sre.google/sre-book/service-level-objectives/"
+    },
+    {
+      "id": "S25",
+      "title": "Nielsen Norman Group: Response times, the 3 important limits",
+      "url": "https://www.nngroup.com/articles/response-times-3-important-limits/"
+    },
+    {
+      "id": "S26",
+      "title": "Efficient memory management for LLM serving with PagedAttention (Kwon et al., 2023)",
+      "url": "https://arxiv.org/abs/2309.06180"
+    },
+    {
+      "id": "S27",
+      "title": "vLLM documentation",
+      "url": "https://docs.vllm.ai"
+    },
+    {
+      "id": "S28",
+      "title": "SGLang: efficient execution of structured language model programs (Zheng et al., 2023)",
+      "url": "https://arxiv.org/abs/2312.07104"
+    },
+    {
+      "id": "S29",
+      "title": "AWQ: activation-aware weight quantization for LLM compression and acceleration (Lin et al., 2023)",
+      "url": "https://arxiv.org/abs/2306.00978"
+    },
+    {
+      "id": "S30",
+      "title": "GPTQ: accurate post-training quantization for generative pre-trained transformers (Frantar et al., 2022)",
+      "url": "https://arxiv.org/abs/2210.17323"
+    },
+    {
+      "id": "S31",
+      "title": "vLLM documentation: quantization",
+      "url": "https://docs.vllm.ai/en/latest/features/quantization/"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Coding agents read whole files to change a few lines",
+      "techniqueId": "ast",
+      "advice": "Navigate the syntax tree and load only the nodes that matter."
+    },
+    {
+      "symptom": "Token generation is too slow",
+      "techniqueId": "specdec",
+      "advice": "Let a small draft model propose tokens that the big model verifies in one pass."
+    },
+    {
+      "symptom": "Time to first token is high with long, repeated prompts",
+      "techniqueId": "prefix",
+      "advice": "Enable prefix caching and keep the prompt start stable."
+    },
+    {
+      "symptom": "Long prompts stall other users’ streams at scale",
+      "techniqueId": "disagg",
+      "advice": "Serve prefill and decode on separate GPU pools."
+    },
+    {
+      "symptom": "Tool calls run one after another",
+      "techniqueId": "graphs",
+      "advice": "Model the task as a graph and run independent steps in parallel."
+    },
+    {
+      "symptom": "Users stare at a blank screen for seconds before the assistant answers",
+      "techniqueId": "latbudget",
+      "advice": "Set p95 budgets, trace each stage, stream a status line and tokens, run independent calls in parallel, cut LLM hops and time out slow tools with a fallback."
+    },
+    {
+      "symptom": "Self-hosted model is slow and expensive, and requests queue at peak",
+      "techniqueId": "serving",
+      "advice": "Serve with a continuous-batching engine (vLLM, SGLang), load-test, and size GPUs for p95 at peak."
+    },
+    {
+      "symptom": "A large open model needs too many GPUs to self-host",
+      "techniqueId": "quant",
+      "advice": "Quantise to FP8 (or 4-bit for one GPU), add an FP8 KV cache, and re-run your own evals."
+    }
+  ]
+}

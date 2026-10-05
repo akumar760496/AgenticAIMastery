@@ -1,0 +1,921 @@
+{
+  "id": "indicspeech",
+  "moduleSlug": "computer-use",
+  "name": "Speech in Indian Languages",
+  "shortName": "Indic speech",
+  "question": "Does the agent hear Hindi, Tamil and Hinglish correctly?",
+  "summary": "Speech recognition and synthesis for Hindi, Tamil, Bengali and other Indian languages, including callers who switch between them and English mid-sentence. Accuracy differs widely by language, accent and channel: an English-first model that is fine on English can get half the words wrong in Tamil on an 8 kHz phone line. The work is choosing an Indic-tuned recogniser, identifying the language turn by turn, boosting your own vocabulary, turning spoken amounts such as “saadhe teen hazaar” into ₹3,500, and measuring word error rate per language on your own call recordings. Latency and the voice loop itself belong to Realtime Voice Agents; this is about language quality.",
+  "useCases": [
+    "Helplines where callers speak Hindi, Hinglish, Tamil, Bengali and English",
+    "Calls that capture amounts, policy numbers, names and dates",
+    "Choosing between English-first, multilingual and Indic-tuned speech vendors"
+  ],
+  "keyFacts": {
+    "label": "What to measure",
+    "items": [
+      {
+        "term": "WER per language",
+        "detail": "(substitutions + deletions + insertions) ÷ reference words, per language and accent"
+      },
+      {
+        "term": "CER",
+        "detail": "character error rate: fairer for long, agglutinative words, as in Tamil"
+      },
+      {
+        "term": "Amount accuracy",
+        "detail": "spoken amounts turned into the exact rupee value"
+      },
+      {
+        "term": "Entity accuracy",
+        "detail": "policy numbers, plan names and customer names right"
+      },
+      {
+        "term": "Language ID",
+        "detail": "correct language on each turn, including code-switched turns"
+      },
+      {
+        "term": "Handover rate",
+        "detail": "calls passed to a person because speech was not understood"
+      }
+    ]
+  },
+  "steps": [
+    "Sample and transcribe your own calls, stratified by language, accent and channel",
+    "Identify the language on every turn and route to a recogniser tuned for it and for 8 kHz audio",
+    "Add custom vocabulary and rules that turn spoken amounts into numbers, then read them back",
+    "Report WER per language and amount accuracy, and hand low-confidence turns to a person"
+  ],
+  "pitfalls": [
+    "Choosing a model on a clean, wideband benchmark instead of your own phone calls",
+    "One blended WER that hides a failing Tamil or Bengali slice",
+    "Fixing the language at the start of the call when callers switch mid-call"
+  ],
+  "tools": [
+    "AI4Bharat IndicConformer",
+    "Sarvam (Saaras, Bulbul)",
+    "Bhashini",
+    "Google Cloud Speech-to-Text",
+    "Azure AI Speech",
+    "jiwer (WER, CER)"
+  ],
+  "remember": "Measure per language on your own calls. Identify each turn, boost your words, read amounts back.",
+  "caption": "Illustrative: helpline calls at Kavach Bima, a fictional insurer; 45% Hindi, 20% Hinglish, 15% Tamil, 10% Bengali, 10% English.",
+  "comparison": {
+    "scope": "Recognition and speech in Indian languages",
+    "cost": 3,
+    "needs": "Labelled call recordings per language",
+    "best": "A good average hiding a failing language"
+  },
+  "diagram": {
+    "file": "diagrams/indicspeech.svg"
+  },
+  "lesson": {
+    "file": "call_speech_eval.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import jiwer",
+        "steps": []
+      },
+      {
+        "text": "from collections import defaultdict",
+        "steps": []
+      },
+      {
+        "text": "from kavach.speech import load_turns, identify_language, RECOGNISERS, say   # your wrappers",
+        "steps": []
+      },
+      {
+        "text": "from kavach.amounts import words_to_rupees, rupees_in_words                  # your rules",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "TURNS = load_turns(\"calls/2026-08/\", sample_rate=8000)   # human-transcribed",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "PHRASES = [\"Kavach Suraksha Plus\", \"nominee\", \"grace period\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "           \"lapse\", \"revival\", \"rider\", \"premium\", \"surrender value\"]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def transcribe(turn):",
+        "steps": []
+      },
+      {
+        "text": "    lang = identify_language(turn.audio)          # every turn, not once a call",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    asr = RECOGNISERS[lang]                       # Indic-tuned, 8 kHz adapted",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    hyp = asr.transcribe(turn.audio, language=lang, phrases=PHRASES)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    return lang, hyp",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def evaluate(turns):",
+        "steps": []
+      },
+      {
+        "text": "    pairs, amt = defaultdict(list), [0, 0]",
+        "steps": []
+      },
+      {
+        "text": "    for t in turns:",
+        "steps": []
+      },
+      {
+        "text": "        lang, hyp = transcribe(t)",
+        "steps": []
+      },
+      {
+        "text": "        pairs[t.lang].append((t.reference, hyp.text))    # true language slice",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        if t.amount is not None:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            amt[0] += words_to_rupees(hyp.text) == t.amount   # \"saadhe teen hazaar\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            amt[1] += 1",
+        "steps": []
+      },
+      {
+        "text": "    for lang, p in sorted(pairs.items()):",
+        "steps": []
+      },
+      {
+        "text": "        refs, hyps = map(list, zip(*p))",
+        "steps": []
+      },
+      {
+        "text": "        print(lang, f\"WER {jiwer.wer(refs, hyps):.1%}\", f\"CER {jiwer.cer(refs, hyps):.1%}\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(f\"amounts right {amt[0] / amt[1]:.1%}\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def confirm_amount(hyp, lang):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    value = words_to_rupees(hyp.text)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if value is None or hyp.confidence < 0.8:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return None                                   # ask again, then a person",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    say(f\"{rupees_in_words(value, lang)}, sahi hai?\", lang=lang)  # read it back",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return value",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Test on your own calls",
+        "text": "Kavach Bima, a fictional insurer, samples turns from its own recorded calls, at the 8 kHz the phone line delivers, and has people transcribe them. The sample is stratified: 45% Hindi, 20% Hinglish, 15% Tamil, 10% Bengali, 10% English. A clean wideband benchmark would flatter every vendor."
+      },
+      {
+        "title": "Identify the language on every turn",
+        "text": "Callers switch. A policyholder opens in Tamil, then says the policy number in English. With the language fixed per call, Hinglish WER rose from 18% to 24% even on the Indic-tuned model, and Tamil, Bengali and English got worse too."
+      },
+      {
+        "title": "Route to a recogniser tuned for it",
+        "text": "Each language goes to a recogniser trained on Indian speech and adapted to 8 kHz audio. The English-first model got 66% of Tamil words wrong; the Indic-tuned one with telephony tuning and per-turn language ID gets 17%, and 16% with the vocabulary added."
+      },
+      {
+        "title": "Boost your own words",
+        "text": "Plan names and policy terms, such as “Kavach Suraksha Plus”, “grace period” and “revival”, are passed as phrase hints so the recogniser prefers them. They are rare in general speech, so without hints they come out as similar-sounding everyday words."
+      },
+      {
+        "title": "Turn amounts into numbers, then read them back",
+        "text": "“saadhe teen hazaar” is 3.5 × 1,000 = ₹3,500; “dhai lakh” is ₹2,50,000; “paune chaar hazaar” is ₹3,750. Rules turn the words into a value, and the agent reads it back in the caller’s language before acting. Amount capture rose from 55% to 91%."
+      },
+      {
+        "title": "Score per language, not one average",
+        "text": "WER and CER are printed per true language, so a good Hindi score cannot hide Tamil. Blended WER fell from 41% to 12%, and calls needing a person from 55% to 17%. Low-confidence amounts are asked again, then handed to a person."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Your own calls, 8 kHz, transcribed</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"39\" y=\"35\" text-anchor=\"middle\">hi 45%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"74\" y=\"20\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"105\" y=\"35\" text-anchor=\"middle\">hg 20%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"140\" y=\"20\" width=\"62\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"171\" y=\"35\" text-anchor=\"middle\">ta 15%</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"206\" y=\"20\" width=\"70\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"241\" y=\"35\" text-anchor=\"middle\">bn 10%</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"280\" y=\"20\" width=\"72\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"316\" y=\"35\" text-anchor=\"middle\">en 10%</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"52\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"68\" text-anchor=\"middle\">turn 1 · ta</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"122\" y=\"52\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"176\" y=\"68\" text-anchor=\"middle\">turn 2 · en</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"236\" y=\"52\" width=\"116\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"294\" y=\"68\" text-anchor=\"middle\">turn 3 · hi-en</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"86\" width=\"126\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"71\" y=\"102\" text-anchor=\"middle\">ta → Indic ASR</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M136 98L150 98\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"152\" y=\"86\" width=\"200\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"252\" y=\"102\" text-anchor=\"middle\">Tamil WER 66% → 17%</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"120\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"136\" text-anchor=\"middle\">hints: Kavach Suraksha Plus · grace period</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"154\" width=\"176\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"96\" y=\"170\" text-anchor=\"middle\">“saadhe teen hazaar”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M186 166L200 166\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"202\" y=\"154\" width=\"70\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"237\" y=\"170\" text-anchor=\"middle\">₹3,500</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx warn\" x=\"276\" y=\"154\" width=\"76\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"314\" y=\"170\" text-anchor=\"middle\">read back</text></g><text class=\"tl a\" x=\"8\" y=\"196\" style=\"text-anchor:start;--d:0.4s\">amounts right 55% → 91%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"219\" style=\"text-anchor:end;--d:0s\">blended WER</text><rect x=\"118\" y=\"209\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"209\" width=\"122.99999999999999\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"219\" style=\"text-anchor:start;--d:0.2s\">41%</text><text class=\"tl a\" x=\"112\" y=\"241\" style=\"text-anchor:end;--d:0.1s\">after</text><rect x=\"118\" y=\"231\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"231\" width=\"36\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"241\" style=\"text-anchor:start;--d:0.30000000000000004s\">12%</text><text class=\"sb a\" x=\"8\" y=\"258\" style=\"text-anchor:start;--d:0.2s\">per language · humans 55% → 17%</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Callers can speak the language, and the mix of languages, they actually use",
+      "Amounts, policy numbers and names are captured instead of re-asked",
+      "Fewer calls handed to people for being misheard",
+      "Per-language scores show exactly where to invest"
+    ],
+    "cons": [
+      "Needs transcribed recordings in every language you serve",
+      "Accuracy still varies by language, accent and line quality",
+      "Custom tuning and hosting cost more per minute",
+      "Recordings and transcripts are personal data under the DPDP Act"
+    ],
+    "avoidWhen": [
+      "Nearly all callers speak one well-supported language on good audio (a strong general model is enough)",
+      "You cannot collect or label any real calls (start with a narrow pilot and a human fallback)"
+    ],
+    "tools": [
+      {
+        "name": "AI4Bharat IndicConformer",
+        "type": "Open source (AI4Bharat, IIT Madras)",
+        "what": "Conformer speech recognition covering the 22 scheduled Indian languages",
+        "url": "https://ai4bharat.iitm.ac.in"
+      },
+      {
+        "name": "Sarvam AI",
+        "type": "Commercial",
+        "what": "Indian-language speech-to-text (Saaras) and text-to-speech (Bulbul) APIs",
+        "url": "https://docs.sarvam.ai"
+      },
+      {
+        "name": "Bhashini",
+        "type": "Government platform",
+        "what": "Speech recognition, synthesis and translation services for Indian languages",
+        "url": "https://bhashini.gov.in"
+      },
+      {
+        "name": "Google Cloud Speech-to-Text",
+        "type": "Cloud API",
+        "what": "Many Indian locales, such as hi-IN, ta-IN and bn-IN, with phrase adaptation",
+        "url": "https://cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages"
+      },
+      {
+        "name": "Azure AI Speech",
+        "type": "Cloud API",
+        "what": "Indian locales, phrase lists, Custom Speech and neural voices",
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support"
+      },
+      {
+        "name": "jiwer",
+        "type": "Open source",
+        "what": "Word and character error rates for your evaluation scripts",
+        "url": "https://github.com/jitsi/jiwer"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kavach Bima, a fictional insurer, runs a helpline where calls are 45% Hindi, 20% Hinglish, 15% Tamil, 10% Bengali and 10% English, over 8 kHz phone lines. Callers ask about premiums, lapsed policies and claims, and say amounts such as “saadhe teen hazaar”. Choose the speech model and three language-quality options, and watch word error rate per language, amounts captured, calls needing a person and cost per minute.",
+    "controls": [
+      "Choose the speech model: English-first global, multilingual general, or Indic-tuned.",
+      "Toggle identifying the language on every turn, and custom vocabulary for policy terms and amounts.",
+      "Toggle fine-tuning for 8 kHz telephony audio, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "WER per language",
+        "meaning": "Share of words misrecognised on phone calls in each language, the number a blended score hides."
+      },
+      {
+        "name": "Blended WER",
+        "meaning": "WER weighted by the call mix, with the worst language named."
+      },
+      {
+        "name": "Amounts captured exactly",
+        "meaning": "Spoken amounts turned into the exact rupee value; amount rules and read-back raise it."
+      },
+      {
+        "name": "Calls needing a person",
+        "meaning": "Calls handed over because speech or amounts were not understood."
+      },
+      {
+        "name": "Cost per minute",
+        "meaning": "Speech stack cost plus the people who take handed-over calls at about ₹12 a minute."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "English-first, language fixed per call",
+        "expect": "Blended WER 41%: Tamil 66%, Bengali 60%, Hinglish 51%. 55% of amounts right, 55% of calls need a person, ₹8.58 a minute."
+      },
+      {
+        "k": "multi",
+        "name": "Multilingual general, per-turn language ID",
+        "expect": "Blended WER 22%, Tamil 30%. 67% of amounts right, 35% need a person, ₹6.49 a minute."
+      },
+      {
+        "k": "indic",
+        "name": "Indic-tuned, language fixed per call",
+        "expect": "Blended WER 19%, but Hinglish 24% and Tamil 25%. 69% of amounts right, 31% need a person, ₹6.27 a minute."
+      },
+      {
+        "k": "full",
+        "name": "Indic-tuned with everything on",
+        "expect": "Blended WER 12%, Tamil 16%. 91% of amounts right, 17% need a person, ₹4.99 a minute, despite a ₹2.90 speech stack."
+      }
+    ],
+    "missions": [
+      {
+        "k": "amounts",
+        "text": "Capture at least 90% of amounts exactly with no more than 20% of calls going to a person.",
+        "hint": "It needs the Indic-tuned model, per-turn language ID, custom vocabulary and telephony tuning together."
+      },
+      {
+        "k": "tamil",
+        "text": "Bring Tamil WER down to 20% or less.",
+        "hint": "An Indic-tuned model plus 8 kHz telephony tuning, with language ID or vocabulary on."
+      },
+      {
+        "k": "lid",
+        "text": "Show that even the Indic-tuned model mishears Hinglish (over 20% WER) when the language is fixed per call.",
+        "hint": "Choose Indic-tuned, switch off per-turn language ID and leave telephony tuning off."
+      }
+    ],
+    "tools": [
+      {
+        "n": "AI4Bharat IndicConformer",
+        "type": "Open source · AI4Bharat, IIT Madras",
+        "start": 2,
+        "prod": 2,
+        "best": "Conformer speech recognition for the 22 scheduled Indian languages, trained on Indian speech such as IndicVoices.",
+        "ex": "Self-host Tamil and Bengali recognition and fine-tune it on your own 8 kHz calls.",
+        "pros": [
+          "Open weights you can fine-tune and host in India",
+          "Broad Indian-language coverage"
+        ],
+        "cons": [
+          "You run the GPUs and the serving stack",
+          "Streaming and telephony tuning are your job"
+        ],
+        "url": "https://ai4bharat.iitm.ac.in"
+      },
+      {
+        "n": "Sarvam AI",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Indian-language speech-to-text (Saaras) and text-to-speech (Bulbul), built for code-mixed Indian speech.",
+        "ex": "Transcribe Hinglish premium calls and read amounts back in a Hindi voice.",
+        "pros": [
+          "Built for Indian languages and code-mixing",
+          "Speech-to-text and voices from one vendor"
+        ],
+        "cons": [
+          "Check coverage and accuracy per language on your calls",
+          "Vendor dependency"
+        ],
+        "url": "https://docs.sarvam.ai"
+      },
+      {
+        "n": "Bhashini",
+        "type": "Government platform",
+        "start": 2,
+        "prod": 2,
+        "best": "Speech recognition, synthesis and translation services for Indian languages from the National Language Translation Mission.",
+        "ex": "Add Bengali and Odia recognition to a public-service line.",
+        "pros": [
+          "Wide language coverage",
+          "Public-interest access"
+        ],
+        "cons": [
+          "Service levels and quotas vary",
+          "Integration effort for production telephony"
+        ],
+        "url": "https://bhashini.gov.in"
+      },
+      {
+        "n": "Google Cloud Speech-to-Text",
+        "type": "Cloud API",
+        "start": 3,
+        "prod": 3,
+        "best": "Many Indian locales, such as hi-IN, ta-IN and bn-IN, with phrase hints for custom vocabulary.",
+        "ex": "Recognise English and Hindi turns with plan names boosted.",
+        "pros": [
+          "Many locales, one API",
+          "Managed scaling"
+        ],
+        "cons": [
+          "Accuracy varies by locale and model: test on your calls",
+          "Data residency needs checking"
+        ],
+        "url": "https://cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages"
+      },
+      {
+        "n": "Azure AI Speech",
+        "type": "Cloud API",
+        "start": 3,
+        "prod": 3,
+        "best": "Indian locales, phrase lists, Custom Speech training on your audio, and neural voices such as hi-IN-SwaraNeural.",
+        "ex": "Train Custom Speech on labelled Tamil calls and use a Tamil voice for read-back.",
+        "pros": [
+          "Custom Speech on your own audio",
+          "Many Indian-language neural voices"
+        ],
+        "cons": [
+          "Custom models cost more to host",
+          "Per-locale feature coverage differs"
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Open weights to fine-tune on your calls",
+        "tool": "AI4Bharat IndicConformer"
+      },
+      {
+        "need": "Hinglish recognition and Indian voices from one API",
+        "tool": "Sarvam AI"
+      },
+      {
+        "need": "Custom models trained on your own audio",
+        "tool": "Azure AI Speech"
+      }
+    ],
+    "goals": [
+      "Explain why WER must be measured per language on your own phone calls",
+      "Explain how per-turn language ID, custom vocabulary and amount rules raise accuracy on what matters",
+      "Weigh a costlier Indic-tuned stack against the people it saves"
+    ]
+  },
+  "practice": {
+    "scenario": "Kavach Bima, a fictional insurer, answers policy and premium calls in Hindi, Hinglish, Tamil, Bengali and English over 8 kHz phone lines. Its first speech model was English-first: fine on English, but it got 66% of Tamil words wrong and captured only 55% of spoken amounts such as “saadhe teen hazaar”. After testing vendors on its own transcribed calls, it moved to an Indic-tuned recogniser adapted to phone audio, identified the language on every turn, boosted plan names and policy terms, and read amounts back. Blended word error rate fell from 41% to 12%, and calls handed to a person from 55% to 17%.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Premium, lapse and claim-status calls in Hindi, Tamil and Bengali"
+      },
+      {
+        "industry": "Banking and NBFCs",
+        "use": "EMI and collections calls where amounts and dates must be captured exactly"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Appointment and pharmacy lines where medicine names and dosages need custom vocabulary"
+      }
+    ],
+    "analogy": "A switchboard operator in Chennai who also takes calls from Kolkata and Lucknow. She notices which language each caller is using, even when it changes mid-sentence, knows the company’s product names by heart, and repeats every amount back before writing it down.",
+    "library": {
+      "name": "jiwer",
+      "what": "Computes word error rate (WER) and character error rate (CER) between reference transcripts and a recogniser’s output, so you can score each language slice of your own calls.",
+      "install": "pip install jiwer"
+    },
+    "note": "The recogniser, language identification and read-back are vendor-specific, so they are stubs here; wire them to IndicConformer, Sarvam, Bhashini, Google or Azure as you choose. The amount rules cover common Hindi and Hinglish forms only; extend them for Tamil and Bengali numerals and for your own call data. Normalise case and punctuation the same way on both sides before scoring.",
+    "samples": [
+      {
+        "file": "amounts_and_wer.py",
+        "language": "python",
+        "code": "import re\nfrom collections import defaultdict\nimport jiwer\n\nNUM = {\"ek\": 1, \"do\": 2, \"teen\": 3, \"chaar\": 4, \"char\": 4, \"paanch\": 5, \"panch\": 5,\n       \"chhe\": 6, \"saat\": 7, \"aath\": 8, \"nau\": 9, \"das\": 10, \"bees\": 20,\n       \"pachees\": 25, \"tees\": 30, \"chaalees\": 40, \"pachaas\": 50, \"sattar\": 70,\n       \"dedh\": 1.5, \"dhai\": 2.5}\nSCALE = {\"sau\": 100, \"hazaar\": 1_000, \"hazar\": 1_000, \"lakh\": 1_00_000, \"crore\": 1_00_00_000}\nADJUST = {\"saadhe\": 0.5, \"sava\": 0.25, \"paune\": -0.25}   # 3½, 2¼, 3¾ ...\n\ndef words_to_rupees(text):\n    \"\"\"'saadhe teen hazaar' -> 3500, 'dhai lakh' -> 250000, '12,500' -> 12500.\"\"\"\n    total, cur, adj, seen = 0, 0, 0, False\n    for w in re.findall(r\"[a-z]+|\\d[\\d,]*\", text.lower()):\n        if w[0].isdigit():\n            cur += int(w.replace(\",\", \"\")); seen = True\n        elif w in ADJUST:\n            adj = ADJUST[w]\n        elif w in NUM:\n            cur += NUM[w]; seen = True\n        elif w in SCALE and seen:\n            total += ((cur or 1) + adj) * SCALE[w]\n            cur, adj = 0, 0\n    return round(total + cur) if seen else None\n\ndef inr(n):\n    \"\"\"Indian digit grouping: 250000 -> '2,50,000'.\"\"\"\n    s = str(n)\n    if len(s) <= 3:\n        return s\n    head, tail = s[:-3], s[-3:]\n    head = re.sub(r\"(\\d)(?=(\\d\\d)+$)\", r\"\\1,\", head)\n    return f\"{head},{tail}\"\n\ndef score_by_language(rows):\n    \"\"\"rows: (language, reference, hypothesis) from your own transcribed calls.\"\"\"\n    by_lang = defaultdict(lambda: ([], []))\n    for lang, ref, hyp in rows:\n        by_lang[lang][0].append(ref)\n        by_lang[lang][1].append(hyp)\n    return {lang: (jiwer.wer(refs, hyps), jiwer.cer(refs, hyps))\n            for lang, (refs, hyps) in by_lang.items()}\n\nif __name__ == \"__main__\":\n    for said in [\"saadhe teen hazaar\", \"dhai lakh\", \"paune chaar hazaar\",\n                 \"teen hazaar paanch sau\", \"sava do lakh\", \"premium 12,500 hai\"]:\n        print(f\"{said!r:28} -> ₹{inr(words_to_rupees(said))}\")\n    rows = [(\"hi\", \"mera premium kab due hai\", \"mera premium kab due hai\"),\n            (\"hi\", \"policy lapse ho gayi kya\", \"policy laps ho gayi kya\"),\n            (\"ta\", \"en policy number sollunga\", \"en policy nambar sollunga\")]\n    for lang, (wer, cer) in score_by_language(rows).items():\n        print(lang, f\"WER {wer:.0%}  CER {cer:.0%}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Kavach Bima’s calls are 45% Hindi, 20% Hinglish, 15% Tamil, 10% Bengali and 10% English. On its own 8 kHz calls, the Indic-tuned model’s word error rates are 10%, 14%, 16%, 14% and 11%. What is the blended WER, in percent?",
+    "answer": "0.45 × 10 + 0.20 × 14 + 0.15 × 16 + 0.10 × 14 + 0.10 × 11 = 4.5 + 2.8 + 2.4 + 1.4 + 1.1 = 12.2%. The blend is a summary only: Tamil at 16% is a third worse than Hindi at 10%, so report every slice.",
+    "expected": {
+      "value": 12.2,
+      "tolerance": 0.1,
+      "label": "% WER ="
+    },
+    "interview": [
+      {
+        "question": "How would you choose a speech-recognition model for an Indian-language helpline?",
+        "answer": "Sample and transcribe real calls at the channel’s 8 kHz, stratified by language, accent and code-mixing, and score each vendor’s WER and CER per slice, plus accuracy on the things that matter: amounts, policy numbers, names and plan names. Compare English-first, multilingual and Indic-tuned models such as IndicConformer, Sarvam, Bhashini, Google and Azure on that set, and weigh accuracy against cost, hosting and data residency. A clean wideband benchmark or a single blended number is not enough."
+      },
+      {
+        "question": "Callers switch between Hindi, English and Tamil. What changes in the speech pipeline?",
+        "answer": "Identify the language on every turn, or use a recogniser that handles code-mixing, instead of fixing it at the start of the call. Keep the transcript in a consistent script so downstream steps and scoring agree, boost domain terms with custom vocabulary, turn spoken amounts such as “saadhe teen hazaar” into numbers with rules, read them back in the caller’s language, and hand low-confidence turns to a person."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Reporting one blended WER",
+        "fix": "Report WER and CER per language and accent, with the worst slice named"
+      },
+      {
+        "mistake": "Trusting raw transcripts for amounts",
+        "fix": "Normalise spoken amounts with rules and read them back before acting"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "is01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A reference transcript has 20 words. The recogniser makes 2 substitutions, 1 deletion and 1 insertion. What is the word error rate?",
+      "options": [
+        "15%",
+        "20%",
+        "10%",
+        "25%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "WER = (S + D + I) ÷ N = (2 + 1 + 1) ÷ 20 = 4 ÷ 20 = 20%."
+    },
+    {
+      "id": "is02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Calls are 60% Hindi at 10% WER and 40% Tamil at 20% WER. What is the blended WER?",
+      "options": [
+        "15%",
+        "12%",
+        "14%",
+        "18%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.6 × 10 + 0.4 × 20 = 6 + 8 = 14%. The Tamil slice is still twice as bad as Hindi."
+    },
+    {
+      "id": "is03",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Phone audio is sampled at 8 kHz. Up to roughly what frequency does it carry sound?",
+      "options": [
+        "8 kHz",
+        "16 kHz",
+        "2 kHz",
+        "4 kHz"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Half the sampling rate (the Nyquist limit): 4 kHz, so consonant detail above it is lost. Wideband models trained on 16 kHz audio do worse on it without adaptation."
+    },
+    {
+      "id": "is04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A caller says the premium is “saadhe teen hazaar”. What value should be stored?",
+      "options": [
+        "₹3,000",
+        "₹3,500",
+        "₹3,250",
+        "₹4,500"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Saadhe adds a half: 3.5 × 1,000 = ₹3,500."
+    },
+    {
+      "id": "is05",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A borrower says the outstanding amount is “paune do lakh”. What is it?",
+      "options": [
+        "₹1,75,000",
+        "₹2,25,000",
+        "₹2,75,000",
+        "₹1,25,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Paune means a quarter less: 1.75 × 1,00,000 = ₹1,75,000."
+    },
+    {
+      "id": "is06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A merchant says the refund was “dhai sau rupaye”. What amount is that?",
+      "options": [
+        "₹200",
+        "₹2,500",
+        "₹250",
+        "₹25"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Dhai is 2.5, and sau is 100: 2.5 × 100 = ₹250."
+    },
+    {
+      "id": "is07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A helpline’s English-first model scores 41% blended WER; an Indic-tuned stack scores 12%. Speech costs ₹2.00 and ₹2.90 a minute, and 55% versus 17% of calls need a person at ₹12 a minute. What is the all-in cost per minute of the Indic-tuned stack?",
+      "options": [
+        "₹2.90",
+        "₹4.94",
+        "₹8.60",
+        "₹5.94"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "₹2.90 + 0.17 × ₹12 = ₹2.90 + ₹2.04 = ₹4.94, against ₹2.00 + 0.55 × ₹12 = ₹8.60 for the cheaper model."
+    },
+    {
+      "id": "is08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom helpline takes 20,000 calls a day, and 17% need a person. How many calls a day go to people?",
+      "options": [
+        "1,700",
+        "2,400",
+        "3,400",
+        "17,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "20,000 × 0.17 = 3,400 calls."
+    },
+    {
+      "id": "is09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A policyholder presses 1 for Hindi, then answers in Tamil. Hinglish and Tamil WER are much worse than on a test set. What is the likely cause?",
+      "options": [
+        "The language is fixed per call from the menu, not identified per turn",
+        "The phone line is too fast",
+        "The model is too large",
+        "Tamil cannot be recognised"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Callers switch. Identify the language on every turn, or use a model that handles code-mixing."
+    },
+    {
+      "id": "is10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A pharmacy helpline’s recogniser keeps turning medicine brand names into ordinary words. What is the cheapest first fix?",
+      "options": [
+        "Switch to a larger language model",
+        "Pass the brand names as custom vocabulary or phrase hints",
+        "Record at a higher volume",
+        "Ask callers to spell every name"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rare domain terms need boosting. Custom vocabulary makes the recogniser prefer them."
+    },
+    {
+      "id": "is11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A vendor quotes 6% WER for Hindi on a public benchmark. Your 8 kHz Hindi calls score 18%. What best explains the gap?",
+      "options": [
+        "The benchmark is wrong",
+        "Your callers speak worse Hindi",
+        "Clean wideband benchmark audio differs from noisy, narrowband, code-mixed phone calls",
+        "WER cannot be compared"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Channel, noise, accents and code-mixing all raise error rates. Always test on your own calls."
+    },
+    {
+      "id": "is12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why is character error rate (CER) often reported alongside WER for Tamil?",
+      "options": [
+        "Tamil has no word boundaries",
+        "Long, agglutinative words turn one small error into a whole wrong word, so CER shows partial correctness",
+        "CER is always lower, so it looks better",
+        "WER cannot be computed for Tamil"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A single suffix error makes the whole long word wrong under WER; CER gives credit for the rest."
+    },
+    {
+      "id": "is13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Reference transcripts write Hinglish in Roman script, but the recogniser outputs Devanagari for Hindi words. What happens to measured WER?",
+      "options": [
+        "It is inflated, because correct words in a different script count as errors",
+        "Nothing",
+        "It falls",
+        "The recogniser crashes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Normalise script, case and punctuation the same way on both sides before scoring."
+    },
+    {
+      "id": "is14",
+      "kind": "single",
+      "industry": "Government",
+      "question": "What is Bhashini?",
+      "options": [
+        "A private speech start-up",
+        "A benchmark of English speech",
+        "India’s government platform for Indian-language speech and translation services",
+        "A telephony standard"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Bhashini comes from the National Language Translation Mission and offers speech recognition, synthesis and translation services."
+    },
+    {
+      "id": "is15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The agent heard “saadhe teen hazaar” but confidence is low. What should it do before acting?",
+      "options": [
+        "Store ₹3,000 to be safe",
+        "Read the value back in the caller’s language and ask for confirmation, then hand over if still unsure",
+        "Skip the amount",
+        "Ask for a written letter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Read-back turns a silent error into a quick correction; a person takes over if it is still unclear."
+    },
+    {
+      "id": "is16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An English text-to-speech voice reads “₹3,500 due on 5/9” to Hindi-speaking callers, who find it confusing. What helps most?",
+      "options": [
+        "A faster voice",
+        "Write the amount and date as words in the caller’s language and use a Hindi voice, with a pronunciation lexicon for plan names",
+        "A louder voice",
+        "Removing the amount"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "TTS reads what it is given. Normalise amounts and dates into words for the target language, and use a voice and lexicon for that language."
+    },
+    {
+      "id": "is17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which of these belong in an evaluation set for an Indian-language helpline? Choose all that apply.",
+      "options": [
+        "Turns from your own recorded calls at 8 kHz",
+        "A quota for each language, including Tamil and Bengali",
+        "Only clean studio recordings",
+        "Turns with amounts, policy numbers and names"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Evaluate on real channel audio, stratified by language, with the entities that matter. Studio audio flatters every model."
+    },
+    {
+      "id": "is18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which steps raise the share of spoken amounts captured exactly? Choose all that apply.",
+      "options": [
+        "Rules that convert saadhe, sava, paune, dhai, hazaar and lakh into numbers",
+        "Custom vocabulary for number words and amounts",
+        "Reading the amount back for confirmation",
+        "Reporting one blended WER"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Normalisation, vocabulary and read-back all work on amounts. A blended WER measures nothing about them."
+    },
+    {
+      "id": "is19",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Hospital helpline recordings are used to evaluate speech models. Which practices fit the DPDP Act and good hygiene? Choose all that apply.",
+      "options": [
+        "Tell callers about recording and its purpose",
+        "Redact names, phone and policy numbers from transcripts used for scoring",
+        "Keep recordings forever in case they are useful",
+        "Restrict who can listen to raw audio"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Recordings are personal data: give notice, minimise, redact and restrict access. Keeping them indefinitely is not good practice. Educational framing, not legal advice."
+    },
+    {
+      "id": "is20",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "An Indic-tuned stack costs ₹0.90 a minute more than an English-first one. Which effects can still make it cheaper overall? Choose all that apply.",
+      "options": [
+        "Fewer calls handed to people",
+        "Fewer repeated questions and shorter calls",
+        "Fewer wrong amounts to correct later",
+        "A higher blended WER"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "People cost far more per minute than speech models, so accuracy that avoids handovers, repeats and corrections pays for the premium. Higher WER does the opposite."
+    }
+  ]
+}

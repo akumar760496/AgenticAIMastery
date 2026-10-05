@@ -1,0 +1,906 @@
+{
+  "id": "dimred",
+  "moduleSlug": "embeddings",
+  "name": "Matryoshka, Quantised and Reduced Embeddings",
+  "shortName": "Smaller vectors",
+  "question": "Can the vectors be smaller without losing recall?",
+  "summary": "Shrink vectors to save memory, storage and search time. Matryoshka-trained models let you simply keep the first dimensions. Quantization stores each value in fewer bits. PCA projects onto the directions that matter most. Recall usually drops a little, so measure it.",
+  "useCases": [
+    "Large corpora where the index no longer fits in memory",
+    "Latency budgets that full-size vectors can’t meet",
+    "Edge or mobile search with tight storage"
+  ],
+  "keyFacts": {
+    "label": "Methods",
+    "items": [
+      {
+        "term": "Matryoshka truncation",
+        "detail": "keep, say, the first 256 of 1,536 dimensions"
+      },
+      {
+        "term": "Scalar quantization",
+        "detail": "float32 → int8: 4× smaller"
+      },
+      {
+        "term": "Binary quantization",
+        "detail": "1 bit per dimension: 32× smaller; re-rank with full vectors"
+      },
+      {
+        "term": "Product quantization",
+        "detail": "compress sub-vectors into codebook IDs"
+      },
+      {
+        "term": "PCA",
+        "detail": "project onto the top principal components"
+      },
+      {
+        "term": "UMAP / t-SNE",
+        "detail": "2-D views for inspection, not for search"
+      }
+    ]
+  },
+  "steps": [
+    "Record baseline recall@k and memory at full size",
+    "Try truncation (if the model supports it) and int8 quantization first",
+    "For very large corpora, use binary quantization with a full-precision re-rank",
+    "Choose the smallest setting whose recall loss you can accept"
+  ],
+  "pitfalls": [
+    "Truncating a model not trained for it loses a lot of quality",
+    "Binary vectors need oversampling and re-ranking",
+    "2-D plots distort distances, so don’t draw conclusions from them alone"
+  ],
+  "tools": [
+    "OpenAI dimensions parameter",
+    "Nomic Embed",
+    "FAISS",
+    "Qdrant quantization",
+    "Weaviate compression",
+    "scikit-learn PCA"
+  ],
+  "remember": "Smaller vectors, measured recall.",
+  "caption": "Bytes per vector, computed from the dimensions and bits shown.",
+  "comparison": {
+    "scope": "Same meaning, fewer bytes",
+    "cost": 1,
+    "needs": "Large, memory-bound indexes",
+    "best": "Some recall loss"
+  },
+  "diagram": {
+    "file": "diagrams/dimred.svg"
+  },
+  "lesson": {
+    "file": "shrink_vectors.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import numpy as np",
+        "steps": []
+      },
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "client = OpenAI()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def embed(texts, dims):",
+        "steps": []
+      },
+      {
+        "text": "    r = client.embeddings.create(model=\"text-embedding-3-small\", input=texts,",
+        "steps": []
+      },
+      {
+        "text": "                                 dimensions=dims)     # Matryoshka truncation",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return np.array([d.embedding for d in r.data], dtype=np.float32)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "full = embed(chunks, 1536)                   # 1,536 × 4 B = 6,144 B each",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "base_recall = recall_at_k(full, eval_set, k=10)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "small = embed(chunks, 512)                   # 2,048 B each",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "scale = np.abs(small).max(axis=0) / 127",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "small_i8 = np.round(small / scale).astype(np.int8)       # 512 B, 4x smaller",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "bits = np.packbits(full > 0, axis=1)         # 1,536 bits = 192 B, 32x smaller",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def search_binary(q, k=10, oversample=4):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    qb = np.packbits(q > 0)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    ham = np.unpackbits(bits ^ qb, axis=1).sum(axis=1)   # Hamming distance",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    cand = np.argsort(ham)[:k * oversample]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return cand[np.argsort(-(full[cand] @ q))][:k]   # rescore with float32",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for name, idx in [(\"512 int8\", small_i8), (\"binary + rescore\", bits)]:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(name, recall_at_k(idx, eval_set, k=10) / base_recall)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Record the baseline",
+        "text": "Measure recall@10 and memory at full size first: 1,536 float32 dimensions take 6,144 bytes per vector."
+      },
+      {
+        "title": "Truncate a Matryoshka model",
+        "text": "Models trained Matryoshka-style put the most information in the first dimensions, so asking for 512 keeps about 99% of recall at a third of the size."
+      },
+      {
+        "title": "Quantize to int8",
+        "text": "Store each value in 8 bits instead of 32 with a per-dimension scale: 512 bytes per vector, 4× smaller again, with a small recall loss."
+      },
+      {
+        "title": "Or go binary",
+        "text": "Keep only the sign of each dimension: 1 bit each, 192 bytes for 1,536 dimensions, 32× smaller. On its own, recall falls to about 0.82."
+      },
+      {
+        "title": "Oversample, then rescore",
+        "text": "Fetch 4× more candidates by fast Hamming distance, then rescore them with the full-precision vectors. Most of the lost recall comes back."
+      },
+      {
+        "title": "Choose by measured recall",
+        "text": "Pick the smallest setting whose recall you can accept. Here 512-dimension int8 keeps 98% of recall at 12× less memory."
+      }
+    ],
+    "sceneHeight": 236,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"18\" style=\"--d:0s\">float32 · 1,536 dims</text><rect x=\"8\" y=\"23\" width=\"240\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"8\" y=\"23\" width=\"240\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"254\" y=\"33\" text-anchor=\"start\" style=\"--d:0.25s;text-anchor:start\">6,144 B · 1.00</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"52\" style=\"--d:0s\">Matryoshka · 512 dims</text><rect x=\"8\" y=\"57\" width=\"240\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"8\" y=\"57\" width=\"80\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"254\" y=\"67\" text-anchor=\"start\" style=\"--d:0.25s;text-anchor:start\">2,048 B · 0.99</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"86\" style=\"--d:0s\">int8 · 512 dims</text><rect x=\"8\" y=\"91\" width=\"240\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"8\" y=\"91\" width=\"20\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"254\" y=\"101\" text-anchor=\"start\" style=\"--d:0.25s;text-anchor:start\">512 B · 0.98</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"120\" style=\"--d:0s\">binary · 1,536 dims</text><rect x=\"8\" y=\"125\" width=\"240\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"8\" y=\"125\" width=\"7.5\" height=\"12\" rx=\"3\" class=\"bar grow fail\" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"254\" y=\"135\" text-anchor=\"start\" style=\"--d:0.25s;text-anchor:start\">192 B · 0.82</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"146\" width=\"104\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"60\" y=\"163\" text-anchor=\"middle\">binary top 40</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M114 159L126 159\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"128\" y=\"146\" width=\"112\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"184\" y=\"163\" text-anchor=\"middle\">float32 rescore</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M242 159L254 159\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"256\" y=\"146\" width=\"96\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"304\" y=\"163\" text-anchor=\"middle\">top 10 · 0.98</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"186\" width=\"344\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"204\">Smallest setting that meets the target</text><text class=\"sb\" x=\"180\" y=\"219\">e.g. 512 dims int8: 12× smaller, recall 0.98</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "4× to 32× less memory and storage",
+      "Faster search: smaller vectors, cheaper distances",
+      "Often no retraining: Matryoshka truncation and quantization",
+      "Rescoring recovers most of the recall lost"
+    ],
+    "cons": [
+      "Some recall loss, so it must be measured",
+      "Truncating a model not trained for it loses a lot",
+      "Binary quantization needs oversampling and rescoring",
+      "Rescoring keeps full vectors on disk and adds reads"
+    ],
+    "avoidWhen": [
+      "The index is small enough to fit comfortably in memory",
+      "Recall is already below target at full size"
+    ],
+    "tools": [
+      {
+        "name": "OpenAI dimensions parameter",
+        "type": "Hosted API",
+        "what": "Matryoshka truncation of text-embedding-3 vectors",
+        "url": "https://platform.openai.com/docs/guides/embeddings"
+      },
+      {
+        "name": "Nomic Embed v1.5",
+        "type": "Open model",
+        "what": "Matryoshka dimensions from 768 down to 64",
+        "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5"
+      },
+      {
+        "name": "FAISS",
+        "type": "Open source library",
+        "what": "Product quantization and IVF-PQ indexes",
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "name": "Qdrant quantization",
+        "type": "Vector database feature",
+        "what": "Scalar, binary and product quantization with rescoring",
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "name": "Weaviate compression",
+        "type": "Vector database feature",
+        "what": "PQ, BQ and SQ compression settings",
+        "url": "https://docs.weaviate.io/weaviate/concepts/vector-quantization"
+      },
+      {
+        "name": "scikit-learn PCA",
+        "type": "Open source",
+        "what": "Projecting vectors onto top principal components",
+        "url": "https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Your document search holds 50 million chunks embedded at 1,536 float32 dimensions, and the index must fit in 64 GB of RAM. Shrink the vectors with Matryoshka truncation, quantization and rescoring while keeping recall@10 at 95% or more of the full-size baseline.",
+    "controls": [
+      "Choose how many dimensions to keep and the precision of each value.",
+      "Switch rescoring on and choose how many extra candidates to fetch (oversampling).",
+      "Drag the number of vectors in the index."
+    ],
+    "outputs": [
+      {
+        "name": "Bytes per vector",
+        "meaning": "Dimensions × bits per value ÷ 8."
+      },
+      {
+        "name": "Index memory",
+        "meaning": "Bytes per vector × number of vectors, against the 64 GB budget."
+      },
+      {
+        "name": "Recall@10 vs baseline",
+        "meaning": "Share of the full-size results still found (illustrative measurements)."
+      },
+      {
+        "name": "Fits in 64 GB",
+        "meaning": "Whether the raw vectors fit the memory budget."
+      },
+      {
+        "name": "Recall ≥ 95%",
+        "meaning": "Whether the recall target is met."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Full size",
+        "expect": "6,144 B per vector × 50M = 307.2 GB. Recall 100%, but it does not fit."
+      },
+      {
+        "k": "int8",
+        "name": "int8, all dimensions",
+        "expect": "1,536 B per vector, 76.8 GB, recall 99.0%: 4× smaller and still over budget."
+      },
+      {
+        "k": "binary",
+        "name": "Binary, no rescoring",
+        "expect": "192 B per vector, 9.6 GB, but recall falls to 82.0%."
+      },
+      {
+        "k": "rescored",
+        "name": "Binary, 2× rescoring",
+        "expect": "Still 9.6 GB; rescoring 20 candidates lifts recall to 91.0%, just short of the target."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fit",
+        "text": "Fit 50 million vectors in 64 GB with recall of at least 95%.",
+        "hint": "Try 1,024 dimensions at int8, or binary with 3× rescoring."
+      },
+      {
+        "k": "precise",
+        "text": "Keep recall at 98% or more using under 1,000 bytes per vector.",
+        "hint": "Binary with 5× rescoring, or 512-dimension int8 with 2× rescoring."
+      },
+      {
+        "k": "trap",
+        "text": "Show why you must measure: find a setting under 5 GB whose recall is below 70%.",
+        "hint": "Binary at 512 dimensions without rescoring."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenAI dimensions parameter",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Requesting shorter text-embedding-3 vectors directly, thanks to Matryoshka-style training.",
+        "ex": "Ask for 512 dimensions instead of 1,536 and store a third of the bytes.",
+        "pros": [
+          "One parameter; no retraining",
+          "Shorter vectors from the same model"
+        ],
+        "cons": [
+          "Only for models trained this way",
+          "Still measure recall on your data"
+        ],
+        "url": "https://platform.openai.com/docs/guides/embeddings"
+      },
+      {
+        "n": "Nomic Embed v1.5",
+        "type": "Open model",
+        "start": 3,
+        "prod": 2,
+        "best": "An open Matryoshka model you can truncate from 768 down to 64 dimensions.",
+        "ex": "Run on-device semantic search in a mobile banking app at 128 dimensions.",
+        "pros": [
+          "Open weights",
+          "Many supported sizes"
+        ],
+        "cons": [
+          "Smaller than the top hosted models",
+          "Self-hosting effort"
+        ],
+        "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5"
+      },
+      {
+        "n": "FAISS",
+        "type": "Open source · Meta",
+        "start": 2,
+        "prod": 3,
+        "best": "Product quantization, IVF-PQ and binary indexes for very large vector sets.",
+        "ex": "Compress 1 billion image vectors with IVF-PQ to fit a single server’s RAM.",
+        "pros": [
+          "Battle-tested at billion scale",
+          "CPU and GPU support"
+        ],
+        "cons": [
+          "A library, not a database",
+          "Index tuning takes expertise"
+        ],
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "n": "Qdrant quantization",
+        "type": "Vector database feature",
+        "start": 3,
+        "prod": 3,
+        "best": "Scalar, binary and product quantization with oversampling and rescoring settings.",
+        "ex": "Enable binary quantization with 3× oversampling and rescoring on a 50M-vector collection.",
+        "pros": [
+          "Configured per collection, no custom code",
+          "Original vectors kept for rescoring"
+        ],
+        "cons": [
+          "Tied to Qdrant",
+          "Binary works best with some models, so test yours"
+        ],
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "n": "Weaviate compression",
+        "type": "Vector database feature",
+        "start": 3,
+        "prod": 3,
+        "best": "PQ, binary and scalar compression settings inside Weaviate.",
+        "ex": "Turn on compression for a growing product catalogue to keep memory flat.",
+        "pros": [
+          "Built into the database",
+          "Several methods to compare"
+        ],
+        "cons": [
+          "Tied to Weaviate",
+          "Recall trade-offs need measuring"
+        ],
+        "url": "https://docs.weaviate.io/weaviate/concepts/vector-quantization"
+      },
+      {
+        "n": "scikit-learn PCA",
+        "type": "Open source",
+        "start": 3,
+        "prod": 1,
+        "best": "Projecting vectors onto their top principal components for analysis or compression experiments.",
+        "ex": "Check how much variance 256 components keep before trying truncation in production.",
+        "pros": [
+          "Simple, well understood",
+          "Useful for inspection"
+        ],
+        "cons": [
+          "Usually worse than Matryoshka truncation",
+          "Must refit when the corpus shifts"
+        ],
+        "url": "https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Quick win on a hosted model",
+        "tool": "OpenAI dimensions parameter"
+      },
+      {
+        "need": "Compression inside the database",
+        "tool": "Qdrant or Weaviate"
+      },
+      {
+        "need": "Billion-scale custom indexes",
+        "tool": "FAISS"
+      }
+    ],
+    "goals": [
+      "Calculate bytes per vector and index memory for any dimension and precision",
+      "Explain Matryoshka truncation, scalar and binary quantization",
+      "Explain oversampling and rescoring, and why recall must be measured"
+    ]
+  },
+  "practice": {
+    "scenario": "A document search over 50 million chunks outgrew its memory budget. Switching from 1,536 float32 dimensions to 512 Matryoshka dimensions stored as int8 cuts each vector from 6,144 to 512 bytes, 12× smaller. Recall@10 is re-measured against the full-size baseline before the switch goes live.",
+    "industries": [
+      {
+        "industry": "Large-scale search",
+        "use": "Billions of product or web vectors"
+      },
+      {
+        "industry": "Mobile & edge",
+        "use": "On-device semantic search"
+      },
+      {
+        "industry": "Enterprise RAG",
+        "use": "Keep vector-database bills flat as the corpus grows"
+      }
+    ],
+    "analogy": "A gallery of thumbnails. Small previews let you scan thousands quickly, then you open the full-size photo you picked.",
+    "library": {
+      "name": "OpenAI embeddings + NumPy",
+      "what": "text-embedding-3 models accept a dimensions parameter (Matryoshka truncation); NumPy handles int8 and binary quantization.",
+      "install": "pip install openai numpy"
+    },
+    "samples": [
+      {
+        "file": "shrink.py",
+        "language": "python",
+        "code": "import numpy as np\nfrom openai import OpenAI\nclient = OpenAI()\n\nresp = client.embeddings.create(model=\"text-embedding-3-large\",\n                                input=[\"Auto-debit for SIP instalments\"],\n                                dimensions=512)             # Matryoshka truncation\nv = np.array(resp.data[0].embedding, dtype=np.float32)     # 512 × 4 B\n\nscale = np.abs(v).max() / 127\nv_int8 = np.round(v / scale).astype(np.int8)               # 4× smaller\nv_bin = np.packbits(v > 0)                                 # 32× smaller\n\nprint(v.nbytes, v_int8.nbytes, v_bin.nbytes)               # 2048 512 64"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "10 million vectors at 1,024 float32 dimensions. How much memory with int8 quantization, in GB?",
+    "answer": "float32: 10M × 4,096 B ≈ 41 GB. int8: 10M × 1,024 B ≈ 10.24 GB. Binary: 10M × 128 B ≈ 1.28 GB.",
+    "expected": {
+      "value": 10.24,
+      "tolerance": 0.1,
+      "label": "GB ="
+    },
+    "interview": [
+      {
+        "question": "What is Matryoshka representation learning?",
+        "answer": "Training an embedding model so the first dimensions carry the most information, like nested dolls. You can truncate vectors (say 1,536 → 256) and keep most of the quality without retraining."
+      },
+      {
+        "question": "Scalar or binary quantization?",
+        "answer": "Scalar (int8) stores each value in 8 bits: 4× smaller with a small recall loss. Binary stores 1 bit per dimension: 32× smaller but a larger loss, usually recovered by oversampling and re-ranking with full vectors."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Truncating vectors from a model not trained for it",
+        "fix": "Only truncate Matryoshka-trained models"
+      },
+      {
+        "mistake": "Judging clusters from a 2-D plot",
+        "fix": "Measure retrieval metrics in the full space"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dr01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "30 million vectors × 1,024 float32 dimensions. How much memory do the raw vectors need?",
+      "options": [
+        "About 123 GB",
+        "About 31 GB",
+        "About 12 GB",
+        "About 1.2 TB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,024 × 4 B = 4,096 B × 30 million ≈ 122.9 GB."
+    },
+    {
+      "id": "dr02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The same 30 million × 1,024 vectors are quantized to int8. How much memory now?",
+      "options": [
+        "About 30.7 GB",
+        "About 15.4 GB",
+        "About 61.4 GB",
+        "About 3.8 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,024 B × 30 million ≈ 30.7 GB, 4× smaller."
+    },
+    {
+      "id": "dr03",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "100 million vectors of 1,024 dimensions are binary quantized. How much memory?",
+      "options": [
+        "12.8 GB",
+        "102.4 GB",
+        "1.28 GB",
+        "51.2 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,024 bits = 128 B × 100 million = 12.8 GB."
+    },
+    {
+      "id": "dr04",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which statements about Matryoshka embeddings are true? Select all that apply.",
+      "options": [
+        "The model is trained so the first dimensions carry the most information",
+        "Truncating a model not trained this way loses much more quality",
+        "Vectors should be re-normalized after truncation before cosine search",
+        "Each truncation size needs a retrained model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "One Matryoshka model supports many sizes; you just keep the first dimensions and re-normalize."
+    },
+    {
+      "id": "dr05",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Binary quantization cut memory 32×, but recall dropped. What is the standard remedy?",
+      "options": [
+        "Oversample candidates and rescore them with full-precision vectors",
+        "Switch back to float32",
+        "Increase chunk size",
+        "Use a smaller model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fetch more cheap candidates, then re-sort them precisely: most recall comes back."
+    },
+    {
+      "id": "dr06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A UMAP plot of note embeddings shows two diagnoses overlapping. What should you conclude?",
+      "options": [
+        "Nothing firm: 2-D projections distort distances, so measure retrieval directly",
+        "The model cannot separate them",
+        "Search will fail for both diagnoses",
+        "The embeddings are corrupted"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "UMAP and t-SNE are for inspection, not proof. Check recall on real queries."
+    },
+    {
+      "id": "dr07",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "1,536 float32 dimensions are reduced to 256 dimensions in int8. How much smaller is each vector?",
+      "options": [
+        "24×",
+        "6×",
+        "4×",
+        "32×"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "6,144 B ÷ 256 B = 24×."
+    },
+    {
+      "id": "dr08",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "You use OpenAI text-embedding-3-small and want 512-dimension vectors without training anything. How?",
+      "options": [
+        "Pass dimensions=512 in the embeddings request",
+        "Run PCA on each single vector",
+        "Keep every third value",
+        "Convert the vectors to int8"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "text-embedding-3 models support a dimensions parameter because they were trained Matryoshka-style."
+    },
+    {
+      "id": "dr09",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which statements about product quantization are true? Select all that apply.",
+      "options": [
+        "It splits each vector into sub-vectors",
+        "It stores a codebook ID for each sub-vector",
+        "Its codebooks are learned from the data",
+        "It is lossless"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "PQ compresses heavily by approximating sub-vectors with learned centroids, so some accuracy is lost."
+    },
+    {
+      "id": "dr10",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Your embedding model was not trained Matryoshka-style, and you need 256 dimensions. What is the better option?",
+      "options": [
+        "Fit PCA on a sample and project, then measure recall, or switch to a Matryoshka model",
+        "Keep the first 256 values and assume nothing changes",
+        "Use every sixth dimension",
+        "Round values to one decimal place"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Naive truncation discards information spread across all dimensions in such a model."
+    },
+    {
+      "id": "dr11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "You need the top 10 results and oversample 4× before rescoring. How many candidates are rescored?",
+      "options": [
+        "40",
+        "14",
+        "10",
+        "400"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "10 × 4 = 40 candidates."
+    },
+    {
+      "id": "dr12",
+      "kind": "single",
+      "industry": "Media",
+      "question": "A newsroom index holds 200,000 vectors at 768 float32 dimensions on a 16 GB server. Should you compress?",
+      "options": [
+        "Probably not: about 614 MB already fits comfortably",
+        "Yes, always use binary",
+        "Yes, truncate to 64 dimensions",
+        "Yes, product quantization is mandatory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "768 × 4 B = 3,072 B × 200,000 ≈ 614 MB. Compression would cost recall for no gain."
+    },
+    {
+      "id": "dr13",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What should you measure before and after compressing an index? Select all that apply.",
+      "options": [
+        "Recall@k against the full-size baseline",
+        "Memory used",
+        "Query latency",
+        "Only the number of dimensions"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Compression trades recall for memory and speed. Measure all three."
+    },
+    {
+      "id": "dr14",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "How many bytes does a 1,536-dimension float16 vector take?",
+      "options": [
+        "3,072",
+        "1,536",
+        "6,144",
+        "768"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,536 × 2 B = 3,072 B, half of float32."
+    },
+    {
+      "id": "dr15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "In a binary index with rescoring, where do the full-precision vectors usually live?",
+      "options": [
+        "On disk or cheaper storage, read only for the candidates",
+        "In RAM next to the binary vectors, always",
+        "Nowhere: they are discarded",
+        "Inside the query"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "RAM holds the compact index; the full vectors are fetched only to rescore a few candidates."
+    },
+    {
+      "id": "dr16",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which practices make int8 quantization safer? Select all that apply.",
+      "options": [
+        "Calibrate value ranges on a representative sample",
+        "Measure recall against float32",
+        "Keep the float32 originals for rescoring",
+        "Compute the scale from a single vector"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A range taken from one vector clips values in others. Calibrate, measure and keep originals."
+    },
+    {
+      "id": "dr17",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which of these reduce the memory an index needs? Select all that apply.",
+      "options": [
+        "Matryoshka truncation",
+        "Scalar quantization",
+        "Product quantization",
+        "Increasing chunk overlap"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "More overlap creates more chunks, which increases memory."
+    },
+    {
+      "id": "dr18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A team truncated a 1,024-dimension model that was not trained Matryoshka-style to 128 dimensions, and recall collapsed. Why?",
+      "options": [
+        "Its information is spread across all dimensions, so the first 128 lose most of it",
+        "128 is below the minimum any database accepts",
+        "Cosine similarity needs at least 256 dimensions",
+        "Truncation always collapses recall"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only Matryoshka-trained models concentrate information in the first dimensions."
+    },
+    {
+      "id": "dr19",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "What is the Hamming distance between binary codes 1011 and 1101?",
+      "options": [
+        "2",
+        "1",
+        "3",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "They differ in the second and third positions: distance 2."
+    },
+    {
+      "id": "dr20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "You want binary quantization with oversampling and rescoring configured per collection, without custom code. Which tool fits?",
+      "options": [
+        "Qdrant quantization",
+        "rank_bm25",
+        "Cohere Rerank",
+        "SigLIP"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Qdrant supports scalar, binary and product quantization with rescoring settings."
+    }
+  ]
+}

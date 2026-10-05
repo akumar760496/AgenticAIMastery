@@ -1,0 +1,901 @@
+{
+  "id": "memwrite",
+  "moduleSlug": "memory",
+  "name": "Write and Forget Policies",
+  "shortName": "Write & forget",
+  "question": "What should be saved, and when must it go?",
+  "summary": "Rules for what becomes memory, how duplicates and conflicts are merged, and when memories expire. Forgetting covers decay, time-to-live limits and user deletion, which must reach every copy: database rows, vectors, summaries and caches. Under India’s DPDP Act, erasure on request or when the purpose ends is a legal duty.",
+  "useCases": [
+    "Any long-term memory that holds personal data",
+    "Regulated sectors: banking, insurance, healthcare",
+    "Stores that grow without limit or keep contradicting themselves"
+  ],
+  "keyFacts": {
+    "label": "Policy levers",
+    "items": [
+      {
+        "term": "Allow-list",
+        "detail": "only named categories are saved: preferences, contact channel, goals"
+      },
+      {
+        "term": "Block-list",
+        "detail": "never store OTPs, card numbers, Aadhaar, PAN or health data in memory"
+      },
+      {
+        "term": "Conflicts",
+        "detail": "newer wins; older is invalidated with a date, not silently kept"
+      },
+      {
+        "term": "TTL and decay",
+        "detail": "one-off items expire; unused items fade"
+      },
+      {
+        "term": "Erasure",
+        "detail": "delete rows, vectors, summaries and caches; log that it happened"
+      },
+      {
+        "term": "Hot path or background",
+        "detail": "write immediately (latency) or in a scheduled job (cheaper)"
+      },
+      {
+        "term": "Erasure on request",
+        "detail": "DPDP Act right to erasure: remove the person from rows, vectors, summaries, caches and backups on a schedule, then confirm"
+      }
+    ]
+  },
+  "steps": [
+    "Allow-list categories and block sensitive patterns before anything is written",
+    "Save only stable, reusable facts; skip one-off remarks",
+    "Consolidate conflicts and attach a time-to-live per category",
+    "Delete everywhere on request, log it, and audit a sample weekly"
+  ],
+  "pitfalls": [
+    "Deleting database rows but leaving embeddings and summaries behind",
+    "Storing OTPs or identity numbers because they appeared in a chat",
+    "Keeping both the old and new address with no validity dates",
+    "Treating erasure as a one-off script instead of a tested job with a deletion log that holds IDs, not the data"
+  ],
+  "tools": [
+    "Mem0",
+    "Graphiti (Zep)",
+    "Letta sleep-time agents",
+    "LangMem",
+    "Microsoft Presidio"
+  ],
+  "remember": "Save less. Delete everywhere. Keep the proof.",
+  "caption": "Illustrative. Legal points are summaries of the DPDP Act and Rules, not legal advice.",
+  "comparison": {
+    "scope": "Memory lifecycle",
+    "cost": 3,
+    "needs": "Policy, filters, deletion jobs, audit log",
+    "best": "Copies that survive deletion"
+  },
+  "diagram": {
+    "file": "diagrams/memwrite.svg"
+  },
+  "lesson": {
+    "file": "memory_policy.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import re, datetime as dt",
+        "steps": []
+      },
+      {
+        "text": "ALLOW = {\"language\", \"channel\", \"goal\", \"address\", \"complaint\"}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "BLOCK = [r\"\\bOTP\\b\", r\"\\b[A-Z]{5}\\d{4}[A-Z]\\b\",        # OTPs, PAN",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "         r\"\\b\\d{4}\\s?\\d{4}\\s?\\d{4}\\b\", r\"\\b(?:\\d[ -]?){13,16}\\b\"]   # Aadhaar, cards",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "TTL = {\"complaint\": dt.timedelta(days=30)}                # one-offs expire",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def write(uid, c):                     # c: category, text, stability 0-1",
+        "steps": []
+      },
+      {
+        "text": "    if c.category not in ALLOW or any(re.search(p, c.text, re.I) for p in BLOCK):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return \"blocked\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if c.stability < 0.7:              # a remark, not a reusable fact",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return \"skipped\"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    now = dt.datetime.now(dt.timezone.utc)",
+        "steps": []
+      },
+      {
+        "text": "    for old in db.find(uid, category=c.category, valid=True):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        db.update(old.id, valid=False, invalid_at=now)    # newer wins",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    expires = now + TTL[c.category] if c.category in TTL else None",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    row = db.insert(uid, c, valid=True, created=now, expires=expires)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    vectors.upsert(row.id, embed(c.text), {\"user\": uid})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def erase(uid):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    rows = db.delete(user=uid); vecs = vectors.delete(filter={\"user\": uid})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    summaries.delete(uid); cache.delete(f\"profile:{uid}\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    audit.append({\"event\": \"erasure\", \"user\": uid, \"rows\": rows,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                  \"vectors\": vecs, \"at\": dt.datetime.now(dt.timezone.utc)})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def weekly_audit(n=200):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    bad = [r for r in db.sample(n) if any(re.search(p, r.text, re.I) for p in BLOCK)]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return len(bad), expired_but_present(), deletions_without_audit()",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Allow-list and block",
+        "text": "Only named categories may be written, and patterns for OTPs, PAN, Aadhaar and card numbers are blocked before anything reaches a store."
+      },
+      {
+        "title": "Save stable facts only",
+        "text": "“Prefers Hindi” is reusable; “asked the gold rate today” is not. A stability score below 0.7 means skip."
+      },
+      {
+        "title": "Consolidate conflicts",
+        "text": "A new address invalidates the old one with a date instead of sitting beside it. History stays for audit; retrieval sees only valid facts."
+      },
+      {
+        "title": "Attach TTLs",
+        "text": "One-off complaints expire after 30 days. Unused items can also decay, so the store does not grow forever."
+      },
+      {
+        "title": "Delete everywhere",
+        "text": "An erasure removes rows, vectors, rolling summaries and caches. One audit line records that it happened, without the data."
+      },
+      {
+        "title": "Audit weekly",
+        "text": "Sample stored memories for blocked patterns, expired items still present and deletions with no audit line."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"8\" width=\"66\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"39\" y=\"23\" text-anchor=\"middle\">Hindi</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx pass\" x=\"76\" y=\"8\" width=\"66\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"109\" y=\"23\" text-anchor=\"middle\">email</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx fail\" x=\"146\" y=\"8\" width=\"66\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"23\" text-anchor=\"middle\">OTP</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx fail\" x=\"216\" y=\"8\" width=\"66\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"249\" y=\"23\" text-anchor=\"middle\">PAN</text></g><g class=\"a\" style=\"--d:0.32s\"><rect class=\"bx fail\" x=\"286\" y=\"8\" width=\"66\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"319\" y=\"23\" text-anchor=\"middle\">Aadhaar</text></g><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t fail\" x=\"250\" y=\"44\">blocked before any store</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"54\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"69\" text-anchor=\"middle\">prefers Hindi · 0.92</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"184\" y=\"54\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"269\" y=\"69\" text-anchor=\"middle\">gold rate today · 0.20</text></g><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"269\" y=\"90\" style=\"fill:var(--ink-2)\">skipped</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"6\" y=\"98\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"113\" text-anchor=\"middle\">addr: Pune · invalid</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 109L184 109\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"186\" y=\"98\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"270\" y=\"113\" text-anchor=\"middle\">addr: Bengaluru · valid</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"130\" width=\"348\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"145\" text-anchor=\"middle\">complaint “app crash” · expires in 30 days</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"6\" y=\"164\" width=\"82\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"47\" y=\"180\" text-anchor=\"middle\">rows 4</text></g><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"80\" cy=\"164\" r=\"9\" class=\"bd-pass\"/><path d=\"M76 164l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"94\" y=\"164\" width=\"82\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"135\" y=\"180\" text-anchor=\"middle\">vectors 4</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"168\" cy=\"164\" r=\"9\" class=\"bd-pass\"/><path d=\"M164 164l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"182\" y=\"164\" width=\"82\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"223\" y=\"180\" text-anchor=\"middle\">summary 1</text></g><g class=\"a\" style=\"--d:0.5s\"><circle cx=\"256\" cy=\"164\" r=\"9\" class=\"bd-pass\"/><path d=\"M252 164l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx \" x=\"270\" y=\"164\" width=\"82\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"311\" y=\"180\" text-anchor=\"middle\">cache 1</text></g><g class=\"a\" style=\"--d:0.6000000000000001s\"><circle cx=\"344\" cy=\"164\" r=\"9\" class=\"bd-pass\"/><path d=\"M340 164l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.7s\"><rect class=\"bx acc\" x=\"6\" y=\"196\" width=\"348\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"211\" text-anchor=\"middle\">audit: erasure · user · counts · time</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"240\" style=\"--d:0s\">Weekly sample: 200 memories · 0 blocked patterns · 0 expired</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Keeps memory small, current and lawful",
+      "Stops sensitive data at the door",
+      "Makes erasure requests provable",
+      "Reduces stale and contradictory answers"
+    ],
+    "cons": [
+      "Pattern filters miss paraphrased sensitive data",
+      "Deleting every derived copy needs careful bookkeeping",
+      "Too strict a policy forgets useful facts",
+      "Retention rules differ by law and sector"
+    ],
+    "avoidWhen": [
+      "There is no long-term memory, only one session",
+      "Records the law requires you to keep (keep them in the system of record, not agent memory)"
+    ],
+    "tools": [
+      {
+        "name": "Mem0",
+        "type": "Open source · managed platform",
+        "what": "Updates, deletes and delete-all per user through one API",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "name": "Graphiti (Zep)",
+        "type": "Open source",
+        "what": "Validity windows: invalidate old facts and keep history",
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "name": "Letta sleep-time agents",
+        "type": "Open source · cloud",
+        "what": "Background agents that consolidate memory between sessions",
+        "url": "https://docs.letta.com/guides/agents/architectures/sleeptime/"
+      },
+      {
+        "name": "LangMem",
+        "type": "Open source",
+        "what": "Background memory managers for consolidation",
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source",
+        "what": "PII detection and redaction before writes",
+        "url": "https://github.com/microsoft/presidio"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A bank’s assistant proposes 10 candidate memories from recent chats, each with a stability score: three preferences, an OTP, a PAN number, a hospital visit, an old and a new address, a one-off app crash and a question about the gold rate. The store is shown 90 days later, and the customer may file a DPDP erasure request.",
+    "controls": [
+      "Set the save threshold on the stability score.",
+      "Toggle the sensitive-data filter and a 30-day TTL for one-off items, and choose how conflicts are handled.",
+      "Request erasure and choose how far deletion reaches: rows, rows and vectors, or every copy."
+    ],
+    "outputs": [
+      {
+        "name": "Stored",
+        "meaning": "Candidates written to memory."
+      },
+      {
+        "name": "Preferences kept",
+        "meaning": "Of the three genuine preferences."
+      },
+      {
+        "name": "Sensitive items stored",
+        "meaning": "OTP, PAN or health data in memory."
+      },
+      {
+        "name": "Stale items",
+        "meaning": "An old address still marked valid, or one-off items kept forever."
+      },
+      {
+        "name": "Copies surviving erasure",
+        "meaning": "Rows, vectors, summary and cache copies left after an erasure request."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Save almost everything",
+        "expect": "Threshold 0.30: 9 of 10 stored, including 3 sensitive items, with 2 stale (old address and the app crash)."
+      },
+      {
+        "k": "thresh",
+        "name": "Threshold 0.70",
+        "expect": "7 stored, all 3 preferences, but the PAN number and hospital visit still get in: stability is not sensitivity."
+      },
+      {
+        "k": "filter",
+        "name": "Filter plus 0.85 threshold",
+        "expect": "0 sensitive and 0 stale, but only 2 of 3 preferences survive: too strict."
+      },
+      {
+        "k": "erase",
+        "name": "Erase rows only",
+        "expect": "The erasure deletes 9 rows but 11 copies survive: 9 vectors, the summary and the cache."
+      }
+    ],
+    "missions": [
+      {
+        "k": "sens",
+        "text": "Store 0 sensitive items while keeping all 3 preferences.",
+        "hint": "No threshold does this alone: the PAN scores 0.88, above “No SMS alerts” at 0.80."
+      },
+      {
+        "k": "erase",
+        "text": "After an erasure request, leave 0 copies outside the audit log.",
+        "hint": "Rows are not enough. Delete vectors, the summary and the cache as well."
+      },
+      {
+        "k": "stale",
+        "text": "Reach 0 stale items with all 3 preferences kept.",
+        "hint": "Let the newer address win, and expire or skip one-off items."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Mem0",
+        "type": "Open source · managed platform",
+        "start": 3,
+        "prod": 3,
+        "best": "One API for adding, updating, deleting and deleting all memories per user.",
+        "ex": "delete_all(user_id=...) on an erasure request, then log the event.",
+        "pros": [
+          "Deletion reaches the memory store and its vectors",
+          "Metadata for categories"
+        ],
+        "cons": [
+          "Summaries and caches outside Mem0 are yours",
+          "Filters are yours to add"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "n": "Graphiti",
+        "type": "Open source · by Zep",
+        "start": 1,
+        "prod": 3,
+        "best": "Invalidating contradicted facts with validity windows while keeping history.",
+        "ex": "The old address gets an end date when the new one arrives; retrieval uses only valid facts.",
+        "pros": [
+          "Conflicts handled with history",
+          "Good for audits"
+        ],
+        "cons": [
+          "Graph database to run",
+          "Erasure must still remove history for personal data"
+        ],
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "n": "Letta sleep-time agents",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 2,
+        "best": "Background agents that consolidate and rewrite memory between conversations.",
+        "ex": "A nightly sleep-time agent merges duplicate facts and drops expired one-offs.",
+        "pros": [
+          "Consolidation off the hot path",
+          "Optional review before applying"
+        ],
+        "cons": [
+          "Another agent to monitor",
+          "Tied to Letta"
+        ],
+        "url": "https://docs.letta.com/guides/agents/architectures/sleeptime/"
+      },
+      {
+        "n": "LangMem",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "Background memory managers that consolidate and update stored memories.",
+        "ex": "Run the memory manager after each session to merge updates into the profile.",
+        "pros": [
+          "Background or hot-path modes",
+          "Works with the LangGraph store"
+        ],
+        "cons": [
+          "Best with LangGraph",
+          "Policies are yours to encode"
+        ],
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source · Microsoft",
+        "start": 2,
+        "prod": 3,
+        "best": "Detecting and redacting PII in text before it is written anywhere.",
+        "ex": "Add custom recognizers for PAN and Aadhaar formats and block writes that match.",
+        "pros": [
+          "Extensible recognizers",
+          "Runs locally"
+        ],
+        "cons": [
+          "Needs tuning for Indian identifiers",
+          "Misses paraphrased data"
+        ],
+        "url": "https://github.com/microsoft/presidio"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Block sensitive data before writes",
+        "tool": "Presidio with custom recognizers"
+      },
+      {
+        "need": "Conflicts with history",
+        "tool": "Graphiti"
+      },
+      {
+        "need": "Simple per-user deletion",
+        "tool": "Mem0 delete_all plus your own caches"
+      }
+    ],
+    "goals": [
+      "Design an allow-list and block-list for what may become memory",
+      "Handle conflicts and expiry so memory stays current",
+      "List every copy an erasure must reach and how to prove it happened"
+    ]
+  },
+  "practice": {
+    "scenario": "A bank’s assistant receives a DPDP erasure request. The memory service deletes the customer’s preference rows, the matching vectors, the rolling summary and the cached profile, and writes one audit line. Records that KYC and tax law require are kept in the core systems, not in the assistant’s memory, and a nightly job drops one-off items past their time-to-live.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Block OTPs, card numbers and Aadhaar from memory; erase on request"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Keep appointment preferences, never diagnoses, in assistant memory"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Expire one-off complaints; keep size and delivery preferences"
+      }
+    ],
+    "analogy": "A records room with a retention schedule. Only listed document types are filed, each has a shred date, and every shredding is logged.",
+    "library": {
+      "name": "Mem0",
+      "what": "Memory layer with add, update, delete and delete_all per user, so writes and erasure go through one API.",
+      "install": "pip install mem0ai"
+    },
+    "note": "drop_summaries, drop_cache and audit stand for your own stores. Regex filters are a first line only; add a PII detector such as Presidio.",
+    "samples": [
+      {
+        "file": "policy.py",
+        "language": "python",
+        "code": "import re\nfrom mem0 import Memory\n\nm = Memory()\nBLOCK = [r\"\\b\\d{4}\\s?\\d{4}\\s?\\d{4}\\b\",        # Aadhaar-like 12 digits\n         r\"\\b[A-Z]{5}\\d{4}[A-Z]\\b\",           # PAN\n         r\"\\b\\d{6}\\b.*\\bOTP\\b|\\bOTP\\b.*\\b\\d{6}\\b\"]\nALLOW = {\"language\", \"channel\", \"goal\", \"address\"}\n\ndef save(user_id: str, category: str, text: str):\n    if category not in ALLOW or any(re.search(p, text, re.I) for p in BLOCK):\n        return None                                        # never written anywhere\n    return m.add(text, user_id=user_id, metadata={\"category\": category},\n                 infer=False)\n\ndef erase(user_id: str, audit):\n    m.delete_all(user_id=user_id)                          # memories and their vectors\n    drop_summaries(user_id); drop_cache(user_id)           # every other copy\n    audit.write({\"event\": \"erasure\", \"user\": user_id})     # proof, not the data\n"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A user’s data sits in 4 table rows, 4 vectors, 1 rolling summary and 1 cache entry. Deletion removes only the table rows. What fraction of the copies survive, as a percentage?",
+    "answer": "Copies: 4 + 4 + 1 + 1 = 10. Surviving: 6. 6 / 10 = 60%.",
+    "expected": {
+      "value": 60,
+      "tolerance": 0.1,
+      "label": "% surviving ="
+    },
+    "interview": [
+      {
+        "question": "What should never go into an assistant’s long-term memory?",
+        "answer": "OTPs, passwords, card numbers, Aadhaar and PAN, and health details, unless there is a clear lawful purpose and controls. Save only allow-listed, stable, reusable categories, and filter before writing."
+      },
+      {
+        "question": "What does honouring an erasure request involve for an AI assistant?",
+        "answer": "Deleting every copy of the personal data it holds: rows, embeddings, summaries, caches and backups on their schedule, while keeping records other laws require in the system of record, and logging the erasure."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Deleting table rows but not embeddings or summaries",
+        "fix": "Track every derived copy and delete them together"
+      },
+      {
+        "mistake": "Saving everything and filtering at read time",
+        "fix": "Filter and classify before anything is written"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mw01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A customer asks the bank assistant to erase their data. Engineering deletes the memory rows. What is still wrong?",
+      "options": [
+        "Nothing",
+        "Vectors, summaries and caches may still hold the data",
+        "The audit log must also be deleted",
+        "The customer must re-register"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Erasure must reach every derived copy; a minimal audit line without the data is kept as proof."
+    },
+    {
+      "id": "mw02",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which should never be written to an assistant’s long-term memory? Select all that apply.",
+      "options": [
+        "A one-time password",
+        "A full card number",
+        "The customer’s preferred language",
+        "A preference for email statements"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "OTPs and card numbers must be blocked; language and channel preferences are useful, safe facts."
+    },
+    {
+      "id": "mw03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A policyholder’s old and new addresses are both stored as valid. What policy fixes this?",
+      "options": [
+        "Keep both; the model will choose",
+        "Newer wins; the older is invalidated with a date",
+        "Delete both",
+        "Store addresses only in summaries"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Consolidating conflicts keeps one current fact and history for audit."
+    },
+    {
+      "id": "mw04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A user’s data sits in 4 rows, 4 vectors, 1 summary and 1 cache entry. Deletion removes only the rows. What percentage of copies survive?",
+      "options": [
+        "40%",
+        "60%",
+        "50%",
+        "0%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Copies: 10. Surviving: 6. 6 ÷ 10 = 60%."
+    },
+    {
+      "id": "mw05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Under India’s DPDP Act, section 8(7), when must a data fiduciary erase personal data?",
+      "options": [
+        "Never, if it might be useful",
+        "When consent is withdrawn or the purpose is no longer served, unless law requires retention",
+        "Only after ten years",
+        "Only when a court orders it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Section 8(7) requires erasure on withdrawal of consent or when the purpose ends, subject to legal retention. This is a summary, not legal advice."
+    },
+    {
+      "id": "mw06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "“App crashed on login” is saved as a memory. What should happen to it?",
+      "options": [
+        "Keep it forever",
+        "Give it a TTL so it expires, for example after 30 days",
+        "Copy it into every prompt",
+        "Promote it to the system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One-off items should expire so the store does not fill with stale noise."
+    },
+    {
+      "id": "mw07",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which are sound parts of a memory write policy? Select all that apply.",
+      "options": [
+        "An allow-list of categories",
+        "Pattern and PII filters before writing",
+        "Saving everything and filtering at read time",
+        "Keeping contradictory facts with no dates"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Allow-lists and pre-write filters work; read-time filtering still stores the data, and undated contradictions cause stale answers."
+    },
+    {
+      "id": "mw08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "DPDP Rules 2025 require processing logs to be kept for at least how long?",
+      "options": [
+        "One month",
+        "One year",
+        "Five years",
+        "Forever"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rule 8 requires the logs to be kept for at least one year. This is a summary, not legal advice."
+    },
+    {
+      "id": "mw09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "LangGraph describes two times to write memory. Which is the trade-off of writing in the hot path?",
+      "options": [
+        "It is free and instant",
+        "It is immediate but adds latency to the response",
+        "It is delayed but cheaper",
+        "It cannot update facts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hot-path writes are available immediately but add latency; background writes are cheaper but delayed."
+    },
+    {
+      "id": "mw10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Ten candidates arrive; 3 are sensitive, 2 are one-offs and 1 is an outdated address. With filters, a stability threshold and conflict handling, how many valid memories remain?",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "10"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "10 − 3 sensitive − 2 one-offs − 1 outdated = 4 valid memories."
+    },
+    {
+      "id": "mw11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A patient requests erasure. Which must the system delete? Select all that apply.",
+      "options": [
+        "Memory rows",
+        "Vector embeddings of those memories",
+        "The audit line recording that the erasure happened",
+        "Rolling summaries mentioning the patient"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Rows, embeddings and summaries are copies. The audit line, without the data, is proof of deletion."
+    },
+    {
+      "id": "mw12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A stability threshold of 0.8 blocks an OTP scored 0.6 but lets a PAN scored 0.88 through. What is the lesson?",
+      "options": [
+        "Raise the threshold to 0.9",
+        "Stability is not sensitivity; add a sensitive-data filter",
+        "PANs are safe to store",
+        "Lower the threshold to 0.5"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sensitive items can look stable; they need a separate filter."
+    },
+    {
+      "id": "mw13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What do Letta sleep-time agents do?",
+      "options": [
+        "Serve users at night only",
+        "Consolidate and rewrite memory in the background",
+        "Delete all memories after a session",
+        "Encrypt the vector store"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sleep-time agents modify memory asynchronously, between conversations."
+    },
+    {
+      "id": "mw14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A regex blocks 12-digit numbers to stop Aadhaar numbers being stored. What does it miss?",
+      "options": [
+        "Nothing",
+        "Numbers written with spaces or in words, and other identifiers",
+        "Only PAN cards",
+        "Only email addresses"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Pattern filters are a first line; add a PII detector such as Presidio and allow-lists."
+    },
+    {
+      "id": "mw15",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "An erasure removes rows and vectors but not the rolling summary or cache. Which statements are true? Select all that apply.",
+      "options": [
+        "The data can still reach the model through the summary",
+        "The cache may serve the old profile",
+        "The erasure is complete",
+        "Only an audit line should remain after erasure"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Leftover summaries and caches keep the data retrievable; only an audit line should remain."
+    },
+    {
+      "id": "mw16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank must keep KYC records by law but has received an erasure request for the assistant’s memory. What is the right design?",
+      "options": [
+        "Keep KYC records in the system of record; erase the assistant’s memory copies",
+        "Erase the KYC records too",
+        "Refuse the request",
+        "Move the KYC records into assistant memory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Legal retention applies to the system of record; agent memory should not hold those records."
+    },
+    {
+      "id": "mw17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Stored memories: 9 items with a row and a vector each, plus 1 summary and 1 cache. How many copies exist?",
+      "options": [
+        "9",
+        "18",
+        "20",
+        "11"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "9 × 2 + 1 + 1 = 20 copies."
+    },
+    {
+      "id": "mw18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What should a weekly memory audit check?",
+      "options": [
+        "How many memories were written",
+        "Blocked patterns present, expired items still stored, deletions without audit lines",
+        "Average embedding norm",
+        "Model temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Audits verify that the policy is enforced."
+    },
+    {
+      "id": "mw19",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are valid forgetting mechanisms? Select all that apply.",
+      "options": [
+        "Time-to-live limits",
+        "Decay of unused items",
+        "User-requested deletion",
+        "Duplicating memories into more stores"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "TTLs, decay and deletion are forgetting mechanisms; duplication makes forgetting harder."
+    },
+    {
+      "id": "mw20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Under DPDP Rule 8, how much notice must be given before erasure after the Third Schedule period ends?",
+      "options": [
+        "24 hours",
+        "48 hours",
+        "7 days",
+        "No notice"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rule 8 requires 48 hours’ notice before erasure. This is a summary, not legal advice."
+    }
+  ]
+}

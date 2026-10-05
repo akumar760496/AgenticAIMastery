@@ -1,0 +1,873 @@
+{
+  "id": "resilience",
+  "moduleSlug": "operations",
+  "name": "Timeouts, Circuit Breakers and Fallbacks",
+  "shortName": "Resilience",
+  "question": "What does the agent do when a provider slows down or fails?",
+  "summary": "Give every model and tool call a timeout shorter than the user’s patience, stop calling a dependency that keeps failing with a circuit breaker (closed, open, half-open), and route to a fallback: a second provider, a smaller model, a cached answer or a clear message. Panel 8 makes one call safe to retry; this protects the whole system when a dependency degrades.",
+  "useCases": [
+    "Any dependency on a hosted model or external API",
+    "User-facing latency targets",
+    "Traffic high enough that hung calls can exhaust workers"
+  ],
+  "keyFacts": {
+    "label": "Controls",
+    "items": [
+      {
+        "term": "Timeout",
+        "detail": "per call, well below the end-to-end target; the Anthropic and OpenAI Python SDKs default to 10 minutes"
+      },
+      {
+        "term": "Retries",
+        "detail": "the same SDKs retry 2 times by default; add jitter and a retry budget"
+      },
+      {
+        "term": "Circuit breaker",
+        "detail": "closed → open after N failures → half-open probe → closed"
+      },
+      {
+        "term": "Fallback chain",
+        "detail": "secondary provider, smaller model, cached answer, graceful message"
+      },
+      {
+        "term": "Bulkhead",
+        "detail": "a separate concurrency limit per dependency"
+      },
+      {
+        "term": "Little’s law",
+        "detail": "busy workers = request rate × average time per request"
+      }
+    ]
+  },
+  "steps": [
+    "Set explicit timeouts and retry counts on every client",
+    "Wrap each dependency in a circuit breaker",
+    "Define and test a fallback for each critical call",
+    "Run outage drills: inject latency and errors, and watch the whole system"
+  ],
+  "pitfalls": [
+    "Default 10-minute timeouts let hung calls exhaust every worker",
+    "Retries without a budget multiply load on a provider that is already failing",
+    "Fallback paths that were never tested fail on the day they are needed"
+  ],
+  "tools": [
+    "LiteLLM Router",
+    "Portkey gateway",
+    "pybreaker",
+    "Tenacity",
+    "Resilience4j",
+    "Envoy"
+  ],
+  "remember": "Short timeouts, fail fast, always have a plan B.",
+  "caption": "Illustrative: a breaker opens after 5 failures, probes after 30 s and sends traffic to a fallback while open.",
+  "comparison": {
+    "scope": "Outages and slowdowns of dependencies",
+    "cost": 2,
+    "needs": "Clients, a breaker, a fallback",
+    "best": "Untested fallbacks and retry storms"
+  },
+  "diagram": {
+    "file": "diagrams/resilience.svg"
+  },
+  "lesson": {
+    "file": "resilient_client.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic, openai, pybreaker",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "primary = anthropic.Anthropic(timeout=8.0, max_retries=1)",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "secondary = openai.OpenAI(timeout=8.0, max_retries=0)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "breaker = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@breaker",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "def ask_primary(q: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    r = primary.messages.create(model=\"claude-sonnet-4-5-20250929\", max_tokens=600,",
+        "steps": []
+      },
+      {
+        "text": "                                messages=[{\"role\": \"user\", \"content\": q}])",
+        "steps": []
+      },
+      {
+        "text": "    return r.content[0].text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask_secondary(q: str) -> str:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    r = secondary.chat.completions.create(model=\"gpt-4o-2024-08-06\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                                          messages=[{\"role\": \"user\", \"content\": q}])",
+        "steps": []
+      },
+      {
+        "text": "    return r.choices[0].message.content",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def answer(q: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        return ask_primary(q)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    except pybreaker.CircuitBreakerError:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        pass                          # open: primary skipped, no wait",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    except Exception:",
+        "steps": []
+      },
+      {
+        "text": "        pass                          # timeout or error: counted",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        return ask_secondary(q)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    except Exception:",
+        "steps": []
+      },
+      {
+        "text": "        return cached_or_message(q)   # cached answer or a clear note",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Set a timeout on every client",
+        "text": "Both SDKs wait up to 10 minutes by default. At 20 requests a second, hung calls would hold thousands of workers; 8 seconds bounds the damage."
+      },
+      {
+        "title": "Keep the retry budget small",
+        "text": "The SDKs retry twice by default. One retry on the primary and none on the fallback stops a slow provider from receiving three times the load."
+      },
+      {
+        "title": "Wrap the dependency in a breaker",
+        "text": "pybreaker counts failures. After 5 in a row it opens and stops calling the primary for 30 seconds, then lets one probe through."
+      },
+      {
+        "title": "Fall back to a second provider",
+        "text": "When the primary fails or is skipped, the same question goes to a second provider with its own timeout. Test this path before you need it."
+      },
+      {
+        "title": "Fail fast while open",
+        "text": "An open breaker raises immediately, so requests skip the 8-second wait and go straight to the fallback. Latency stays low during the outage."
+      },
+      {
+        "title": "Have a last resort",
+        "text": "If both providers fail, return a cached answer or a clear message instead of an error page or a hung request."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"17\" style=\"text-anchor:end;--d:0s\">SDK default</text><rect x=\"118\" y=\"7\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"7\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"17\" style=\"text-anchor:start;--d:0.2s\">600 s</text><text class=\"tl a\" x=\"112\" y=\"37\" style=\"text-anchor:end;--d:0.1s\">your timeout</text><rect x=\"118\" y=\"27\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"27\" width=\"2.5333333333333337\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"37\" style=\"text-anchor:start;--d:0.30000000000000004s\">8 s</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"48\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"62\" text-anchor=\"middle\">retries: default 2 → primary 1, fallback 0</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"78\" width=\"100\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"58\" y=\"95\">Closed</text><text class=\"sb\" x=\"58\" y=\"110\">counting</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M110 98L128 98\" marker-end=\"url(#arr)\"/></g><text class=\"sb a\" x=\"119\" y=\"72\" style=\"text-anchor:middle;--d:0.1s\">5 fails</text><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"130\" y=\"78\" width=\"100\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"95\">Open</text><text class=\"sb\" x=\"180\" y=\"110\">30 s</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M232 98L250 98\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.35s\"><rect class=\"bx warn\" x=\"252\" y=\"78\" width=\"100\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"302\" y=\"95\">Half-open</text><text class=\"sb\" x=\"302\" y=\"110\">1 probe</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"130\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"145\" text-anchor=\"middle\">primary · timeout 8 s</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 141L190 141\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"192\" y=\"130\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"272\" y=\"145\" text-anchor=\"middle\">secondary · 8 s</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"162\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"177\" text-anchor=\"middle\">while open: skip primary · 0.01 s, not 8 s</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"194\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"209\" text-anchor=\"middle\">both fail: cached answer or a clear message</text></g><text class=\"sb a\" x=\"8\" y=\"236\" style=\"text-anchor:start;--d:0.15s\">no hung requests, no error page</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "One slow provider no longer takes down the whole service",
+      "Users get an answer or a clear message, fast",
+      "Load on a failing dependency drops, which helps it recover",
+      "Outage drills make behaviour predictable"
+    ],
+    "cons": [
+      "Fallback models answer differently, so evaluate them too",
+      "More configuration: timeouts, budgets, thresholds",
+      "Short timeouts can cut off slow but healthy calls",
+      "Breakers need tuning to avoid flapping"
+    ],
+    "avoidWhen": [
+      "Adding retries without timeouts or a budget: that multiplies the load",
+      "Falling back to a model that was never evaluated on your task"
+    ],
+    "tools": [
+      {
+        "name": "LiteLLM Router",
+        "type": "Open source",
+        "what": "Timeouts, retries, fallbacks and cooldowns across providers",
+        "url": "https://docs.litellm.ai/docs/routing"
+      },
+      {
+        "name": "Portkey gateway",
+        "type": "Open source, cloud",
+        "what": "An AI gateway with fallbacks, retries and load balancing",
+        "url": "https://portkey.ai/docs"
+      },
+      {
+        "name": "pybreaker",
+        "type": "Open source",
+        "what": "A circuit breaker for Python functions",
+        "url": "https://github.com/danielfm/pybreaker"
+      },
+      {
+        "name": "Tenacity",
+        "type": "Open source",
+        "what": "Retry with backoff, jitter and stop conditions",
+        "url": "https://tenacity.readthedocs.io"
+      },
+      {
+        "name": "Resilience4j",
+        "type": "Open source",
+        "what": "Breakers, bulkheads and rate limiters for the JVM",
+        "url": "https://resilience4j.readme.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A stockbroker’s order-support assistant serves 20 requests a second from a pool of 200 workers. For 20 minutes its primary model provider hangs on 40% of calls; healthy calls take 2 s. Set the timeout, retries, circuit breaker and fallback, and see whether the service stays up.",
+    "controls": [
+      "Pick the timeout per call, from the 600 s SDK default down to 3 s.",
+      "Pick the retries on the primary, and tick the circuit breaker.",
+      "Pick a fallback: none, a secondary provider or a cached answer, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Requests answered well",
+        "meaning": "Share of requests that get a good answer during the outage, after any saturation."
+      },
+      {
+        "name": "p95 latency",
+        "meaning": "The time within which 95% of requests finish."
+      },
+      {
+        "name": "Busy workers",
+        "meaning": "Request rate × average time per request (Little’s law), against the pool of 200."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "SDK defaults, no fallback",
+        "expect": "7,525 busy workers against a pool of 200: the service is down, 2.5% answered."
+      },
+      {
+        "k": "timeouts",
+        "name": "8 s timeout, 1 retry",
+        "expect": "123 busy workers, 84% answered: failures now reach users, p95 16 s."
+      },
+      {
+        "k": "fallback",
+        "name": "Plus a secondary provider",
+        "expect": "99.5% answered, but p95 is 19 s because failures wait for timeouts first."
+      },
+      {
+        "k": "breaker",
+        "name": "Breaker, no retry, secondary",
+        "expect": "97.2% answered, p95 3 s, 65 busy workers."
+      }
+    ],
+    "missions": [
+      {
+        "k": "up",
+        "text": "Answer at least 95% of requests well during the outage.",
+        "hint": "Timeouts keep workers free; a fallback turns failures into answers."
+      },
+      {
+        "k": "fast",
+        "text": "Answer at least 95% well with p95 latency under 8 seconds.",
+        "hint": "Stop waiting on the failing provider: a breaker, or a very short timeout."
+      },
+      {
+        "k": "pool",
+        "text": "With no fallback at all, keep busy workers under the pool of 200.",
+        "hint": "Bound how long a hung call can hold a worker."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LiteLLM Router",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Timeouts, retries, fallbacks and cooldowns across 100+ providers.",
+        "ex": "A primary and a secondary deployment with fallbacks and a 30-second cooldown for failing ones.",
+        "pros": [
+          "One interface for many providers",
+          "Fallbacks and cooldowns built in"
+        ],
+        "cons": [
+          "Another layer to configure and upgrade",
+          "Proxy mode adds a hop"
+        ],
+        "url": "https://docs.litellm.ai/docs/routing"
+      },
+      {
+        "n": "Portkey gateway",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "An AI gateway with fallbacks, retries, load balancing and observability.",
+        "ex": "A gateway config that falls back to a second provider on timeouts and 5xx errors.",
+        "pros": [
+          "Config-driven reliability",
+          "Logs and costs included"
+        ],
+        "cons": [
+          "A hop in every request",
+          "Hosted features are commercial"
+        ],
+        "url": "https://portkey.ai/docs"
+      },
+      {
+        "n": "pybreaker",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "A small circuit breaker for Python functions.",
+        "ex": "Decorate the primary model call with a breaker that opens after 5 failures.",
+        "pros": [
+          "Tiny and simple",
+          "Listeners for state changes"
+        ],
+        "cons": [
+          "Per-process state unless backed by Redis",
+          "No fallback logic of its own"
+        ],
+        "url": "https://github.com/danielfm/pybreaker"
+      },
+      {
+        "n": "Tenacity",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Retries with backoff, jitter and stop conditions.",
+        "ex": "Retry a tool call twice with exponential backoff and jitter, never on 4xx errors.",
+        "pros": [
+          "Flexible retry policies",
+          "Works with async code"
+        ],
+        "cons": [
+          "Easy to over-retry",
+          "No breaker"
+        ],
+        "url": "https://tenacity.readthedocs.io"
+      },
+      {
+        "n": "Resilience4j",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Breakers, bulkheads, rate limiters and retries for Java services.",
+        "ex": "A bulkhead limiting concurrent model calls per provider in a Spring service.",
+        "pros": [
+          "Complete fault-tolerance toolkit",
+          "Metrics built in"
+        ],
+        "cons": [
+          "JVM only",
+          "More configuration"
+        ],
+        "url": "https://resilience4j.readme.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I call several model providers from Python",
+        "tool": "LiteLLM Router"
+      },
+      {
+        "need": "I want reliability as gateway config",
+        "tool": "Portkey gateway"
+      },
+      {
+        "need": "I only need a breaker around one dependency",
+        "tool": "pybreaker"
+      }
+    ],
+    "goals": [
+      "Size timeouts from Little’s law, not defaults",
+      "See why a breaker cuts latency during an outage",
+      "Keep a tested fallback for every critical call"
+    ]
+  },
+  "practice": {
+    "scenario": "A stockbroker’s order-support assistant sees about 20 requests a second at market open. When its primary model provider slowed down, SDK calls with the default 10-minute timeout held every worker, and the whole assistant went down. Now each call times out after 8 seconds, a router falls back to a second provider, and a cooldown takes the failing deployment out of rotation.",
+    "industries": [
+      {
+        "industry": "Stockbroking",
+        "use": "Keep order-status answers flowing at market open when one provider degrades"
+      },
+      {
+        "industry": "Payments",
+        "use": "Fail fast to a clear message when a bank API is down instead of holding threads"
+      },
+      {
+        "industry": "Airlines",
+        "use": "Fall back to a smaller model for rebooking chat during a provider outage"
+      }
+    ],
+    "analogy": "A circuit breaker in your house. When a fault keeps tripping, it cuts the line so the fault cannot burn down everything else.",
+    "library": {
+      "name": "LiteLLM Router",
+      "what": "One interface over many providers, with per-call timeouts, retries, fallbacks and cooldowns for failing deployments.",
+      "install": "pip install litellm"
+    },
+    "note": "Test the fallback path in drills; a fallback that has never run is a guess.",
+    "samples": [
+      {
+        "file": "router.py",
+        "language": "python",
+        "code": "from litellm import Router\n\nrouter = Router(\n    model_list=[\n        {\"model_name\": \"primary\",\n         \"litellm_params\": {\"model\": \"anthropic/claude-sonnet-4-5-20250929\", \"timeout\": 8}},\n        {\"model_name\": \"secondary\",\n         \"litellm_params\": {\"model\": \"openai/gpt-4o-2024-08-06\", \"timeout\": 8}},\n    ],\n    fallbacks=[{\"primary\": [\"secondary\"]}],   # used after primary fails\n    num_retries=1,                            # small retry budget\n    allowed_fails=3,                          # failures before cooldown\n    cooldown_time=30,                         # seconds out of rotation\n)\n\ndef answer(question: str) -> str:\n    try:\n        r = router.completion(model=\"primary\",\n                              messages=[{\"role\": \"user\", \"content\": question}])\n        return r.choices[0].message.content\n    except Exception:\n        return \"Order status is delayed right now. Please check the order book in the app.\""
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An assistant receives 20 requests a second. During a provider slowdown the average request takes 12 seconds. By Little’s law, how many requests are in flight at once, and does that fit a pool of 200 workers?",
+    "answer": "In flight = 20 × 12 = 240, which is more than the pool of 200, so requests queue and time out and the whole service degrades. An 8-second timeout with a fast fallback keeps the average near 3 s: 20 × 3 = 60 in flight.",
+    "expected": {
+      "value": 240,
+      "tolerance": 1,
+      "label": "requests in flight ="
+    },
+    "interview": [
+      {
+        "question": "What are the three states of a circuit breaker?",
+        "answer": "Closed: calls pass through and failures are counted. Open: after a failure threshold, calls fail immediately or go to a fallback, without touching the dependency. Half-open: after a cooldown, a trial call is let through; success closes the breaker, failure opens it again."
+      },
+      {
+        "question": "Why can retries make an outage worse?",
+        "answer": "Each retry adds load to a dependency that is already struggling, and with several layers of retries the load multiplies. Use a small retry count with backoff and jitter, a retry budget as a share of traffic, and a circuit breaker so calls stop when failure is persistent."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Keeping the SDK’s 10-minute default timeout",
+        "fix": "Set a timeout per call below your end-to-end target"
+      },
+      {
+        "mistake": "Adding a fallback that has never been exercised",
+        "fix": "Run failure drills that force traffic onto the fallback"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rs01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An order-support assistant receives 50 requests a second, each taking 4 s on average. By Little’s law, how many are in flight at once?",
+      "options": [
+        "12.5",
+        "54",
+        "200",
+        "2,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "50 × 4 = 200 requests in flight."
+    },
+    {
+      "id": "rs02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A service has a pool of 300 workers and 30 requests a second. What is the highest average request time it can sustain?",
+      "options": [
+        "1 s",
+        "3 s",
+        "10 s",
+        "30 s"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "300 ÷ 30 = 10 s; any longer and requests queue."
+    },
+    {
+      "id": "rs03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The Anthropic and OpenAI Python SDKs, left at defaults, time out after how long?",
+      "options": [
+        "8 seconds",
+        "60 seconds",
+        "10 minutes",
+        "Never"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Both default to 10 minutes, far longer than most user-facing targets."
+    },
+    {
+      "id": "rs04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Three layers each retry a failed call twice, three attempts per layer. In the worst case, how many attempts reach the provider for one user request?",
+      "options": [
+        "3",
+        "6",
+        "9",
+        "27"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "3 × 3 × 3 = 27 attempts: retries multiply across layers."
+    },
+    {
+      "id": "rs05",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which belong in a safe retry policy? Select all that apply.",
+      "options": [
+        "Exponential backoff with jitter",
+        "A small retry budget as a share of traffic",
+        "Retrying every error immediately in a tight loop",
+        "Retrying 4xx validation errors"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Backoff, jitter and budgets limit load; immediate retries and retrying bad requests add it."
+    },
+    {
+      "id": "rs06",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "What does a circuit breaker do after the failure threshold is reached?",
+      "options": [
+        "Retries faster",
+        "Opens and fails fast without calling the dependency, then probes after a cooldown",
+        "Deletes the failing requests",
+        "Switches the model temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Open means skip the dependency; half-open lets a probe test recovery."
+    },
+    {
+      "id": "rs07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In the half-open state, a probe call succeeds. What happens?",
+      "options": [
+        "The breaker opens again",
+        "The breaker closes and normal calls resume",
+        "The breaker stays half-open forever",
+        "All requests go to the fallback"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A successful probe closes the breaker."
+    },
+    {
+      "id": "rs08",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Primary calls fail 40% of the time during an outage. With 2 retries (3 attempts) and independent failures, what share of requests fail every attempt?",
+      "options": [
+        "4.0%",
+        "6.4%",
+        "16%",
+        "40%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.4³ = 0.064, so 6.4% still fail after three attempts."
+    },
+    {
+      "id": "rs09",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "During a provider outage, which changes lower p95 latency for users? Select all that apply.",
+      "options": [
+        "A circuit breaker that skips the failing provider",
+        "A shorter timeout per call",
+        "More retries on the failing provider",
+        "The 10-minute default timeout"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Skipping the failure and bounding waits cut latency; retries and long timeouts add to it."
+    },
+    {
+      "id": "rs10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A symptom-checker falls back to a smaller model during outages. What must be true before relying on it?",
+      "options": [
+        "Nothing; any model works",
+        "The fallback has been evaluated on the task and exercised in drills",
+        "It must be from the same provider",
+        "It must be larger than the primary"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Untested fallbacks answer differently and may fail on the day they are needed."
+    },
+    {
+      "id": "rs11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "What is a bulkhead in resilience design?",
+      "options": [
+        "A backup database",
+        "A separate concurrency limit per dependency, so one slow dependency cannot use every worker",
+        "A retry loop",
+        "A type of timeout"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Bulkheads isolate failures by capping resources per dependency."
+    },
+    {
+      "id": "rs12",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "At market open a provider slows down and the whole order assistant goes down. Which are likely contributing causes? Select all that apply.",
+      "options": [
+        "Default 10-minute timeouts held every worker",
+        "Retries multiplied load on the struggling provider",
+        "The prompt was too short",
+        "Traces were exported in batches"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Long waits exhaust workers and retries amplify load; prompt length and batch export are not causes."
+    },
+    {
+      "id": "rs13",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "A 3-second timeout cuts off 10% of healthy calls that take a little longer. What is the trade-off?",
+      "options": [
+        "No trade-off; shorter is always better",
+        "Shorter timeouts free workers faster but turn slow successes into failures",
+        "Longer timeouts reduce cost",
+        "Timeouts do not affect success"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Set timeouts from the latency distribution of healthy calls, not as low as possible."
+    },
+    {
+      "id": "rs14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When both the primary and the secondary provider fail, what should a customer-facing agent return?",
+      "options": [
+        "A stack trace",
+        "A cached answer or a clear message about the delay",
+        "Nothing until a provider recovers",
+        "A random answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A graceful last resort beats an error page or a hung request."
+    },
+    {
+      "id": "rs15",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which tools provide cross-provider fallbacks for model calls? Select all that apply.",
+      "options": [
+        "LiteLLM Router",
+        "Portkey gateway",
+        "Evidently",
+        "MLflow Prompt Registry"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "LiteLLM and Portkey route between providers with fallbacks; the others handle drift and prompt versions."
+    },
+    {
+      "id": "rs16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "In LiteLLM’s Router, what does a cooldown do?",
+      "options": [
+        "Waits before every call",
+        "Takes a deployment that keeps failing out of rotation for a period",
+        "Cools the GPU",
+        "Reduces temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Failing deployments are skipped for the cooldown time, similar to an open breaker."
+    },
+    {
+      "id": "rs17",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A pybreaker breaker is configured with fail_max=5, reset_timeout=30. What does this mean?",
+      "options": [
+        "Open after 5 consecutive failures and try again after 30 seconds",
+        "Retry 5 times, 30 ms apart",
+        "Allow 5 requests every 30 seconds",
+        "Time out after 5 seconds"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "fail_max is the failure threshold; reset_timeout is the cooldown before a probe."
+    },
+    {
+      "id": "rs18",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "An outage drill injects 40% errors into the primary provider. What should the team measure? Select all that apply.",
+      "options": [
+        "Share of requests answered well",
+        "p95 latency and busy workers",
+        "Number of prompt versions",
+        "Size of the trace backend"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Drills check whether users still get good, timely answers and whether capacity holds."
+    },
+    {
+      "id": "rs19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Why should a retried payment tool call carry an idempotency key even behind a circuit breaker?",
+      "options": [
+        "Breakers make payments exactly once",
+        "A timed-out call may still have succeeded, so a retry could pay twice",
+        "Keys make breakers open faster",
+        "Keys replace timeouts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Timeouts do not mean failure on the other side; keys make retries safe."
+    },
+    {
+      "id": "rs20",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which designs keep an assistant up when its only model provider degrades? Select all that apply.",
+      "options": [
+        "Short timeouts and a small retry budget",
+        "A circuit breaker with a tested fallback",
+        "More workers with the same 10-minute timeout",
+        "Retrying every failed call five times"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Bounded waits and fail-fast fallbacks protect capacity; more workers and more retries only delay the collapse."
+    }
+  ]
+}

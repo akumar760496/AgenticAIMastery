@@ -1,0 +1,802 @@
+{
+  "id": "lateint",
+  "moduleSlug": "embeddings",
+  "name": "Late Interaction and Multi-Vector (ColBERT, ColPali)",
+  "shortName": "Late interaction",
+  "question": "Does one vector per passage lose too much detail?",
+  "summary": "Instead of squeezing each passage into one vector, late-interaction models keep a vector for every token. At query time each query token finds its best match among a passage’s token vectors, and those best matches are summed (MaxSim). ColBERT does this for text; ColPali does it for patches of page images, so scanned forms, tables and charts can be searched without OCR. Accuracy rises, especially on detail and visual documents, but the index is many times larger unless it is compressed.",
+  "useCases": [
+    "Long or detailed passages where exact terms matter",
+    "Scanned forms, statements, tables and slides (ColPali)",
+    "A middle stage between fast retrieval and an expensive cross-encoder"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Token vectors",
+        "detail": "one embedding per token or image patch, not one per passage"
+      },
+      {
+        "term": "MaxSim",
+        "detail": "each query token takes its best match; the sum is the score"
+      },
+      {
+        "term": "Storage",
+        "detail": "tens to hundreds of times a single vector, before compression"
+      },
+      {
+        "term": "Compression",
+        "detail": "residual compression, pooling and binarisation shrink the index"
+      },
+      {
+        "term": "ColPali",
+        "detail": "page images in, patch vectors out: no OCR or layout parsing"
+      },
+      {
+        "term": "Engines",
+        "detail": "PLAID, Vespa, Qdrant multivectors, RAGatouille"
+      }
+    ]
+  },
+  "steps": [
+    "Decide where detail is lost: long passages, exact terms, visual pages",
+    "Index with ColBERT for text or ColPali for page images",
+    "Compress or pool the token vectors to keep the index affordable",
+    "Use it as a retriever or as a re-ranking stage over a cheaper first pass"
+  ],
+  "pitfalls": [
+    "Storing uncompressed multi-vectors and running out of memory",
+    "Using ColPali on clean digital text where text retrieval is cheaper",
+    "Skipping evaluation against a tuned single-vector baseline"
+  ],
+  "tools": [
+    "RAGatouille (ColBERT)",
+    "ColPali / ColQwen",
+    "Vespa",
+    "Qdrant multivectors",
+    "Byaldi"
+  ],
+  "remember": "Keep every token, match each one, compress the index.",
+  "caption": "Illustrative: Anand Bima, a fictional insurer, searches 10 lakh pages of claim documents, many of them scans.",
+  "comparison": {
+    "scope": "Embedding and retrieval",
+    "cost": 3,
+    "needs": "Detailed or visual documents",
+    "best": "Index size"
+  },
+  "diagram": {
+    "file": "diagrams/lateint.svg"
+  },
+  "lesson": {
+    "file": "colpali_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from byaldi import RAGMultiModalModel",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = RAGMultiModalModel.from_pretrained(\"vidore/colqwen2-v1.0\")",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "model.index(input_path=\"claims/\",               # PDFs, scans, forms",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            index_name=\"claims\",",
+        "steps": []
+      },
+      {
+        "text": "            store_collection_with_index=False,",
+        "steps": []
+      },
+      {
+        "text": "            overwrite=True)",
+        "steps": []
+      },
+      {
+        "text": "# every page becomes ~1,000 patch vectors of 128 dims; no OCR",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "hits = model.search(\"hospital bill total and admission date\", k=5)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "for h in hits:",
+        "steps": []
+      },
+      {
+        "text": "    print(h.doc_id, h.page_num, round(h.score, 2))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# production: store multivectors in a vector DB that supports MaxSim,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# pool or binarise patch vectors to cut storage ~10x",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# and re-rank the top 50 from a cheaper first stage",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "compare(recall_at_5, baseline=\"ocr+dense\", candidate=\"colqwen\", eval_set=qs)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Pick a late-interaction model",
+        "text": "ColBERT keeps a vector per text token; ColPali and ColQwen keep a vector per patch of a page image. This insurer’s claims are half scans, so it uses ColQwen."
+      },
+      {
+        "title": "Index page images directly",
+        "text": "Each page becomes about 1,000 patch vectors. There is no OCR or layout step, so a crumpled hospital bill is searched as it looks."
+      },
+      {
+        "title": "Score with MaxSim",
+        "text": "Each query token finds its best-matching patch; the scores are summed. “Total” and “admission date” each find the right box on the bill."
+      },
+      {
+        "title": "Compress the index",
+        "text": "Raw, 10 lakh pages need about 260 GB. Pooling and binarising patch vectors bring it to about 40 GB with little loss."
+      },
+      {
+        "title": "Use it where it pays",
+        "text": "Late interaction can re-rank the top 50 from a cheaper first stage instead of searching everything."
+      },
+      {
+        "title": "Compare with a tuned baseline",
+        "text": "Recall at 5 rises from 69% (OCR plus dense vectors) to 85% on the mixed set. On clean text alone the gain is smaller."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"24\" text-anchor=\"middle\">ColBERT: text tokens</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"184\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"24\" text-anchor=\"middle\">ColQwen: page patches</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"56\" text-anchor=\"middle\">page → ~1,000 patch vectors · no OCR</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"87\" text-anchor=\"middle\">“total”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M118 83L132 83\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"134\" y=\"72\" width=\"218\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"243\" y=\"87\" text-anchor=\"middle\">best patch 0.91</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"8\" y=\"98\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"113\" text-anchor=\"middle\">“admission”</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M118 109L132 109\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"134\" y=\"98\" width=\"218\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"243\" y=\"113\" text-anchor=\"middle\">best patch 0.88</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"130\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"146\" text-anchor=\"middle\">raw 260 GB</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"130\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"146\" text-anchor=\"middle\">compressed 40 GB</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"162\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"177\" text-anchor=\"middle\">first stage top 50 → late-interaction re-rank</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"194\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"210\" text-anchor=\"middle\">recall@5 69% → 85% on mixed claims</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Higher accuracy on detail and exact terms",
+      "Searches scanned and visual pages without OCR (ColPali)",
+      "Explainable: you can see which tokens or patches matched",
+      "Works as a strong re-ranking stage"
+    ],
+    "cons": [
+      "Index is many times larger than single vectors",
+      "Needs a store that supports multi-vector scoring",
+      "Slower queries than one vector per passage",
+      "Fewer managed options"
+    ],
+    "avoidWhen": [
+      "Short, clean text where a tuned single-vector model already scores well",
+      "Tight memory budgets with no room for compression work"
+    ],
+    "tools": [
+      {
+        "name": "RAGatouille",
+        "type": "Open source",
+        "what": "ColBERT indexing and search in a few lines",
+        "url": "https://github.com/AnswerDotAI/RAGatouille"
+      },
+      {
+        "name": "ColPali",
+        "type": "Open models (Illuin, vidore)",
+        "what": "Late interaction over page images",
+        "url": "https://github.com/illuin-tech/colpali"
+      },
+      {
+        "name": "Byaldi",
+        "type": "Open source",
+        "what": "Simple wrapper for ColPali-style models",
+        "url": "https://github.com/AnswerDotAI/byaldi"
+      },
+      {
+        "name": "Vespa",
+        "type": "Open source · cloud",
+        "what": "Native multi-vector and MaxSim ranking at scale",
+        "url": "https://vespa.ai"
+      },
+      {
+        "name": "Qdrant multivectors",
+        "type": "Open source · cloud",
+        "what": "Multi-vector points with MaxSim comparison",
+        "url": "https://qdrant.tech/documentation/concepts/vectors/#multivectors"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Anand Bima, a fictional insurer, searches 10 lakh pages of claim documents: policy text, hospital bills, discharge summaries and forms. Text pipelines use OCR; ColPali reads page images.",
+    "controls": [
+      "Choose the retriever: single vector, ColBERT or ColPali.",
+      "Drag the share of scanned or visual pages.",
+      "Switch on compression of the token vectors."
+    ],
+    "outputs": [
+      {
+        "name": "Recall at 5",
+        "meaning": "Overall, and for text pages and scanned or visual pages."
+      },
+      {
+        "name": "Index size",
+        "meaning": "Storage for 10 lakh pages."
+      },
+      {
+        "name": "Query latency",
+        "meaning": "Time per search."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Single vector on OCR text",
+        "expect": "Recall 69% (scans 60%), 4 GB, 20 ms."
+      },
+      {
+        "k": "colbert",
+        "name": "ColBERT, compressed",
+        "expect": "Recall 77% (text 88%, scans 66%), 6 GB, 45 ms."
+      },
+      {
+        "k": "raw",
+        "name": "ColPali, uncompressed",
+        "expect": "Recall 85%, but 260 GB and 120 ms."
+      },
+      {
+        "k": "colpali",
+        "name": "ColPali, compressed",
+        "expect": "Recall 85%, 40 GB, 90 ms."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 85% recall with an index of 50 GB or less and latency of 100 ms or less.",
+        "hint": "ColPali with compression."
+      },
+      {
+        "k": "visual",
+        "text": "With 80% scanned pages, reach 85% recall.",
+        "hint": "Page images beat OCR on scans."
+      },
+      {
+        "k": "storage",
+        "text": "Show how large an uncompressed multi-vector index gets.",
+        "hint": "ColPali without compression."
+      }
+    ],
+    "tools": [
+      {
+        "n": "RAGatouille",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "ColBERT for text in a few lines.",
+        "ex": "Index policy wordings and search exact clauses.",
+        "pros": [
+          "Very easy start",
+          "Good accuracy"
+        ],
+        "cons": [
+          "Single-machine focus"
+        ],
+        "url": "https://github.com/AnswerDotAI/RAGatouille"
+      },
+      {
+        "n": "ColPali / ColQwen",
+        "type": "Open models",
+        "start": 2,
+        "prod": 2,
+        "best": "Late interaction over page images.",
+        "ex": "Search scanned hospital bills without OCR.",
+        "pros": [
+          "No OCR or layout step",
+          "Strong on visual pages"
+        ],
+        "cons": [
+          "Large indexes",
+          "GPU for embedding"
+        ],
+        "url": "https://github.com/illuin-tech/colpali"
+      },
+      {
+        "n": "Vespa",
+        "type": "Open source · cloud",
+        "start": 1,
+        "prod": 3,
+        "best": "Multi-vector MaxSim ranking at scale.",
+        "ex": "A two-stage ranker: BM25 then ColBERT MaxSim.",
+        "pros": [
+          "Scales out",
+          "Rich ranking"
+        ],
+        "cons": [
+          "Steep learning curve"
+        ],
+        "url": "https://vespa.ai"
+      },
+      {
+        "n": "Qdrant multivectors",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Storing multi-vectors with MaxSim comparison.",
+        "ex": "Rerank top 100 with ColBERT multivectors.",
+        "pros": [
+          "Familiar vector DB",
+          "Quantisation options"
+        ],
+        "cons": [
+          "Memory heavy without care"
+        ],
+        "url": "https://qdrant.tech/documentation/concepts/vectors/#multivectors"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Text, quick try",
+        "tool": "RAGatouille"
+      },
+      {
+        "need": "Scanned pages",
+        "tool": "ColPali or ColQwen"
+      },
+      {
+        "need": "Production scale",
+        "tool": "Vespa or Qdrant multivectors"
+      }
+    ],
+    "goals": [
+      "Explain MaxSim and why token vectors help",
+      "Choose ColBERT or ColPali for a corpus",
+      "Keep multi-vector indexes affordable"
+    ]
+  },
+  "practice": {
+    "scenario": "Anand Bima, a fictional insurer, searches 10 lakh pages of claim documents, half of them scanned hospital bills and forms. Instead of OCR plus one vector per passage, it indexes page images with a ColPali-family model that keeps a vector per image patch, scores with MaxSim, and compresses the patch vectors to keep the index near 40 GB. Recall at 5 on its test questions rises from 69% to 85%.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Hospital bills, claim forms and discharge summaries, often scanned"
+      },
+      {
+        "industry": "Banking",
+        "use": "Statements and KYC documents with tables and stamps"
+      },
+      {
+        "industry": "Enterprise search",
+        "use": "Slide decks and reports where charts carry the answer"
+      }
+    ],
+    "analogy": "Comparing two documents word by word with a highlighter, instead of comparing two one-line summaries of them.",
+    "library": {
+      "name": "RAGatouille",
+      "what": "ColBERT late-interaction indexing and search for text in a few lines of Python.",
+      "install": "pip install ragatouille"
+    },
+    "note": "The first run downloads the model. Index size depends on passage length; compression settings vary by version.",
+    "samples": [
+      {
+        "file": "colbert_search.py",
+        "language": "python",
+        "code": "from ragatouille import RAGPretrainedModel\n\nrag = RAGPretrainedModel.from_pretrained(\"colbert-ir/colbertv2.0\")\ndocs = [open(p).read() for p in [\"policy_wordings.txt\", \"claims_faq.txt\"]]\nrag.index(collection=docs, index_name=\"claims\", max_document_length=256, split_documents=True)\n\nfor hit in rag.search(\"waiting period for cataract surgery\", k=5):\n    print(round(hit[\"score\"], 2), hit[\"content\"][:80])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A page produces 1,000 patch vectors of 128 dimensions stored as 2-byte numbers. How many KB does one page need?",
+    "answer": "1,000 × 128 × 2 bytes = 2,56,000 bytes, about 256 KB (roughly 250 KiB). Ten lakh pages need about 256 GB before compression.",
+    "expected": {
+      "value": 256,
+      "tolerance": 6,
+      "label": "KB ="
+    },
+    "interview": [
+      {
+        "question": "What is late interaction?",
+        "answer": "Queries and documents are encoded into one vector per token, and the score sums each query token’s best match in the document (MaxSim). It keeps detail that a single vector loses, at the cost of a bigger index."
+      },
+      {
+        "question": "When would you use ColPali?",
+        "answer": "When documents are scanned or visual, such as forms, bills, tables and slides, so OCR and layout parsing lose information. It searches page images directly."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Storing uncompressed token vectors",
+        "fix": "Pool, compress or binarise them"
+      },
+      {
+        "mistake": "Replacing a tuned baseline without measuring",
+        "fix": "Compare recall and cost on your own questions"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "li01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What does late interaction keep that a single-vector model does not?",
+      "options": [
+        "Nothing",
+        "A vector per token or patch",
+        "The raw text",
+        "Metadata"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Token-level vectors preserve detail."
+    },
+    {
+      "id": "li02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How is a MaxSim score computed?",
+      "options": [
+        "Average of all similarities",
+        "Sum over query tokens of each token’s best match",
+        "Cosine of two summary vectors",
+        "BM25 score"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Best match per query token, summed."
+    },
+    {
+      "id": "li03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which documents benefit most from ColPali?",
+      "options": [
+        "Clean plain text",
+        "Scanned forms, bills, tables and slides",
+        "Short tweets",
+        "Audio"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Visual layout is where OCR loses information."
+    },
+    {
+      "id": "li04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What are costs of multi-vector indexes? Select all that apply.",
+      "options": [
+        "Much larger storage",
+        "Slower scoring than one vector",
+        "Need for a store that supports MaxSim",
+        "Lower recall on detail"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Recall on detail is usually higher."
+    },
+    {
+      "id": "li05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "1,000 × 128 × 2 bytes per page is about how much?",
+      "options": [
+        "256 KB",
+        "2.5 KB",
+        "25 MB",
+        "128 bytes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,56,000 bytes."
+    },
+    {
+      "id": "li06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does ColPali skip?",
+      "options": [
+        "Embedding",
+        "OCR and layout parsing",
+        "Search",
+        "Storage"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It embeds page images directly."
+    },
+    {
+      "id": "li07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Where can ColBERT sit besides first-stage retrieval?",
+      "options": [
+        "As a re-ranker over a cheaper first stage",
+        "As the LLM",
+        "As a tokenizer",
+        "Nowhere"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Re-ranking limits cost."
+    },
+    {
+      "id": "li08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Recall rises from 69% to 85%. On 1,000 questions, how many more find the page?",
+      "options": [
+        "160",
+        "85",
+        "16",
+        "69"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "16 points of 1,000."
+    },
+    {
+      "id": "li09",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which reduce multi-vector index size? Select all that apply.",
+      "options": [
+        "Token pooling",
+        "Residual compression",
+        "Binarising vectors",
+        "Adding more tokens"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "More tokens make it bigger."
+    },
+    {
+      "id": "li10",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why can single vectors miss a clause detail?",
+      "options": [
+        "They are too long",
+        "One vector summarises the whole passage and blurs specifics",
+        "They use BM25",
+        "They ignore English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Compression into one vector loses detail."
+    },
+    {
+      "id": "li11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A corpus is clean digital text and a tuned dense model gets 92% recall. Is ColBERT worth it?",
+      "options": [
+        "Always",
+        "Only if measured gains justify the larger index",
+        "Never",
+        "Only for Hindi"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Measure against the baseline."
+    },
+    {
+      "id": "li12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which vector databases support multi-vector MaxSim?",
+      "options": [
+        "Qdrant and Vespa",
+        "Only SQLite",
+        "Only Redis strings",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Both support multivectors."
+    },
+    {
+      "id": "li13",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A query has 5 tokens; best matches are 0.9, 0.8, 0.7, 0.6, 0.5. MaxSim score?",
+      "options": [
+        "3.5",
+        "0.7",
+        "0.9",
+        "5"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Sum = 3.5."
+    },
+    {
+      "id": "li14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Discharge summaries are photographed by patients. Which retriever suits them?",
+      "options": [
+        "ColPali on page images",
+        "BM25 on file names",
+        "Single vectors on file names",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Visual retrieval handles photos and layouts."
+    },
+    {
+      "id": "li15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Uncompressed index 260 GB; compressed 40 GB. Reduction?",
+      "options": [
+        "6.5×",
+        "2×",
+        "26×",
+        "4×"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "260 ÷ 40 = 6.5."
+    },
+    {
+      "id": "li16",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Before adopting late interaction, measure… Select all that apply.",
+      "options": [
+        "Recall on your own questions",
+        "Index size and memory",
+        "Query latency",
+        "Colour of the UI"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Measure quality and cost."
+    },
+    {
+      "id": "li17",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Which library makes ColBERT easy to try?",
+      "options": [
+        "RAGatouille",
+        "Pandas",
+        "Flask",
+        "Pytest"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "RAGatouille wraps ColBERT."
+    },
+    {
+      "id": "li18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why does late interaction help exact terms?",
+      "options": [
+        "Each query token can match the same token in the document",
+        "It uses a bigger model",
+        "It ignores stopwords",
+        "It uses BM25 inside"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Token-level matching keeps exact terms visible."
+    },
+    {
+      "id": "li19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is a patch in ColPali?",
+      "options": [
+        "A small square region of a page image",
+        "A software update",
+        "A chunk of text",
+        "A database row"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Patches are image regions."
+    },
+    {
+      "id": "li20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Latency grows from 20 ms to 90 ms. Within a 150 ms budget?",
+      "options": [
+        "Yes",
+        "No",
+        "Only on GPUs",
+        "Only for text"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "90 ms is within 150 ms."
+    }
+  ]
+}

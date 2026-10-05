@@ -1,0 +1,826 @@
+{
+  "id": "feedback",
+  "moduleSlug": "operations",
+  "name": "User Feedback Loops and the Data Flywheel",
+  "shortName": "Feedback loops",
+  "question": "Are users telling us what is broken, and do we act on it?",
+  "summary": "Users show whether an answer helped far more often through behaviour than through ratings. A feedback loop captures explicit signals (thumbs, ratings, comments) and implicit ones (retries, rephrasing, copying the answer, abandoning, asking for a human, editing a draft), attaches them to the trace of the conversation, and turns them into work: a weekly triage clusters failures into patterns, each pattern becomes eval cases and a fix, and suitable examples become fine-tuning or preference data. That cycle of product use producing better data producing a better product is the data flywheel. Automated scoring of sampled traffic is covered by Online Evals; this technique is about the signals users give and the process that acts on them. Using conversations for training needs a lawful basis, such as notice and consent under India’s DPDP Act, and redaction.",
+  "useCases": [
+    "Support and sales assistants with high conversation volume",
+    "Copilots where users edit drafts before sending",
+    "Any product whose eval set has stopped reflecting real use"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Explicit signals",
+        "detail": "thumbs, ratings and comments; rare (1–3% of sessions) and skewed to strong feelings"
+      },
+      {
+        "term": "Implicit signals",
+        "detail": "retry, rephrase, copy, abandon, human handoff, edit distance on drafts"
+      },
+      {
+        "term": "Trace link",
+        "detail": "every signal joined to the conversation, prompt version and retrieved context"
+      },
+      {
+        "term": "Triage",
+        "detail": "weekly review that clusters failures into named patterns with counts"
+      },
+      {
+        "term": "Time to fix",
+        "detail": "days from a pattern appearing to a fix in production"
+      },
+      {
+        "term": "Flywheel",
+        "detail": "patterns → eval cases, fixes and training data → measured release"
+      }
+    ]
+  },
+  "steps": [
+    "Log explicit and implicit signals with the trace id and prompt version",
+    "Review a weekly sample of negative signals and cluster them into failure patterns",
+    "Turn each pattern into eval cases, then a prompt, retrieval or tool fix",
+    "Add consented, redacted examples to training or preference data; measure the next release"
+  ],
+  "pitfalls": [
+    "Counting thumbs-down alone, which misses most failures",
+    "Collecting feedback with no owner or weekly review, so nothing changes",
+    "Training on conversations without notice, consent or redaction"
+  ],
+  "tools": [
+    "Langfuse / LangSmith feedback",
+    "Argilla",
+    "Label Studio",
+    "PostHog or product analytics",
+    "Braintrust"
+  ],
+  "remember": "Capture what users do, not only what they rate; triage weekly; turn patterns into evals and fixes.",
+  "caption": "Illustrative: Dak Mitra, a fictional logistics company, handles 2 lakh support chats a week in English and Hinglish.",
+  "comparison": {
+    "scope": "Failures users notice that evals miss",
+    "cost": 2,
+    "needs": "Signal logging, trace links, a weekly owner",
+    "best": "Signals collected but never acted on"
+  },
+  "diagram": {
+    "file": "diagrams/feedback.svg"
+  },
+  "lesson": {
+    "file": "feedback_loop.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from langfuse import get_client",
+        "steps": []
+      },
+      {
+        "text": "lf = get_client()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_thumbs(trace_id, up, comment=None):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    lf.create_score(trace_id=trace_id, name=\"user_thumbs\", value=1 if up else 0,",
+        "steps": []
+      },
+      {
+        "text": "                    comment=comment)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_event(trace_id, kind):          # retry, rephrase, handoff, copy",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    lf.create_score(trace_id=trace_id, name=f\"implicit_{kind}\", value=1)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def weekly_triage(week):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    bad = fetch_traces(week, any_of=[\"user_thumbs=0\", \"implicit_retry\",",
+        "steps": []
+      },
+      {
+        "text": "                                     \"implicit_handoff\"], sample=300)",
+        "steps": []
+      },
+      {
+        "text": "    patterns = cluster_and_label(bad)   # human reviewer names each cluster",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    for p in patterns[:5]:",
+        "steps": []
+      },
+      {
+        "text": "        eval_set.add(p.examples[:20], tag=p.name)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        open_ticket(p.name, owner=\"assistant-team\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    consented = [t for t in bad if t.consent_training and redact_ok(t)]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    training_queue.add(consented)",
+        "steps": []
+      },
+      {
+        "text": "    return patterns",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# 8 weeks: first-contact resolution 72% → 79%; fix time 45 → 10 days",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Capture explicit feedback",
+        "text": "Dak Mitra, a fictional logistics company, adds thumbs to its support chat. Only about 1.5% of 2 lakh weekly chats get a rating, mostly from very unhappy or very happy users."
+      },
+      {
+        "title": "Capture what users do",
+        "text": "Retries, rephrasing, copying the tracking answer and asking for a human are logged as implicit signals on the same trace. They are noisy, but there are ten times more of them."
+      },
+      {
+        "title": "Triage every week",
+        "text": "A reviewer samples 300 negative traces, clusters them and names the patterns: “COD refund status in Hinglish”, “pincode not serviceable”, “wrong courier partner”."
+      },
+      {
+        "title": "Turn patterns into evals and fixes",
+        "text": "The top five patterns each add 20 eval cases and get an owner. A fix ships only when those cases pass."
+      },
+      {
+        "title": "Feed the flywheel carefully",
+        "text": "Only conversations with training consent and clean redaction go to the training queue, in line with DPDP notice and consent."
+      },
+      {
+        "title": "Measure the loop",
+        "text": "After eight weeks, first-contact resolution rises from 72% to 79%, and the time from a pattern appearing to its fix falls from 45 to 10 days."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">thumbs on 1.5% of chats</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"55\" text-anchor=\"middle\">retry</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"40\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"55\" text-anchor=\"middle\">rephrase</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"40\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"55\" text-anchor=\"middle\">ask for human</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"70\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"85\" text-anchor=\"middle\">300 bad traces → named patterns</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"100\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"115\" text-anchor=\"middle\">+20 eval cases each</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"100\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"115\" text-anchor=\"middle\">owner + ticket</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"130\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"145\" text-anchor=\"middle\">training: consented + redacted only</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"160\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"176\" text-anchor=\"middle\">resolution 72% → 79%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"160\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"176\" text-anchor=\"middle\">fix 45 → 10 days</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Finds failures your eval set does not contain",
+      "Implicit signals give ten times more data than ratings",
+      "Keeps the eval set close to real use",
+      "Each fix is tied to a measured pattern"
+    ],
+    "cons": [
+      "Signals are noisy and biased",
+      "Weekly triage needs reviewer time",
+      "Linking signals to traces needs instrumentation",
+      "Training on user data needs consent and redaction"
+    ],
+    "avoidWhen": [
+      "Collecting ratings nobody reviews",
+      "Training on raw conversations without a lawful basis"
+    ],
+    "tools": [
+      {
+        "name": "Langfuse",
+        "type": "Open source · cloud",
+        "what": "Scores and user feedback attached to traces",
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "name": "LangSmith",
+        "type": "LangChain",
+        "what": "Feedback on runs, annotation queues and datasets",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Argilla",
+        "type": "Open source",
+        "what": "Human review and labelling of feedback for datasets",
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "name": "Label Studio",
+        "type": "Open source",
+        "what": "Labelling interface for triage and training data",
+        "url": "https://labelstud.io"
+      },
+      {
+        "name": "PostHog",
+        "type": "Open source · cloud",
+        "what": "Product analytics for implicit signals such as retries and drop-offs",
+        "url": "https://posthog.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Dak Mitra, a fictional logistics company, handles 2 lakh support chats a week; 72% are resolved without a human. Figures are illustrative over eight weeks.",
+    "controls": [
+      "Choose the signals captured: thumbs only, implicit only, or both linked to traces.",
+      "Add a weekly triage that names failure patterns and assigns owners.",
+      "Feed patterns into eval cases and consented training data (the flywheel)."
+    ],
+    "outputs": [
+      {
+        "name": "Failures detected",
+        "meaning": "Share of real failures that show up in the signals."
+      },
+      {
+        "name": "Resolved without a human",
+        "meaning": "First-contact resolution after eight weeks."
+      },
+      {
+        "name": "Signals a week",
+        "meaning": "Volume to work with."
+      },
+      {
+        "name": "Pattern to fix",
+        "meaning": "Days from first sighting to a fix."
+      },
+      {
+        "name": "Reviewer time",
+        "meaning": "Hours a week."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Thumbs only",
+        "expect": "25% of failures seen, fixes take 45 days, resolution 72%."
+      },
+      {
+        "k": "implicit",
+        "name": "Implicit signals only",
+        "expect": "55% seen, but still 45 days and 72%."
+      },
+      {
+        "k": "triage",
+        "name": "Both + weekly triage",
+        "expect": "70% seen, 10 days, resolution 76%, 12 h a week."
+      },
+      {
+        "k": "flywheel",
+        "name": "Both + triage + flywheel",
+        "expect": "Resolution 79%, 10 days, 16 h a week."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 79% resolution with fixes in 10 days and 16 reviewer hours a week or less.",
+        "hint": "All signals, triage and the flywheel."
+      },
+      {
+        "k": "implicit",
+        "text": "Detect at least 55% of failures.",
+        "hint": "Watch what users do, not only what they rate."
+      },
+      {
+        "k": "cheap",
+        "text": "Gain at least 3 points with 12 reviewer hours a week or less.",
+        "hint": "Triage without the flywheel."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Langfuse",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Feedback scores on traces.",
+        "ex": "Thumbs and handoff scores per trace.",
+        "pros": [
+          "Self-host option",
+          "Traces and scores together"
+        ],
+        "cons": [
+          "You build the triage"
+        ],
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "n": "LangSmith",
+        "type": "LangChain",
+        "start": 3,
+        "prod": 3,
+        "best": "Annotation queues from feedback.",
+        "ex": "Queue all handoffs for weekly review.",
+        "pros": [
+          "Queues and datasets",
+          "Good UI"
+        ],
+        "cons": [
+          "Hosted by default"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Argilla",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Labelling feedback into datasets.",
+        "ex": "Label 300 traces into patterns.",
+        "pros": [
+          "Flexible labels",
+          "Hugging Face integration"
+        ],
+        "cons": [
+          "Another tool to run"
+        ],
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "n": "PostHog",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "Implicit behaviour signals.",
+        "ex": "Retry and drop-off events per session.",
+        "pros": [
+          "Product analytics",
+          "Session replay"
+        ],
+        "cons": [
+          "Not LLM-specific"
+        ],
+        "url": "https://posthog.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "More signal",
+        "tool": "Log retries, rephrasing and handoffs"
+      },
+      {
+        "need": "Act on it",
+        "tool": "Weekly triage with owners"
+      },
+      {
+        "need": "Compound it",
+        "tool": "Patterns into evals and training data"
+      }
+    ],
+    "goals": [
+      "Capture explicit and implicit feedback on traces",
+      "Run a weekly triage into failure patterns",
+      "Feed patterns into evals and consented training data"
+    ]
+  },
+  "practice": {
+    "scenario": "Dak Mitra, a fictional logistics company, handles 2 lakh support chats a week in English and Hinglish. Thumbs-down covered 1.5% of chats and showed a quarter of failures. It now logs retries, rephrasing and requests for a human on the same traces, a reviewer clusters 300 negative traces each week into named patterns, and the top five become eval cases, fixes with owners and, where customers consented, redacted training data. In eight weeks first-contact resolution rises from 72% to 79% and a failure pattern goes from first sighting to fix in 10 days instead of 45.",
+    "industries": [
+      {
+        "industry": "Logistics",
+        "use": "Tracking, COD refunds and delivery complaints"
+      },
+      {
+        "industry": "Banking",
+        "use": "Card and UPI dispute assistants where handoffs signal failure"
+      },
+      {
+        "industry": "SaaS",
+        "use": "Copilots where the edit distance on drafts shows quality"
+      }
+    ],
+    "analogy": "A restaurant that reads the plates coming back to the kitchen, not just the comment cards, and changes one recipe each week based on what was left uneaten.",
+    "library": {
+      "name": "pandas",
+      "what": "A few lines of pandas turn exported signals into a weekly failure-pattern table; any tracing tool can export them.",
+      "install": "pip install pandas"
+    },
+    "note": "signals.csv is an export from your tracing or analytics tool with one row per signal; the pattern column is filled by the reviewer during triage.",
+    "samples": [
+      {
+        "file": "weekly_triage.py",
+        "language": "python",
+        "code": "import pandas as pd\n\ns = pd.read_csv(\"signals.csv\", parse_dates=[\"ts\"])        # trace_id, ts, kind, pattern\nweek = s[s.ts >= s.ts.max() - pd.Timedelta(days=7)]\n\nnegative = week[week.kind.isin([\"thumbs_down\", \"retry\", \"rephrase\", \"handoff\"])]\nprint(\"traces with a negative signal:\", negative.trace_id.nunique())\n\ntable = (negative.dropna(subset=[\"pattern\"])\n         .groupby(\"pattern\").trace_id.nunique()\n         .sort_values(ascending=False).head(5))\nprint(table)                                              # top five failure patterns\ntable.to_csv(\"patterns_this_week.csv\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "2 lakh chats a week; 1.5% leave a rating and 20% of ratings are thumbs-down. How many thumbs-down a week?",
+    "answer": "2,00,000 × 0.015 = 3,000 ratings; × 0.2 = 600 thumbs-down a week.",
+    "expected": {
+      "value": 600,
+      "tolerance": 5,
+      "label": "thumbs-down ="
+    },
+    "interview": [
+      {
+        "question": "How would you use user feedback to improve an assistant?",
+        "answer": "Capture explicit and implicit signals on traces, triage a sample of negative traces weekly into named failure patterns, turn each into eval cases and a fix with an owner, and add consented, redacted examples to training data; measure each release on the eval set."
+      },
+      {
+        "question": "Why are implicit signals important?",
+        "answer": "Few users rate, and those who do are skewed to extremes. Retries, rephrasing, handoffs and edits are far more common and reveal failures users never report."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Relying on thumbs-down alone",
+        "fix": "Add implicit signals linked to traces"
+      },
+      {
+        "mistake": "Collecting feedback with no owner",
+        "fix": "Run a weekly triage with named patterns and owners"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fb01",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Why are thumbs ratings alone not enough?",
+      "options": [
+        "Few users rate and they skew to extremes",
+        "They are too accurate",
+        "They cost money",
+        "They are illegal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1–3% of sessions."
+    },
+    {
+      "id": "fb02",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are implicit signals? Select all that apply.",
+      "options": [
+        "Retrying the question",
+        "Asking for a human",
+        "Copying the answer",
+        "The model’s temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Behaviour, not settings."
+    },
+    {
+      "id": "fb03",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "2 lakh chats × 1.5% rated = ?",
+      "options": [
+        "300",
+        "3,000",
+        "30,000",
+        "1,500"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Ratings a week."
+    },
+    {
+      "id": "fb04",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "3,000 ratings × 20% negative = ?",
+      "options": [
+        "60",
+        "600",
+        "6,000",
+        "2,400"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Thumbs-down a week."
+    },
+    {
+      "id": "fb05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What must each signal be linked to?",
+      "options": [
+        "The trace, prompt version and context",
+        "The user’s password",
+        "A random id",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "So failures can be diagnosed."
+    },
+    {
+      "id": "fb06",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "What does weekly triage produce?",
+      "options": [
+        "Named failure patterns with counts and owners",
+        "A new logo",
+        "More GPUs",
+        "A price change"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Patterns become work."
+    },
+    {
+      "id": "fb07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A fix for a pattern should ship when?",
+      "options": [
+        "Its eval cases pass",
+        "When a manager asks",
+        "Immediately without tests",
+        "Never"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Guarded by evals."
+    },
+    {
+      "id": "fb08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Under DPDP, training on chat logs needs?",
+      "options": [
+        "A lawful basis such as notice and consent, plus redaction",
+        "Nothing",
+        "Only encryption",
+        "A bigger model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Educational summary, not legal advice."
+    },
+    {
+      "id": "fb09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Edit distance on drafts measures?",
+      "options": [
+        "How much users change the assistant’s output",
+        "Latency",
+        "Token cost",
+        "Model size"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Big edits mean poor drafts."
+    },
+    {
+      "id": "fb10",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Resolution rises from 72% to 79%. On 2 lakh chats, how many more resolved a week?",
+      "options": [
+        "7,000",
+        "14,000",
+        "1,400",
+        "79,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2,00,000 × 0.07."
+    },
+    {
+      "id": "fb11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique scores sampled traffic automatically?",
+      "options": [
+        "Online Evals and Drift Alerts",
+        "Feedback loops",
+        "Canary releases",
+        "Vector compression"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one is about user signals."
+    },
+    {
+      "id": "fb12",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which make a flywheel turn? Select all that apply.",
+      "options": [
+        "Patterns become eval cases",
+        "Fixes are measured on the eval set",
+        "Consented examples join training data",
+        "Ratings are hidden"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Hiding signals stops it."
+    },
+    {
+      "id": "fb13",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Pattern-to-fix time falls from 45 to 10 days. Days saved?",
+      "options": [
+        "35",
+        "10",
+        "55",
+        "45"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "45 − 10."
+    },
+    {
+      "id": "fb14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A handoff to a human after the assistant answered usually signals?",
+      "options": [
+        "A likely failure",
+        "Success",
+        "Nothing",
+        "A billing event"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Strong implicit signal."
+    },
+    {
+      "id": "fb15",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why cluster rather than read every negative trace?",
+      "options": [
+        "Volume is too high; patterns show what matters most",
+        "Clustering is required by law",
+        "Traces are unreadable",
+        "To save disk"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Prioritise by count."
+    },
+    {
+      "id": "fb16",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Implicit signals are noisy. What reduces the noise?",
+      "options": [
+        "Combining several signals and reviewing samples",
+        "Ignoring them",
+        "Only using thumbs",
+        "Deleting traces"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Triangulate."
+    },
+    {
+      "id": "fb17",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What should a triage record per pattern? Select all that apply.",
+      "options": [
+        "Name",
+        "Count",
+        "Owner",
+        "Favourite colour"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "And example traces."
+    },
+    {
+      "id": "fb18",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Top 5 patterns × 20 eval cases each adds?",
+      "options": [
+        "25",
+        "100",
+        "200",
+        "20"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "5 × 20."
+    },
+    {
+      "id": "fb19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Feedback collected but never reviewed results in?",
+      "options": [
+        "No improvement",
+        "Automatic fixes",
+        "Better models",
+        "Lower cost"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Someone must own it."
+    },
+    {
+      "id": "fb20",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Which is a good weekly triage sample size for one reviewer?",
+      "options": [
+        "About 300 traces",
+        "3 traces",
+        "3 lakh traces",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Enough to see patterns."
+    }
+  ]
+}

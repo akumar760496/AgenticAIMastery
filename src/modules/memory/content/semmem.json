@@ -1,0 +1,863 @@
+{
+  "id": "semmem",
+  "moduleSlug": "memory",
+  "name": "Semantic Memory",
+  "shortName": "Semantic memory",
+  "question": "What does the agent know about this user?",
+  "summary": "Durable facts about users and entities, stored outside the model and carried across sessions. A pipeline extracts candidate facts from each exchange, reconciles them with what is already stored, and retrieves the relevant few on each turn. The hard part is not storing facts but updating and scoping them.",
+  "useCases": [
+    "Assistants that serve the same customer across weeks or months",
+    "Preferences, goals and profile facts the user should not have to repeat",
+    "Replacing long transcript replays with a few retrieved facts"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Reconcile",
+        "detail": "compare each new fact with similar ones: ADD, UPDATE, DELETE or no-op (Mem0)"
+      },
+      {
+        "term": "Shapes",
+        "detail": "one profile document per user, or a collection of small facts"
+      },
+      {
+        "term": "Scope",
+        "detail": "namespace by tenant and user; never search across users"
+      },
+      {
+        "term": "Time",
+        "detail": "keep validity windows and invalidate contradicted facts (Graphiti)"
+      },
+      {
+        "term": "Savings",
+        "detail": "Mem0 reported over 90% fewer tokens than full context on LOCOMO"
+      },
+      {
+        "term": "Evaluate",
+        "detail": "updates, multi-session and temporal questions, and abstention (LongMemEval)"
+      }
+    ]
+  },
+  "steps": [
+    "Choose the shape: a profile document or a collection of small facts",
+    "Extract candidate facts after each exchange",
+    "Reconcile each against its most similar stored facts: add, update, delete or skip",
+    "Retrieve the top few, scoped to the user, and test updates and abstention"
+  ],
+  "pitfalls": [
+    "Append-only stores that keep both the old and the new city",
+    "A search without the user ID in the namespace, leaking facts between users",
+    "Evaluating recall only, never updates or “I don’t know”"
+  ],
+  "tools": [
+    "Mem0",
+    "LangMem",
+    "LangGraph store",
+    "Graphiti (Zep)",
+    "Letta memory blocks"
+  ],
+  "remember": "Update, don’t append. Scope every search.",
+  "caption": "Illustrative token counts for an investor with five stored facts.",
+  "comparison": {
+    "scope": "Facts across sessions",
+    "cost": 3,
+    "needs": "Store, extraction LLM, namespaces",
+    "best": "Stale or cross-user facts"
+  },
+  "diagram": {
+    "file": "diagrams/semmem.svg"
+  },
+  "lesson": {
+    "file": "investor_memory.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from mem0 import Memory",
+        "steps": []
+      },
+      {
+        "text": "m = Memory.from_config(CONFIG)          # your LLM + vector store",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# collection: many small facts per investor (a profile is one document)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def remember(tenant, investor, user_msg, reply):",
+        "steps": []
+      },
+      {
+        "text": "    out = m.add([{\"role\": \"user\", \"content\": user_msg},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                 {\"role\": \"assistant\", \"content\": reply}],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                user_id=f\"{tenant}:{investor}\")",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "    for ev in out[\"results\"]:            # ADD / UPDATE / DELETE / NONE",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        log.info(\"%s %s\", ev[\"event\"], ev[\"memory\"])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def recall(tenant, investor, question, k=3):",
+        "steps": []
+      },
+      {
+        "text": "    hits = m.search(question, user_id=f\"{tenant}:{investor}\", limit=k)",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    return \"\\n\".join(f\"- {h['memory']}\" for h in hits[\"results\"])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def system_prompt(tenant, investor, question):",
+        "steps": []
+      },
+      {
+        "text": "    facts = recall(tenant, investor, question)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return f\"{RULES}\\n<investor_facts>\\n{facts}\\n</investor_facts>\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CASES = [(\"Where does the investor live?\", \"Bengaluru\"),   # changed",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "         (\"Monthly SIP amount?\", \"8,000\"),                 # updated",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "         (\"Investor's employer?\", \"don't know\")]           # never said",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "score = sum(exp.lower() in answer(q).lower() for q, exp in CASES) / len(CASES)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Choose profile or collection",
+        "text": "A profile is one document per investor, rewritten as facts change. A collection keeps many small facts and retrieves a few. Here: a collection."
+      },
+      {
+        "title": "Extract facts per exchange",
+        "text": "After each exchange an LLM pulls out candidate facts: “lives in Pune”, “prefers Hindi”, “SIP ₹5,000 a month”."
+      },
+      {
+        "title": "Reconcile with the store",
+        "text": "Each candidate is compared with the most similar stored facts. “We moved to Bengaluru” becomes an UPDATE, not a second city."
+      },
+      {
+        "title": "Scope by tenant and user",
+        "text": "Every write and search carries the tenant and investor ID, so one investor’s facts can never be retrieved for another."
+      },
+      {
+        "title": "Retrieve top-k per turn",
+        "text": "The few most relevant facts go near the top of the system prompt: about 180 tokens instead of 26k of old transcripts."
+      },
+      {
+        "title": "Evaluate updates and abstention",
+        "text": "Test questions whose answer changed and questions the investor never answered. “I don’t know” is the right answer to the last one."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"90\" y=\"24\" text-anchor=\"middle\">profile: 1 document</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"186\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"270\" y=\"24\" text-anchor=\"middle\">collection: small facts ✓</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"52\" style=\"--d:0s\">Extracted</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"6\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"73\" text-anchor=\"middle\">city = Pune</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"124\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"73\" text-anchor=\"middle\">lang = Hindi</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx \" x=\"242\" y=\"58\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"298\" y=\"73\" text-anchor=\"middle\">SIP = ₹5,000</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"6\" y=\"98\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"86\" y=\"113\" text-anchor=\"middle\">“moved to Bengaluru”</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln \" d=\"M168 109L184 109\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"186\" y=\"98\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"270\" y=\"113\" text-anchor=\"middle\">UPDATE city = Bengaluru</text></g><g class=\"a\" style=\"--d:0.4s\"><line x1=\"16\" x2=\"102\" y1=\"69\" y2=\"69\" style=\"stroke:var(--fail);stroke-width:1.4\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"6\" y=\"132\" width=\"348\" height=\"30\" rx=\"7\"/><text class=\"mono\" x=\"16\" y=\"151\">user_id = \"wealth:inv-2231\"  (never across users)</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"6\" y=\"184\" style=\"--d:0s\">Prompt</text><rect x=\"70\" y=\"174\" width=\"236\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"70\" y=\"174\" width=\"236\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"312\" y=\"184\" style=\"--d:0.2s\">26k</text><rect x=\"70\" y=\"192\" width=\"236\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"70\" y=\"192\" width=\"1.633846153846154\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.3s\"/><text class=\"mono a\" x=\"78\" y=\"202\" style=\"--d:0.4s\">3 facts · 180 tokens</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"220\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"39\" y=\"236\" text-anchor=\"middle\">city ✓</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx pass\" x=\"78\" y=\"220\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"111\" y=\"236\" text-anchor=\"middle\">SIP ✓</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx pass\" x=\"150\" y=\"220\" width=\"204\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"252\" y=\"236\" text-anchor=\"middle\">employer: don’t know ✓</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "The user does not have to repeat themselves",
+      "A few facts replace thousands of tokens of transcripts",
+      "Facts can be inspected, corrected and deleted",
+      "Works across channels and sessions"
+    ],
+    "cons": [
+      "Extraction and reconciliation cost LLM calls",
+      "Wrong or stale facts are confidently reused",
+      "Needs strict namespacing to avoid cross-user leaks",
+      "Harder to evaluate than recall alone"
+    ],
+    "avoidWhen": [
+      "One-off sessions with no returning users",
+      "Facts that change every session (keep them in short-term memory)"
+    ],
+    "tools": [
+      {
+        "name": "Mem0",
+        "type": "Open source · managed platform",
+        "what": "Fact extraction with ADD/UPDATE/DELETE reconciliation per user",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "name": "LangMem",
+        "type": "Open source",
+        "what": "Memory extraction tools on top of the LangGraph store",
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "name": "LangGraph store",
+        "type": "Open source",
+        "what": "Namespaced long-term store with semantic search",
+        "url": "https://docs.langchain.com/oss/python/langgraph/memory"
+      },
+      {
+        "name": "Graphiti (Zep)",
+        "type": "Open source",
+        "what": "Temporal knowledge graph that invalidates contradicted facts",
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "name": "Letta memory blocks",
+        "type": "Open source · cloud",
+        "what": "Labelled, size-limited blocks kept in the agent’s context",
+        "url": "https://docs.letta.com/guides/agents/memory-blocks"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A robo-advisory assistant has spoken with one investor over five sessions. Eight statements came up, including a move from Pune to Bengaluru, a SIP raised from ₹5,000 to ₹8,000 and a switch from Hindi to English. The assistant must answer three questions from memory: where the investor lives, which language to use and the monthly SIP.",
+    "controls": [
+      "Choose an append-only store or one that reconciles each new fact with ADD, UPDATE or DELETE.",
+      "Turn on newest-wins so conflicting retrieved facts resolve to the later one.",
+      "Choose a collection of small facts with top-k retrieval, or one profile document injected whole."
+    ],
+    "outputs": [
+      {
+        "name": "Stored facts",
+        "meaning": "What the memory holds; stale facts are marked."
+      },
+      {
+        "name": "Answers",
+        "meaning": "The assistant’s answer to each question and whether it is right."
+      },
+      {
+        "name": "Stale facts stored",
+        "meaning": "Facts that a later statement has replaced but that are still stored."
+      },
+      {
+        "name": "Tokens injected per question",
+        "meaning": "About 60 tokens per fact; a profile adds a 40-token header."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Append-only, top 3",
+        "expect": "8 facts, 3 of them stale. Every question retrieves both the old and new value, so 0 of 3 answers are right, at 180 tokens."
+      },
+      {
+        "k": "profile",
+        "name": "Append-only profile",
+        "expect": "The whole 8-line profile, 520 tokens, holds both cities: still 0 of 3 right."
+      },
+      {
+        "k": "reconcile",
+        "name": "Reconcile, top 1",
+        "expect": "5 current facts, 0 stale. City and language are right, but the SIP fact ranks second, so top 1 answers “I don’t know”: 2 of 3 at 60 tokens."
+      },
+      {
+        "k": "rprofile",
+        "name": "Reconciled profile",
+        "expect": "3 of 3 right with 0 stale, but the profile costs 340 tokens every time."
+      }
+    ],
+    "missions": [
+      {
+        "k": "city",
+        "text": "Make the assistant give the correct city after the move.",
+        "hint": "Reconcile updates, or let the newest of two retrieved facts win."
+      },
+      {
+        "k": "stale",
+        "text": "Get to 0 stale facts stored.",
+        "hint": "Only reconciliation removes replaced facts; newest-wins hides them but keeps them."
+      },
+      {
+        "k": "lean",
+        "text": "Get all 3 answers right with fewer than 300 injected tokens.",
+        "hint": "A profile costs at least 340. Use a collection with enough top-k to reach the SIP fact."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Mem0",
+        "type": "Open source · managed platform",
+        "start": 3,
+        "prod": 3,
+        "best": "Extracting facts from conversations and reconciling them with ADD, UPDATE, DELETE or no change, per user.",
+        "ex": "After each advisory chat, add the messages under user_id \"wealth:inv-2231\" and search the top 3 facts next turn.",
+        "pros": [
+          "Reconciliation built in",
+          "Many vector store and LLM backends"
+        ],
+        "cons": [
+          "Each add costs LLM calls",
+          "Result formats change between versions"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "n": "LangMem",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "Memory extraction and management on top of the LangGraph store, as profiles or collections.",
+        "ex": "A background manager updates an investor profile document after each session.",
+        "pros": [
+          "Profile and collection patterns",
+          "Background or hot-path writing"
+        ],
+        "cons": [
+          "Best with LangGraph",
+          "Younger library"
+        ],
+        "url": "https://langchain-ai.github.io/langmem/"
+      },
+      {
+        "n": "LangGraph store",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "A namespaced long-term store with semantic search that your own code writes to.",
+        "ex": "store.put((\"wealth\", investor_id), \"profile\", {...}) and search within that namespace only.",
+        "pros": [
+          "Namespaces make scoping explicit",
+          "Postgres and other backends"
+        ],
+        "cons": [
+          "Extraction and reconciliation are yours to build",
+          "Framework-specific API"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/memory"
+      },
+      {
+        "n": "Graphiti",
+        "type": "Open source · by Zep",
+        "start": 1,
+        "prod": 3,
+        "best": "A temporal knowledge graph: facts carry validity windows and are invalidated, not deleted, when contradicted.",
+        "ex": "“Lives in Pune” gets an end date when “moved to Bengaluru” arrives, so history questions still work.",
+        "pros": [
+          "Answers “what was true when” questions",
+          "Keeps an audit trail of changes"
+        ],
+        "cons": [
+          "Needs a graph database",
+          "More moving parts than a vector store"
+        ],
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "n": "Letta memory blocks",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 2,
+        "best": "Small, labelled, size-limited blocks that stay in the agent’s context and that the agent can edit.",
+        "ex": "A “human” block holding the investor’s language, goal and risk profile, capped at a few hundred characters.",
+        "pros": [
+          "Always visible to the agent",
+          "Simple to inspect"
+        ],
+        "cons": [
+          "Blocks take context on every call",
+          "The agent decides edits, which is harder to audit"
+        ],
+        "url": "https://docs.letta.com/guides/agents/memory-blocks"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Fastest start with reconciliation",
+        "tool": "Mem0"
+      },
+      {
+        "need": "Facts that change over time and need history",
+        "tool": "Graphiti"
+      },
+      {
+        "need": "Already on LangGraph",
+        "tool": "LangGraph store with LangMem"
+      }
+    ],
+    "goals": [
+      "Explain why append-only memory produces stale and conflicting answers",
+      "Reconcile new facts with ADD, UPDATE, DELETE or no change, and scope them per user",
+      "Evaluate memory on updates and abstention, not just recall"
+    ]
+  },
+  "practice": {
+    "scenario": "A robo-advisory assistant serves investors over months. After each chat, Mem0 extracts facts such as “risk profile: moderate”, “goal: child’s education in 2034” and “prefers Hindi”, and reconciles them with what is stored, so “we moved to Bengaluru” updates the city instead of adding a second one. Each turn retrieves the top 3 facts for that investor only.",
+    "industries": [
+      {
+        "industry": "Wealth management",
+        "use": "Risk profile, goals and language, updated when they change"
+      },
+      {
+        "industry": "Telecom care",
+        "use": "Plan, device and preferred contact channel across calls"
+      },
+      {
+        "industry": "EdTech",
+        "use": "Learner level, exam date and weak topics across weeks"
+      }
+    ],
+    "analogy": "A good relationship manager’s client diary. They do not reread every past meeting; they keep a short, current page per client and cross out what has changed.",
+    "library": {
+      "name": "Mem0",
+      "what": "Open-source memory layer: extracts facts from messages, reconciles them with ADD, UPDATE, DELETE or no-op, and searches per user.",
+      "install": "pip install mem0ai"
+    },
+    "note": "Result shapes differ slightly between Mem0 versions; check the one you install.",
+    "samples": [
+      {
+        "file": "memory.py",
+        "language": "python",
+        "code": "from mem0 import Memory\n\nm = Memory()                          # default config; set your LLM and vector store\n\ndef remember(user_id: str, user_msg: str, reply: str):\n    m.add([{\"role\": \"user\", \"content\": user_msg},\n           {\"role\": \"assistant\", \"content\": reply}],\n          user_id=user_id)            # extract + reconcile, scoped to this investor\n\ndef recall(user_id: str, question: str, k: int = 3) -> str:\n    hits = m.search(question, user_id=user_id, limit=k)[\"results\"]\n    return \"\\n\".join(f\"- {h['memory']}\" for h in hits)\n\nfacts = recall(\"inv-2231\", \"Which city is the investor in?\")\nsystem = f\"Known facts about this investor:\\n{facts}\"   # near the top of the prompt\n"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Replaying full history costs 26,000 tokens per turn. Retrieving 3 facts costs 180 tokens. What percentage of those tokens does retrieval save?",
+    "answer": "Saving = (26,000 − 180) / 26,000 = 25,820 / 26,000 ≈ 99.3%.",
+    "expected": {
+      "value": 99.3,
+      "tolerance": 0.1,
+      "label": "% saved ="
+    },
+    "interview": [
+      {
+        "question": "How do you keep user facts current?",
+        "answer": "Reconcile each new candidate fact with the most similar stored facts and choose add, update, delete or no-op, or keep validity windows and invalidate the old fact. Test with questions whose answer changed over time."
+      },
+      {
+        "question": "How do you stop one user’s memories reaching another?",
+        "answer": "Namespace every write and search by tenant and user ID, enforce it in the storage layer rather than in the prompt, and test cross-user queries in CI."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "An append-only store that keeps both the old and the new address",
+        "fix": "Reconcile updates, or invalidate the older fact with a date"
+      },
+      {
+        "mistake": "Evaluating only recall of facts",
+        "fix": "Also test updates, time questions and abstention"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sm01",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "An investor said “I live in Pune” in January and “we moved to Bengaluru” in June. An append-only store now holds both. What is the risk?",
+      "options": [
+        "None: more facts are better",
+        "The assistant may retrieve the old city and act on it",
+        "The store will refuse the second fact",
+        "Tokens will fall"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Append-only memory keeps contradictions; retrieval can surface the stale fact."
+    },
+    {
+      "id": "sm02",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Mem0 compares each candidate fact with similar stored memories and chooses one of which operations?",
+      "options": [
+        "INSERT, SELECT, JOIN",
+        "ADD, UPDATE, DELETE or no change",
+        "PUSH, POP, PEEK",
+        "CREATE, READ, ARCHIVE"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Mem0’s reconciliation step picks ADD, UPDATE, DELETE or NOOP."
+    },
+    {
+      "id": "sm03",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which make a semantic memory store safe for a multi-tenant telecom assistant? Select all that apply.",
+      "options": [
+        "Tenant and user ID in the namespace of every write and search",
+        "Enforcing scope in the storage layer",
+        "One shared namespace for faster search",
+        "Telling the model in the prompt not to mention other users"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Scoping must be structural. A shared namespace leaks; prompt instructions are not a control."
+    },
+    {
+      "id": "sm04",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Replaying full history costs 26,000 tokens per turn; retrieving 3 facts costs 180. What percentage is saved?",
+      "options": [
+        "93.1%",
+        "99.3%",
+        "69.2%",
+        "0.7%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(26,000 − 180) ÷ 26,000 = 25,820 ÷ 26,000 ≈ 99.3%."
+    },
+    {
+      "id": "sm05",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A tutor asks “When is the learner’s exam?” The learner never said. What should memory-backed answers do?",
+      "options": [
+        "Guess a common exam date",
+        "Say it does not know",
+        "Use another learner’s date",
+        "Ask the model to invent a plausible one"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Abstention is part of memory quality; LongMemEval tests it explicitly."
+    },
+    {
+      "id": "sm06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A LangGraph store search uses the namespace (\"memories\",) for all customers. What is the bug?",
+      "options": [
+        "The limit is too small",
+        "All customers share one namespace, so facts can leak between them",
+        "Namespaces must be strings, not tuples",
+        "The store needs a TTL"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The namespace must include the user (and tenant) ID."
+    },
+    {
+      "id": "sm07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which facts are good candidates for semantic memory in a shopping assistant? Select all that apply.",
+      "options": [
+        "Preferred delivery address",
+        "Shoe size",
+        "The exact wording of a greeting last week",
+        "Today’s flash-sale price"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Stable, reusable facts belong in semantic memory; greetings and short-lived prices do not."
+    },
+    {
+      "id": "sm08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Graphiti handles a contradicted fact (old nominee replaced by a new one) how?",
+      "options": [
+        "Deletes the old fact with no trace",
+        "Invalidates it with a validity window and keeps history",
+        "Keeps both as equally valid",
+        "Refuses the new fact"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Graphiti keeps temporal validity, so history questions still work while retrieval uses the current fact."
+    },
+    {
+      "id": "sm09",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Each fact costs about 60 tokens. A profile document has a 40-token header and 5 facts. How many tokens does injecting it cost?",
+      "options": [
+        "300",
+        "340",
+        "360",
+        "200"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40 + 5 × 60 = 340 tokens."
+    },
+    {
+      "id": "sm10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinic assistant should remember appointment preferences across months. Which technique is this?",
+      "options": [
+        "Short-term memory",
+        "Semantic memory",
+        "Prompt caching",
+        "Speculative decoding"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Durable facts about a user across sessions are semantic memory."
+    },
+    {
+      "id": "sm11",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "LongMemEval evaluates which abilities? Select all that apply.",
+      "options": [
+        "Knowledge updates",
+        "Temporal reasoning",
+        "Abstention",
+        "Image generation"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "It tests extraction, multi-session and temporal reasoning, knowledge updates and abstention."
+    },
+    {
+      "id": "sm12",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A customer’s plan changed from Basic to Premium. The store still returns Basic first. With append-only memory, which quick mitigation helps answers but leaves the store stale?",
+      "options": [
+        "Newest-wins when retrieved facts conflict",
+        "Raising top-k to 20",
+        "Removing the user ID",
+        "Lowering the embedding dimension"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Newest-wins fixes the answer when both are retrieved, but the stale fact is still stored; reconciliation is the real fix."
+    },
+    {
+      "id": "sm13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "On LOCOMO, Mem0 reported token savings versus full-context replay of roughly what size?",
+      "options": [
+        "About 10%",
+        "More than 90%",
+        "About 50%",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Mem0 reported over 90% token savings compared with full context."
+    },
+    {
+      "id": "sm14",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which statements about profile versus collection memory are correct? Select all that apply.",
+      "options": [
+        "A profile is one document per user, rewritten as facts change",
+        "A collection stores many small facts and retrieves a few",
+        "A profile must be retrieved with top-k",
+        "A collection can never be updated"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Profiles are single documents; collections are many small items retrieved by relevance. Both can be updated."
+    },
+    {
+      "id": "sm15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An assistant keeps 8 facts, 3 of them stale. After switching to reconciliation, how many facts remain if each stale fact was replaced by a newer one already stored?",
+      "options": [
+        "8",
+        "5",
+        "3",
+        "11"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The 3 stale facts are removed and their replacements stay: 8 − 3 = 5."
+    },
+    {
+      "id": "sm16",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Where should retrieved investor facts go in the prompt?",
+      "options": [
+        "Near the top, in a clearly marked block",
+        "Buried in the middle of the conversation history",
+        "Only in the assistant’s previous reply",
+        "In a tool result with no label"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A clearly labelled block near the top is easy for the model to find and use."
+    },
+    {
+      "id": "sm17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Top-k is 1 and the SIP fact ranks second for “What is the monthly SIP?”. What happens?",
+      "options": [
+        "The right SIP is returned",
+        "The assistant has no SIP fact and should say it does not know",
+        "The assistant returns every fact",
+        "The top-k setting is ignored"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only the top-ranked fact is retrieved, and it is not the SIP fact."
+    },
+    {
+      "id": "sm18",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are risks of semantic memory in a patient-facing assistant? Select all that apply.",
+      "options": [
+        "Stale facts reused confidently",
+        "Facts leaking across patients without scoping",
+        "Lower token use than transcripts",
+        "Faster retrieval than full history"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Staleness and leakage are the risks; lower tokens and faster retrieval are benefits."
+    },
+    {
+      "id": "sm19",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A dispatcher assistant stores “preferred depot: Bhiwandi” and later “switched to Taloja”. With reconciliation, what does the store hold?",
+      "options": [
+        "Both depots",
+        "Only Taloja as the current depot",
+        "Only Bhiwandi",
+        "Neither"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The new statement updates the existing depot fact."
+    },
+    {
+      "id": "sm20",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Which tool is built around a temporal knowledge graph for agent memory?",
+      "options": [
+        "Graphiti",
+        "tiktoken",
+        "Presidio",
+        "RULER"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Graphiti, from Zep, builds a temporal knowledge graph with validity windows."
+    }
+  ]
+}

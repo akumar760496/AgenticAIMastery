@@ -1,0 +1,805 @@
+{
+  "id": "quant",
+  "moduleSlug": "performance",
+  "name": "Quantisation for Inference (FP8, INT4, KV Cache)",
+  "shortName": "Model quantisation",
+  "question": "Can a big model run on fewer GPUs without losing quality?",
+  "summary": "Quantisation stores a model’s weights, and sometimes its activations and KV cache, in fewer bits so it needs less GPU memory and moves less data per token. FP8 (weights and activations) roughly halves memory versus BF16 with very little quality loss on recent GPUs. Weight-only 4-bit methods such as AWQ and GPTQ cut memory about 4× and suit small-batch or single-GPU serving, with a larger quality drop, especially on small models. An FP8 KV cache frees memory for more concurrent sequences. The gains show up as fewer GPUs, higher throughput and lower cost per token, but quality must be measured on your own tasks, including Indian languages and long context. Compressing embedding vectors is a separate technique in module 5.",
+  "useCases": [
+    "Fitting a 70B-class model on one or two GPUs",
+    "Cutting cost per token for self-hosted models",
+    "Running models on laptops and edge devices (GGUF)"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "BF16",
+        "detail": "16-bit baseline; 2 bytes per parameter"
+      },
+      {
+        "term": "FP8",
+        "detail": "8-bit weights and activations; Hopper-class GPUs and newer; usually within a fraction of a point"
+      },
+      {
+        "term": "INT4 weight-only",
+        "detail": "AWQ, GPTQ; about 0.5 byte per parameter plus overhead; bigger loss on small models"
+      },
+      {
+        "term": "KV-cache quantisation",
+        "detail": "FP8 KV halves cache memory, so more sequences fit"
+      },
+      {
+        "term": "Calibration",
+        "detail": "a few hundred representative prompts to set scales"
+      },
+      {
+        "term": "Evaluation",
+        "detail": "your own task scores, per language and context length, before and after"
+      }
+    ]
+  },
+  "steps": [
+    "Measure baseline quality, throughput and memory in BF16",
+    "Quantise with calibration data from your own traffic (FP8 first)",
+    "Serve with the quantised weights and, if needed, an FP8 KV cache",
+    "Re-run your evals per language and length; roll back if the loss exceeds your limit"
+  ],
+  "pitfalls": [
+    "Calibrating on English web text for a Hindi and Tamil workload",
+    "Judging quality on a general benchmark instead of your tasks",
+    "Assuming 4-bit is always faster; at large batch it can be slower than FP8"
+  ],
+  "tools": [
+    "LLM Compressor",
+    "AutoAWQ / GPTQModel",
+    "vLLM quantised serving",
+    "TensorRT Model Optimizer",
+    "llama.cpp GGUF",
+    "lm-evaluation-harness"
+  ],
+  "remember": "Fewer bits, fewer GPUs; FP8 first, and measure on your own tasks.",
+  "caption": "Illustrative: Nyaya Sahayak, a fictional legal-research service, self-hosts a 70B model on 80 GB GPUs.",
+  "comparison": {
+    "scope": "Model weights and KV cache",
+    "cost": 2,
+    "needs": "Fewer GPUs, lower cost per token",
+    "best": "Quality loss on your tasks and languages"
+  },
+  "diagram": {
+    "file": "diagrams/quant.svg"
+  },
+  "lesson": {
+    "file": "fp8_quantise.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from transformers import AutoModelForCausalLM, AutoTokenizer",
+        "steps": []
+      },
+      {
+        "text": "from llmcompressor import oneshot",
+        "steps": []
+      },
+      {
+        "text": "from llmcompressor.modifiers.quantization import QuantizationModifier",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "MODEL = \"meta-llama/Llama-3.3-70B-Instruct\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "model = AutoModelForCausalLM.from_pretrained(MODEL, torch_dtype=\"auto\")",
+        "steps": []
+      },
+      {
+        "text": "tok = AutoTokenizer.from_pretrained(MODEL)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "recipe = QuantizationModifier(targets=\"Linear\", scheme=\"FP8_DYNAMIC\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                              ignore=[\"lm_head\"])",
+        "steps": []
+      },
+      {
+        "text": "oneshot(model=model, recipe=recipe)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "model.save_pretrained(\"llama70b-fp8\"); tok.save_pretrained(\"llama70b-fp8\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# shell: vllm serve ./llama70b-fp8 --tensor-parallel-size 2 \\",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "#        --kv-cache-dtype fp8",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# eval: lm_eval --model local-chat-completions --tasks our_legal_qa_hi_en",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# BF16 86.0 → FP8 85.5; GPUs 4 → 2; ₹208 → ₹95 per 1M tokens",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Start from a baseline",
+        "text": "Nyaya Sahayak, a fictional legal-research service, runs a 70B model. In BF16 its 140 GB of weights plus KV cache need four 80 GB GPUs."
+      },
+      {
+        "title": "Quantise to FP8",
+        "text": "FP8 dynamic quantisation needs no calibration set: weights are converted once and activations are scaled on the fly. The weights shrink to about 70 GB."
+      },
+      {
+        "title": "Serve on fewer GPUs",
+        "text": "The FP8 model fits on two GPUs with tensor parallelism instead of four."
+      },
+      {
+        "title": "Quantise the KV cache",
+        "text": "An FP8 KV cache halves cache memory, so more sequences fit and throughput rises."
+      },
+      {
+        "title": "Re-run your own evals",
+        "text": "Score the legal Q&A set in Hindi and English, short and long context, before and after."
+      },
+      {
+        "title": "Decide on the numbers",
+        "text": "Quality moves from 86.0 to 85.5, GPUs from 4 to 2 and cost from about ₹208 to ₹95 per million tokens. 4-bit would fit on one GPU but lose 1.5 points."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">BF16 70B: 140 GB → 4 GPUs</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"56\" text-anchor=\"middle\">FP8_DYNAMIC → weights ≈ 70 GB</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"87\" text-anchor=\"middle\">tensor-parallel-size 2</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"117\" text-anchor=\"middle\">kv-cache-dtype fp8 → more sequences</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"148\" text-anchor=\"middle\">legal QA · Hindi</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"184\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"148\" text-anchor=\"middle\">legal QA · English</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"180\" text-anchor=\"middle\">86.0 → 85.5</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"180\" text-anchor=\"middle\">₹208 → ₹95 / 1M</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Half or a quarter of the GPU memory",
+      "Fewer GPUs and lower cost per token",
+      "Higher throughput from less memory traffic",
+      "FP8 loss is usually very small"
+    ],
+    "cons": [
+      "Quality loss must be measured on your tasks",
+      "Some formats need recent GPUs (FP8 on Hopper and newer)",
+      "Calibration data must match your traffic",
+      "Small models lose more at 4-bit"
+    ],
+    "avoidWhen": [
+      "Tasks where a fraction of a point matters more than cost",
+      "Quantising without a before-and-after eval"
+    ],
+    "tools": [
+      {
+        "name": "LLM Compressor",
+        "type": "Open source · vLLM project",
+        "what": "FP8, INT8 and INT4 quantisation recipes for vLLM",
+        "url": "https://github.com/vllm-project/llm-compressor"
+      },
+      {
+        "name": "GPTQModel",
+        "type": "Open source",
+        "what": "GPTQ 4-bit quantisation of Hugging Face models",
+        "url": "https://github.com/ModelCloud/GPTQModel"
+      },
+      {
+        "name": "vLLM quantisation",
+        "type": "Open source",
+        "what": "Serve FP8, AWQ, GPTQ models and an FP8 KV cache",
+        "url": "https://docs.vllm.ai/en/latest/features/quantization/"
+      },
+      {
+        "name": "TensorRT Model Optimizer",
+        "type": "Open source · NVIDIA",
+        "what": "FP8 and INT4 quantisation for TensorRT-LLM",
+        "url": "https://github.com/NVIDIA/TensorRT-Model-Optimizer"
+      },
+      {
+        "name": "llama.cpp",
+        "type": "Open source",
+        "what": "GGUF quantised models for CPU and edge",
+        "url": "https://github.com/ggml-org/llama.cpp"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Nyaya Sahayak, a fictional legal-research service, self-hosts a model on 80 GB GPUs at ₹300 an hour (illustrative). Quality is its own Hindi and English legal Q&A score.",
+    "controls": [
+      "Choose the model: 70B or 8B.",
+      "Choose the weight format: BF16, FP8 or INT4 weight-only.",
+      "Store the KV cache in FP8."
+    ],
+    "outputs": [
+      {
+        "name": "Quality",
+        "meaning": "Score on the service’s own evals."
+      },
+      {
+        "name": "Weights",
+        "meaning": "GB of model weights."
+      },
+      {
+        "name": "GPUs needed",
+        "meaning": "80 GB GPUs including KV cache room."
+      },
+      {
+        "name": "Throughput",
+        "meaning": "Tokens a second across the GPUs."
+      },
+      {
+        "name": "Cost per 1M tokens",
+        "meaning": "GPU cost ÷ tokens."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "70B in BF16",
+        "expect": "4 GPUs, quality 86%, ₹208.3 per 1M."
+      },
+      {
+        "k": "fp8",
+        "name": "70B in FP8",
+        "expect": "2 GPUs, 85.7%, ₹119 per 1M."
+      },
+      {
+        "k": "int4",
+        "name": "70B in INT4",
+        "expect": "1 GPU, 84.5%, ₹104.2 per 1M."
+      },
+      {
+        "k": "fp8kv",
+        "name": "70B FP8 + FP8 KV cache",
+        "expect": "2 GPUs, 85.5%, ₹95.2 per 1M."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Run the 70B model at 85% quality or more on 2 GPUs or fewer for ₹100 per 1M tokens or less.",
+        "hint": "8-bit weights and cache."
+      },
+      {
+        "k": "onegpu",
+        "text": "Fit the 70B model on one GPU.",
+        "hint": "4-bit weights."
+      },
+      {
+        "k": "loss",
+        "text": "Find where quantisation costs the most quality.",
+        "hint": "Small models suffer more at 4-bit."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LLM Compressor",
+        "type": "Open source · vLLM project",
+        "start": 3,
+        "prod": 3,
+        "best": "Producing FP8 and INT4 checkpoints for vLLM.",
+        "ex": "FP8_DYNAMIC recipe for a 70B model.",
+        "pros": [
+          "Simple recipes",
+          "Made for vLLM"
+        ],
+        "cons": [
+          "Needs GPU memory to run"
+        ],
+        "url": "https://github.com/vllm-project/llm-compressor"
+      },
+      {
+        "n": "GPTQModel",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "4-bit GPTQ with calibration data.",
+        "ex": "Calibrate on 512 Hindi and English prompts.",
+        "pros": [
+          "Small models",
+          "Many backends"
+        ],
+        "cons": [
+          "Larger quality loss"
+        ],
+        "url": "https://github.com/ModelCloud/GPTQModel"
+      },
+      {
+        "n": "TensorRT Model Optimizer",
+        "type": "Open source · NVIDIA",
+        "start": 2,
+        "prod": 3,
+        "best": "FP8 and INT4 for TensorRT-LLM.",
+        "ex": "FP8 engine for latency-critical serving.",
+        "pros": [
+          "Fast kernels",
+          "NVIDIA support"
+        ],
+        "cons": [
+          "NVIDIA only"
+        ],
+        "url": "https://github.com/NVIDIA/TensorRT-Model-Optimizer"
+      },
+      {
+        "n": "llama.cpp",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "GGUF models on CPUs and laptops.",
+        "ex": "An 8B Q4 model for offline field use.",
+        "pros": [
+          "Runs anywhere",
+          "Many quant levels"
+        ],
+        "cons": [
+          "Lower throughput than GPUs"
+        ],
+        "url": "https://github.com/ggml-org/llama.cpp"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Default for recent GPUs",
+        "tool": "FP8 weights + FP8 KV cache"
+      },
+      {
+        "need": "Must fit one GPU",
+        "tool": "INT4 AWQ or GPTQ"
+      },
+      {
+        "need": "Laptop or edge",
+        "tool": "GGUF with llama.cpp"
+      }
+    ],
+    "goals": [
+      "Compute weight memory for BF16, FP8 and INT4",
+      "Choose a format for a GPU budget",
+      "Measure quality loss on your own tasks"
+    ]
+  },
+  "practice": {
+    "scenario": "Nyaya Sahayak, a fictional legal-research service, self-hosts a 70B model so case files stay in its own cloud. In BF16 the model needs four 80 GB GPUs and costs about ₹208 per million tokens. It converts the weights to FP8, serves on two GPUs with an FP8 KV cache, and re-runs its Hindi and English legal Q&A evals: quality moves from 86.0 to 85.5 and cost falls to about ₹95 per million tokens. A 4-bit version would fit on one GPU but lose 1.5 points, so it is kept for a low-priority batch workload only.",
+    "industries": [
+      {
+        "industry": "Legal",
+        "use": "Large models on few GPUs for judgment search and drafting"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "On-premise models where patient data cannot leave the hospital"
+      },
+      {
+        "industry": "Field sales",
+        "use": "Small quantised models on laptops that work offline"
+      }
+    ],
+    "analogy": "Saving photos as high-quality JPEGs instead of RAW files: a quarter of the space, and nobody can tell the difference at normal viewing size, but you still check the ones that matter.",
+    "library": {
+      "name": "vLLM",
+      "what": "Serves pre-quantised FP8, AWQ and GPTQ checkpoints and can store the KV cache in FP8.",
+      "install": "pip install vllm"
+    },
+    "note": "Needs GPUs that support FP8 (Hopper-class or newer) for the FP8 model; the model id is an example of a published FP8 checkpoint. Compare against the BF16 model on your own evals.",
+    "samples": [
+      {
+        "file": "compare_formats.py",
+        "language": "python",
+        "code": "from vllm import LLM, SamplingParams\n\nquestions = [l.strip() for l in open(\"legal_qa_hi_en.txt\", encoding=\"utf-8\")][:200]\nparams = SamplingParams(max_tokens=256, temperature=0)\n\nllm = LLM(model=\"RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic\",\n          tensor_parallel_size=2, kv_cache_dtype=\"fp8\", max_model_len=8192)\nouts = llm.generate(questions, params)\n\nwith open(\"answers_fp8.jsonl\", \"w\", encoding=\"utf-8\") as f:\n    for q, o in zip(questions, outs):\n        f.write(f'{{\"q\": {q!r}, \"a\": {o.outputs[0].text!r}}}\\n')\nprint(\"wrote\", len(outs), \"answers; score them with the same grader as the BF16 run\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A 70B-parameter model in 4-bit weights uses 0.5 bytes per parameter plus 10% overhead for scales. How many GB of weights?",
+    "answer": "70 × 10⁹ × 0.5 = 35 GB; plus 10% = 38.5 GB, which fits on one 80 GB GPU with room for the KV cache.",
+    "expected": {
+      "value": 38.5,
+      "tolerance": 1,
+      "label": "GB ="
+    },
+    "interview": [
+      {
+        "question": "FP8 or INT4 for serving a 70B model?",
+        "answer": "FP8 first on GPUs that support it: half the memory with a very small quality change and good throughput at large batch. INT4 weight-only when you must fit on fewer GPUs or run small batches, after checking the larger quality loss on your tasks."
+      },
+      {
+        "question": "What does KV-cache quantisation buy you?",
+        "answer": "The cache for each sequence takes half the memory in FP8, so more sequences fit at once and throughput rises, at a very small quality cost."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Calibrating on generic English text",
+        "fix": "Use prompts from your own traffic and languages"
+      },
+      {
+        "mistake": "Trusting a general benchmark",
+        "fix": "Re-run your own evals before and after"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "qn01",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "BF16 uses how many bytes per parameter?",
+      "options": [
+        "0.5",
+        "1",
+        "2",
+        "4"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "16 bits."
+    },
+    {
+      "id": "qn02",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A 70B model in BF16 needs about how many GB of weights?",
+      "options": [
+        "35",
+        "70",
+        "140",
+        "280"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "70 × 2."
+    },
+    {
+      "id": "qn03",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "FP8 weights for 70B are about?",
+      "options": [
+        "35 GB",
+        "70 GB",
+        "140 GB",
+        "7 GB"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One byte each."
+    },
+    {
+      "id": "qn04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "4-bit weights for 70B plus 10% overhead?",
+      "options": [
+        "38.5 GB",
+        "35 GB",
+        "70 GB",
+        "17.5 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "35 × 1.1."
+    },
+    {
+      "id": "qn05",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Which format usually loses least quality?",
+      "options": [
+        "FP8",
+        "INT4",
+        "INT2",
+        "1-bit"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fraction of a point."
+    },
+    {
+      "id": "qn06",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which are 4-bit weight-only methods? Select all that apply.",
+      "options": [
+        "AWQ",
+        "GPTQ",
+        "FP8 dynamic",
+        "GGUF Q4 variants"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "FP8 is 8-bit."
+    },
+    {
+      "id": "qn07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What does an FP8 KV cache give?",
+      "options": [
+        "More concurrent sequences",
+        "Better grammar",
+        "Longer training",
+        "Smaller vocabularies"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Half the cache memory."
+    },
+    {
+      "id": "qn08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which models lose more quality at 4-bit?",
+      "options": [
+        "Small models",
+        "Very large models",
+        "All equally",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Less redundancy."
+    },
+    {
+      "id": "qn09",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Calibration data should come from?",
+      "options": [
+        "Your own prompts and languages",
+        "Random English web text",
+        "Test answers",
+        "Nowhere"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Match your traffic."
+    },
+    {
+      "id": "qn10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Four GPUs at ₹300/h vs two. Hourly saving?",
+      "options": [
+        "₹300",
+        "₹600",
+        "₹1,200",
+        "₹150"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2 × 300."
+    },
+    {
+      "id": "qn11",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Quality moves from 86.0 to 85.5. Loss?",
+      "options": [
+        "0.5 points",
+        "5 points",
+        "1.5 points",
+        "0 points"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "86.0 − 85.5."
+    },
+    {
+      "id": "qn12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "At large batch, weight-only INT4 can be?",
+      "options": [
+        "Slower than FP8",
+        "Always fastest",
+        "Free",
+        "Unsupported"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Dequantisation overhead."
+    },
+    {
+      "id": "qn13",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "What should be re-checked after quantising? Select all that apply.",
+      "options": [
+        "Task quality per language",
+        "Long-context behaviour",
+        "Throughput and memory",
+        "The company logo"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Before and after."
+    },
+    {
+      "id": "qn14",
+      "kind": "single",
+      "industry": "Field sales",
+      "question": "Which format runs quantised models on laptops with llama.cpp?",
+      "options": [
+        "GGUF",
+        "ONNX only",
+        "Parquet",
+        "CSV"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Many quant levels."
+    },
+    {
+      "id": "qn15",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "₹300/h per GPU, 2 GPUs, 6.3M tokens an hour. Cost per 1M?",
+      "options": [
+        "₹47.6",
+        "₹95.2",
+        "₹190.5",
+        "₹600"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "600 ÷ 6.3."
+    },
+    {
+      "id": "qn16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique compresses embedding vectors rather than model weights?",
+      "options": [
+        "Vector Compression",
+        "Quantisation for inference",
+        "Serving engines",
+        "Distillation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Module 5."
+    },
+    {
+      "id": "qn17",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "FP8 needs which kind of GPU for full speed?",
+      "options": [
+        "Recent GPUs with FP8 support (Hopper-class or newer)",
+        "Any CPU",
+        "Only TPUs",
+        "Phones"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Hardware support."
+    },
+    {
+      "id": "qn18",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Benefits of quantisation? Select all that apply.",
+      "options": [
+        "Fewer GPUs",
+        "Lower cost per token",
+        "Higher throughput",
+        "Guaranteed better quality"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Quality usually drops a little."
+    },
+    {
+      "id": "qn19",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A 70B FP8 model plus 20 GB KV on 80 GB GPUs using 72 GB each needs?",
+      "options": [
+        "1 GPU",
+        "2 GPUs",
+        "3 GPUs",
+        "4 GPUs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "90 ÷ 72 → 2."
+    },
+    {
+      "id": "qn20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What is the first step before quantising?",
+      "options": [
+        "Measure baseline quality, throughput and memory",
+        "Delete the BF16 model",
+        "Change the prompt",
+        "Buy more GPUs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "You need a baseline."
+    }
+  ]
+}

@@ -1,0 +1,822 @@
+{
+  "id": "pydantic",
+  "moduleSlug": "frameworks",
+  "name": "Pydantic AI",
+  "shortName": "Pydantic AI",
+  "question": "How do I get typed, validated agents with little ceremony?",
+  "summary": "Pydantic AI, from the team behind Pydantic, defines an agent with a model, typed dependencies and a typed output. Tool arguments and final outputs are validated Pydantic models, and invalid output goes back to the model for a retry. It supports most providers through one API, injects dependencies such as a bank client so agents are easy to test, and integrates with Temporal, DBOS and Prefect for durable runs, with Logfire for tracing.",
+  "useCases": [
+    "Python teams who value type safety",
+    "Agents that must return structured data",
+    "Model-agnostic apps that may switch providers"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "output_type",
+        "detail": "a Pydantic model the answer must match"
+      },
+      {
+        "term": "deps_type",
+        "detail": "typed dependencies injected into tools"
+      },
+      {
+        "term": "@agent.tool",
+        "detail": "tools with validated arguments"
+      },
+      {
+        "term": "Providers",
+        "detail": "Anthropic, OpenAI, Google, Bedrock and more"
+      },
+      {
+        "term": "Durable",
+        "detail": "Temporal, DBOS, Prefect integrations"
+      },
+      {
+        "term": "Evals",
+        "detail": "Pydantic Evals; Logfire for traces"
+      }
+    ]
+  },
+  "steps": [
+    "Define the output model and dependencies",
+    "Register tools with typed arguments",
+    "Run with injected dependencies; test with fakes",
+    "Add durable execution for long runs"
+  ],
+  "pitfalls": [
+    "Assuming validation means correct values (Panel 13)",
+    "Putting business state in globals instead of deps",
+    "Expecting built-in multi-agent teams"
+  ],
+  "tools": [
+    "Pydantic AI",
+    "Pydantic Logfire",
+    "Pydantic Evals",
+    "Temporal or DBOS"
+  ],
+  "remember": "Type the output, inject the dependencies, validate everything.",
+  "caption": "Python only.",
+  "comparison": {
+    "scope": "Typed Python agents",
+    "cost": 1,
+    "needs": "Python",
+    "best": "Mistaking valid for correct"
+  },
+  "diagram": {
+    "file": "diagrams/pydantic.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_pydantic.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "class Reply(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    status: Literal[\"succeeded\", \"dispute_raised\", \"rejected\", \"not_found\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    message: str",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "agent = Agent(\"anthropic:claude-sonnet-4-5\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "              deps_type=Bank, output_type=Reply,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "              instructions=SYSTEM)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@agent.tool",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "async def get_transaction(ctx: RunContext[Bank], utr: str) -> dict:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return await ctx.deps.transactions.get(utr)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@agent.tool",
+        "steps": []
+      },
+      {
+        "text": "async def raise_dispute(ctx: RunContext[Bank], utr: str, reason: str):",
+        "steps": []
+      },
+      {
+        "text": "    if not await ctx.deps.approvals.request(utr, reason):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"Rejected by reviewer.\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return await ctx.deps.disputes.create(utr, reason)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "result = agent.run_sync(QUESTION, deps=bank)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "print(result.output.status)                  # a validated Reply",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Type the answer",
+        "text": "Reply is a Pydantic model with a fixed set of statuses. Downstream code can switch on status without parsing text."
+      },
+      {
+        "title": "Declare dependencies",
+        "text": "deps_type=Bank says what every run receives. Tools use ctx.deps instead of globals, so tests pass a fake bank."
+      },
+      {
+        "title": "Typed tools",
+        "text": "Arguments are validated before the tool runs; the schema is generated from the type hints and docstring."
+      },
+      {
+        "title": "Approval through the dependency",
+        "text": "The approval service is part of the injected bank, so a test can approve or reject automatically."
+      },
+      {
+        "title": "Any provider, one string",
+        "text": "Switching from Anthropic to OpenAI or Google is a change to the model string, not a rewrite."
+      },
+      {
+        "title": "A validated result",
+        "text": "result.output is a Reply. If the model returns something invalid, Pydantic AI sends the error back and retries."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">Reply(status, message)</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"36\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"51\" text-anchor=\"middle\">deps: Bank</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"36\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"51\" text-anchor=\"middle\">tests: FakeBank</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"66\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"81\" text-anchor=\"middle\">get_transaction(utr: str) → dict</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"96\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"111\" text-anchor=\"middle\">ctx.deps.approvals.request(…)</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"126\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"63\" y=\"141\" text-anchor=\"middle\">anthropic:</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"124\" y=\"126\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"141\" text-anchor=\"middle\">openai:</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx soft\" x=\"240\" y=\"126\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"295\" y=\"141\" text-anchor=\"middle\">google-gla:</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"158\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"173\" text-anchor=\"middle\">status = \"dispute_raised\" ✓ validated</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"210\" style=\"text-anchor:middle;fill:var(--ink-2)\">8% invalid → 0.5% after two retries</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Validated, typed outputs and tools",
+      "Easy to test with injected dependencies",
+      "Most providers through one API",
+      "Durable execution integrations"
+    ],
+    "cons": [
+      "Python only",
+      "Fewer built-in multi-agent patterns",
+      "Typed style takes some learning",
+      "Validation does not check truth"
+    ],
+    "avoidWhen": [
+      "Non-Python teams",
+      "Workspace agents that need built-in file and shell tools"
+    ],
+    "tools": [
+      {
+        "name": "Pydantic AI",
+        "type": "Open source",
+        "what": "Typed agent framework",
+        "url": "https://ai.pydantic.dev"
+      },
+      {
+        "name": "Pydantic Logfire",
+        "type": "Commercial, free tier",
+        "what": "Tracing and cost tracking",
+        "url": "https://pydantic.dev/logfire"
+      },
+      {
+        "name": "Pydantic Evals",
+        "type": "Open source",
+        "what": "Evaluation for agents",
+        "url": "https://ai.pydantic.dev/evals/"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source, cloud",
+        "what": "Durable execution",
+        "url": "https://ai.pydantic.dev/durable_execution/temporal/"
+      },
+      {
+        "name": "Pydantic Graph",
+        "type": "Open source",
+        "what": "Typed graph workflows",
+        "url": "https://ai.pydantic.dev/graph/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional wealth-tech firm wants typed, validated agent outputs and the freedom to switch model providers. Set its needs and see when Pydantic AI comes out on top and when it is ruled out.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Committed to Claude",
+        "expect": "Top pick: Claude Agent SDK. Pydantic AI ranks 2 of 8."
+      },
+      {
+        "k": "typed",
+        "name": "Typed outputs, quickly",
+        "expect": "Top pick: Pydantic AI."
+      },
+      {
+        "k": "bank",
+        "name": "Bank case with approvals",
+        "expect": "Top pick: LangGraph. Pydantic AI ranks 2 of 7."
+      },
+      {
+        "k": "java",
+        "name": "Java team on Google Cloud",
+        "expect": "Top pick: Google ADK. Pydantic AI is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make Pydantic AI the top pick.",
+        "hint": "Typed outputs and provider freedom are its strengths."
+      },
+      {
+        "k": "typed",
+        "text": "Make it the top pick with typed outputs essential and provider switching required.",
+        "hint": "Start from the typed scenario."
+      },
+      {
+        "k": "out",
+        "text": "Find a constraint that rules Pydantic AI out.",
+        "hint": "Which languages does it support?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "Pydantic AI",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Typed agents over most providers.",
+        "ex": "The dispute agent returning a validated Reply.",
+        "pros": [
+          "Type safety",
+          "Testable deps"
+        ],
+        "cons": [
+          "Python only",
+          "Fewer team patterns"
+        ],
+        "url": "https://ai.pydantic.dev"
+      },
+      {
+        "n": "Pydantic Logfire",
+        "type": "Commercial · free tier",
+        "start": 3,
+        "prod": 3,
+        "best": "Tracing and cost tracking for agents.",
+        "ex": "See each run’s model calls and tool calls.",
+        "pros": [
+          "Tight integration",
+          "OpenTelemetry-based"
+        ],
+        "cons": [
+          "Hosted service",
+          "Costs at scale"
+        ],
+        "url": "https://pydantic.dev/logfire"
+      },
+      {
+        "n": "Pydantic Evals",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Evaluate agent behaviour with datasets.",
+        "ex": "Score the dispute agent on labelled cases.",
+        "pros": [
+          "Same typed style",
+          "Works in CI"
+        ],
+        "cons": [
+          "Younger than alternatives",
+          "Python only"
+        ],
+        "url": "https://ai.pydantic.dev/evals/"
+      },
+      {
+        "n": "Temporal integration",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Durable Pydantic AI agents.",
+        "ex": "Let a case wait days for approval.",
+        "pros": [
+          "Survives crashes",
+          "Replay"
+        ],
+        "cons": [
+          "Needs a Temporal cluster",
+          "More moving parts"
+        ],
+        "url": "https://ai.pydantic.dev/durable_execution/temporal/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We want typed outputs",
+        "tool": "Pydantic AI"
+      },
+      {
+        "need": "We must switch providers",
+        "tool": "Pydantic AI or LangGraph"
+      },
+      {
+        "need": "We are a Java shop",
+        "tool": "Look at Google ADK"
+      }
+    ],
+    "goals": [
+      "See where typed, thin frameworks fit",
+      "Understand dependency injection for testing",
+      "Recognise language constraints"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional wealth-tech firm needed its support agent to return a structured status that downstream systems could act on, and wanted freedom to switch model providers. In Pydantic AI the agent returns a validated Reply model, and the bank client is injected as a dependency, so tests swap in a fake bank. Moving from one provider to another was a one-line change of the model string.",
+    "industries": [
+      {
+        "industry": "Wealth management",
+        "use": "Agents whose answers feed other systems"
+      },
+      {
+        "industry": "Lending",
+        "use": "Extraction agents with strict output models"
+      },
+      {
+        "industry": "SaaS",
+        "use": "Model-agnostic assistants with typed tools"
+      }
+    ],
+    "analogy": "A form with labelled boxes instead of a blank page: the agent can only hand back something that fits, and anything that doesn’t is returned for correction.",
+    "library": {
+      "name": "Pydantic AI",
+      "what": "Typed agents, tools and outputs over most model providers, with dependency injection for testing.",
+      "install": "pip install pydantic-ai"
+    },
+    "note": "Tests can pass a fake Bank as deps and a test model, so the agent’s logic is checked without calling a real provider.",
+    "samples": [
+      {
+        "file": "upi_agent_pydantic.py",
+        "language": "python",
+        "code": "from typing import Literal\nfrom pydantic import BaseModel\nfrom pydantic_ai import Agent, RunContext\n\nclass Reply(BaseModel):\n    status: Literal[\"succeeded\", \"dispute_raised\", \"rejected\", \"not_found\"]\n    message: str\n\nagent = Agent(\n    \"anthropic:claude-sonnet-4-5\",          # or \"openai:...\", \"google-gla:...\"\n    deps_type=Bank,\n    output_type=Reply,\n    instructions=SYSTEM,\n)\n\n@agent.tool\nasync def get_transaction(ctx: RunContext[Bank], utr: str) -> dict:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return await ctx.deps.transactions.get(utr)\n\n@agent.tool\nasync def raise_dispute(ctx: RunContext[Bank], utr: str, reason: str) -> str:\n    \"\"\"Raise a dispute for a failed UPI debit. Needs human approval.\"\"\"\n    if not await ctx.deps.approvals.request(utr, reason):\n        return \"Rejected by reviewer.\"\n    return await ctx.deps.disputes.create(utr, reason)\n\nresult = agent.run_sync(\"My ₹1,200 UPI payment failed but money was debited. UTR 412345678901\",\n                        deps=bank)\nprint(result.output.status, result.output.message)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent’s output fails validation 8% of the time on the first try. Pydantic AI sends the error back, and each retry succeeds 75% of the time. With two retries, what share of runs still fails validation, in percent?",
+    "answer": "0.08 × 0.25 × 0.25 = 0.005, or 0.5%. Validation plus retries catches most shape errors; the remaining failures need handling, and valid shape still does not guarantee correct values.",
+    "expected": {
+      "value": 0.5,
+      "tolerance": 0.02,
+      "label": "% failing ="
+    },
+    "interview": [
+      {
+        "question": "What does Pydantic AI add over a plain SDK?",
+        "answer": "Typed agents: an output type that the answer must validate against, with automatic retries when it does not; typed tool arguments; dependency injection so tools get a bank client or database that tests can replace; one API across providers; and integrations for durable execution, tracing and evals."
+      },
+      {
+        "question": "Why inject dependencies into an agent?",
+        "answer": "So tools do not reach for globals. Passing a typed dependency such as a bank client makes the agent testable with a fake, keeps credentials out of prompts, and makes it clear what each run can touch."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Treating validated output as correct",
+        "fix": "Check values with business rules (Panel 13)"
+      },
+      {
+        "mistake": "Globals inside tools",
+        "fix": "Inject dependencies through deps"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pd01",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "What does output_type do in Pydantic AI?",
+      "options": [
+        "Sets the model temperature",
+        "Requires the final answer to validate against a typed model",
+        "Chooses the provider",
+        "Streams tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Typed, validated output."
+    },
+    {
+      "id": "pd02",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "What does deps_type provide?",
+      "options": [
+        "Typed dependencies injected into tools",
+        "Model weights",
+        "A vector store",
+        "A UI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Dependency injection."
+    },
+    {
+      "id": "pd03",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "The model returns output that fails validation. What does Pydantic AI do?",
+      "options": [
+        "Crashes",
+        "Sends the error back and retries",
+        "Returns it anyway",
+        "Switches provider"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Validation with retries."
+    },
+    {
+      "id": "pd04",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "How do you switch provider in Pydantic AI?",
+      "options": [
+        "Change the model string",
+        "Rewrite tools",
+        "Retrain",
+        "It is impossible"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One API across providers."
+    },
+    {
+      "id": "pd05",
+      "kind": "multi",
+      "industry": "Wealth tech",
+      "question": "Which durable-execution integrations does Pydantic AI offer? Select all that apply.",
+      "options": [
+        "Temporal",
+        "DBOS",
+        "Kubernetes CronJobs only",
+        "None"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Also Prefect and others."
+    },
+    {
+      "id": "pd06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "8% of outputs fail validation; each retry succeeds 75% of the time. After two retries, what share still fails?",
+      "options": [
+        "0.5%",
+        "2%",
+        "6%",
+        "8%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.08 × 0.25 × 0.25."
+    },
+    {
+      "id": "pd07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which language does Pydantic AI support?",
+      "options": [
+        "Python",
+        "Java",
+        "Go",
+        ".NET"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Python only."
+    },
+    {
+      "id": "pd08",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "Why is dependency injection good for testing?",
+      "options": [
+        "Tests can pass fakes instead of real services",
+        "It speeds up models",
+        "It hides errors",
+        "It removes the need for tests"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Swap real clients for fakes."
+    },
+    {
+      "id": "pd09",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Does validated output mean correct values?",
+      "options": [
+        "Yes",
+        "No: shape is guaranteed, values still need business-rule checks",
+        "Only for numbers",
+        "Only for strings"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Panel 13’s lesson."
+    },
+    {
+      "id": "pd10",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which companion tools come from the Pydantic team? Select all that apply.",
+      "options": [
+        "Logfire for tracing",
+        "Pydantic Evals",
+        "LangSmith",
+        "CrewAI AMP"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Logfire and Evals."
+    },
+    {
+      "id": "pd11",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "How are tool argument schemas produced?",
+      "options": [
+        "From type hints and docstrings",
+        "Hand-written JSON only",
+        "From the prompt",
+        "They are not needed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Generated from the function."
+    },
+    {
+      "id": "pd12",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A tool calls a global PROD_BANK client. What is wrong?",
+      "options": [
+        "Nothing",
+        "Tests cannot swap it, and every test hits production",
+        "It is faster",
+        "It uses less memory"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Use ctx.deps."
+    },
+    {
+      "id": "pd13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which is a weaker area for Pydantic AI compared with some alternatives?",
+      "options": [
+        "Typed outputs",
+        "Built-in multi-agent team patterns",
+        "Provider support",
+        "Testing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It is a thin, typed framework."
+    },
+    {
+      "id": "pd14",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "What is RunContext in a tool signature?",
+      "options": [
+        "The run’s context, giving access to deps",
+        "A database connection pool",
+        "A model name",
+        "A logger only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ctx.deps and more."
+    },
+    {
+      "id": "pd15",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which scenario suits Pydantic AI best?",
+      "options": [
+        "A Python team needing typed outputs and provider freedom",
+        "A Java shop",
+        "A .NET team on Azure",
+        "A six-agent crew"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its core strengths."
+    },
+    {
+      "id": "pd16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "How can you test agent logic without calling a real model?",
+      "options": [
+        "Use a test model that returns scripted responses",
+        "Call production",
+        "Skip tests",
+        "Use a larger model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Test models and fake deps."
+    },
+    {
+      "id": "pd17",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "Which Pydantic library gives typed graph workflows?",
+      "options": [
+        "Pydantic Graph",
+        "Pydantic Settings",
+        "Pydantic Core",
+        "Logfire"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "For graph-shaped workflows."
+    },
+    {
+      "id": "pd18",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which does a typed Reply model enable? Select all that apply.",
+      "options": [
+        "Downstream code switching on a status field",
+        "Validation of the answer’s shape",
+        "Guaranteed factual accuracy",
+        "Removing the need for evals"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Shape, not truth."
+    },
+    {
+      "id": "pd19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where should credentials live in a Pydantic AI agent?",
+      "options": [
+        "In injected dependencies, not in prompts",
+        "In the system prompt",
+        "In tool docstrings",
+        "In the output model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keep secrets out of prompts."
+    },
+    {
+      "id": "pd20",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "When is Pydantic AI ruled out in the chooser?",
+      "options": [
+        "When the team needs Java, Go or .NET",
+        "When outputs must be typed",
+        "When providers must switch",
+        "Never"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Python only."
+    }
+  ]
+}

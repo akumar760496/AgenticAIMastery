@@ -1,0 +1,823 @@
+{
+  "id": "aiincident",
+  "moduleSlug": "governance",
+  "name": "AI Incident Management and Reporting",
+  "shortName": "AI incident governance",
+  "question": "When an AI system causes harm, who decides, who is told, and by when?",
+  "summary": "Operational incident response restores service; AI incident management is the governance around it. It defines what counts as an AI incident (unfair decisions, harmful or false outputs, privacy leaks, unsafe actions, security compromise, not just outages), sets a severity scale, keeps a register with owners and evidence, and runs notification playbooks with the clocks that may apply: for example CERT-In’s 6-hour reporting of cyber incidents, DPDP breach intimation to the Data Protection Board and affected people, sector regulators such as RBI, SEBI or IRDAI, and serious-incident reporting under the EU AI Act for high-risk systems. Each incident ends with a root cause, corrective actions and a report to the board or risk committee, and the register feeds risk reviews. This is an educational summary, not legal advice; confirm current obligations with counsel. On-call response and trace replay are covered by Incident Response in module 11.",
+  "useCases": [
+    "Regulated firms using AI in credit, claims, trading or customer service",
+    "Any AI system that makes or shapes decisions about people",
+    "Organisations adopting ISO/IEC 42001 or the NIST AI RMF"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Definition",
+        "detail": "harm types that count: unfair outcomes, false or harmful outputs, privacy, unsafe actions, security"
+      },
+      {
+        "term": "Severity",
+        "detail": "S1–S4 by people affected, harm, reversibility and regulatory exposure"
+      },
+      {
+        "term": "Register",
+        "detail": "one record per incident: owner, evidence, timeline, decisions, status"
+      },
+      {
+        "term": "Notification clocks",
+        "detail": "CERT-In 6 hours for cyber incidents; DPDP breach intimation; sector regulators; EU AI Act for high-risk systems"
+      },
+      {
+        "term": "Root cause and CAPA",
+        "detail": "cause, corrective and preventive actions, verified before closure"
+      },
+      {
+        "term": "Learning",
+        "detail": "repeat-incident rate and themes reported to the risk committee"
+      }
+    ]
+  },
+  "steps": [
+    "Write a definition and severity matrix, agreed with risk, legal and compliance",
+    "Keep one register with owners, evidence and a timeline for every incident",
+    "Build notification playbooks with clocks and pre-approved templates per regulator",
+    "Close with root cause and verified corrective actions; review themes quarterly"
+  ],
+  "pitfalls": [
+    "Treating a biased model as “working fine” because nothing crashed",
+    "Discovering the notification clock after it has run out",
+    "Closing incidents on a fix that was never verified, so they recur"
+  ],
+  "tools": [
+    "An incident register (Jira, ServiceNow or a GRC tool)",
+    "OECD AI Incidents Monitor",
+    "AI Incident Database",
+    "NIST AI RMF Playbook",
+    "ISO/IEC 42001 controls"
+  ],
+  "remember": "Define it, grade it, log it, notify on the clock, fix the cause.",
+  "caption": "Illustrative: Arogya Kosh, a fictional health insurer, uses AI for claims triage and a customer chatbot.",
+  "comparison": {
+    "scope": "Harm from AI systems, not just outages",
+    "cost": 2,
+    "needs": "Definition, register, playbooks",
+    "best": "Missed notification clocks"
+  },
+  "diagram": {
+    "file": "diagrams/aiincident.svg"
+  },
+  "lesson": {
+    "file": "ai_incident.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "SEVERITY = {                     # agreed with risk, legal, compliance",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "  \"S1\": \"many people harmed, or irreversible, or regulator-reportable\",",
+        "steps": []
+      },
+      {
+        "text": "  \"S2\": \"a group harmed and reversible; possible regulatory exposure\",",
+        "steps": []
+      },
+      {
+        "text": "  \"S3\": \"individuals affected, quickly reversible\",",
+        "steps": []
+      },
+      {
+        "text": "  \"S4\": \"near miss, no one harmed\"}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def open_incident(signal):",
+        "steps": []
+      },
+      {
+        "text": "    inc = register.create(title=signal.title, system=signal.system,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                          owner=on_call_risk_owner(), evidence=signal.traces)",
+        "steps": []
+      },
+      {
+        "text": "    inc.harm = classify_harm(signal)       # unfair, false, privacy, unsafe, security",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    inc.severity = grade(inc, SEVERITY)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    for clock in playbook.clocks_for(inc):    # CERT-In, DPDP, IRDAI, EU AI Act",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        schedule(clock.deadline(inc.detected_at), clock.template, approver=\"CCO\")",
+        "steps": []
+      },
+      {
+        "text": "    return inc",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def close_incident(inc):",
+        "steps": []
+      },
+      {
+        "text": "    assert inc.root_cause and inc.capa",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    assert verify_fix(inc.capa, eval_set=inc.regression_cases)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    register.close(inc)",
+        "steps": []
+      },
+      {
+        "text": "    risk_committee.add_to_quarterly(inc)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# claims triage: 1,240 rejections reversed; chatbot: 38 policy numbers shown",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define what counts",
+        "text": "Arogya Kosh, a fictional health insurer, agrees with risk, legal and compliance which harms count as AI incidents and how to grade them from S1 to S4. Unfair outcomes and privacy leaks count, not just outages."
+      },
+      {
+        "title": "Register and grade",
+        "text": "Every signal that may be an AI incident opens a register entry with an owner, the traces as evidence and a severity."
+      },
+      {
+        "title": "Start the clocks",
+        "text": "The playbook lists which notifications may apply, with deadlines from the detection time and pre-approved templates. A privacy leak starts the DPDP breach steps; a cyber attack the CERT-In 6-hour report; claims decisions may need a note to IRDAI."
+      },
+      {
+        "title": "Fix the cause, then close",
+        "text": "An incident closes only with a root cause and corrective actions whose fix passes the regression cases added for it."
+      },
+      {
+        "title": "Report and learn",
+        "text": "Closed incidents go to the quarterly risk committee pack with themes and repeat rates."
+      },
+      {
+        "title": "Two real-looking cases",
+        "text": "A claims triage model rejected 1,240 valid claims from one region (S2, decisions reversed); the chatbot showed 38 customers another person’s policy number (S2, DPDP breach steps)."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"24\" text-anchor=\"middle\">unfair</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"124\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"24\" text-anchor=\"middle\">privacy</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"24\" text-anchor=\"middle\">unsafe action</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">register entry + owner</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">severity S2</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"87\" text-anchor=\"middle\">CERT-In 6 h</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"87\" text-anchor=\"middle\">DPDP breach</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"72\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"87\" text-anchor=\"middle\">IRDAI</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"117\" text-anchor=\"middle\">root cause + CAPA, fix verified</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"132\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"147\" text-anchor=\"middle\">quarterly risk committee pack</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"178\" text-anchor=\"middle\">1,240 claims reversed</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"178\" text-anchor=\"middle\">38 policy numbers</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Harms that never crash a service are still caught",
+      "Deadlines are met because the clocks are known in advance",
+      "One register gives regulators and auditors a clear record",
+      "Repeat incidents fall when fixes must be verified"
+    ],
+    "cons": [
+      "Needs agreement across risk, legal, compliance and engineering",
+      "Triage and paperwork take time",
+      "Definitions need updating as systems change",
+      "Over-reporting fatigue if severity is poorly calibrated"
+    ],
+    "avoidWhen": [
+      "Leaving AI harms to the IT outage process alone",
+      "Waiting for a first incident to decide who must be notified"
+    ],
+    "tools": [
+      {
+        "name": "OECD AI Incidents Monitor",
+        "type": "Public resource",
+        "what": "Global tracker of reported AI incidents and hazards",
+        "url": "https://oecd.ai/en/incidents"
+      },
+      {
+        "name": "AI Incident Database",
+        "type": "Public resource",
+        "what": "Searchable collection of real-world AI incidents",
+        "url": "https://incidentdatabase.ai"
+      },
+      {
+        "name": "NIST AI RMF Playbook",
+        "type": "Framework",
+        "what": "Suggested actions for managing and responding to AI risks",
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      },
+      {
+        "name": "ServiceNow / Jira",
+        "type": "Commercial",
+        "what": "Incident registers with workflows and audit trails",
+        "url": "https://www.atlassian.com/software/jira"
+      },
+      {
+        "name": "ISO/IEC 42001",
+        "type": "Standard",
+        "what": "AI management system including incident and nonconformity handling",
+        "url": "https://www.iso.org/standard/81230.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Arogya Kosh, a fictional health insurer, uses AI for claims triage and a customer chatbot. Over a year there are unfair rejections, privacy slips, harmful replies and one security event. Figures are illustrative; this is not legal advice.",
+    "controls": [
+      "Choose what counts: outages only, or a written AI-incident definition with an S1–S4 scale.",
+      "Keep a central register with owners, evidence and verified closure.",
+      "Choose how notifications are handled: worked out on the day, or a playbook with clocks and templates."
+    ],
+    "outputs": [
+      {
+        "name": "Recognised",
+        "meaning": "Share of real AI incidents treated as incidents."
+      },
+      {
+        "name": "On-time notifications",
+        "meaning": "Share sent within the applicable deadline."
+      },
+      {
+        "name": "Time to classify",
+        "meaning": "Hours from detection to a severity."
+      },
+      {
+        "name": "Repeat incidents",
+        "meaning": "Incidents that recur within a year."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Outages only, ad hoc",
+        "expect": "35% recognised, 40% on time, 72 hours to classify, 9 repeats."
+      },
+      {
+        "k": "defined",
+        "name": "Written definition",
+        "expect": "90% recognised, 4 hours, but 55% on time."
+      },
+      {
+        "k": "playbook",
+        "name": "Definition + playbook",
+        "expect": "95% on time, still 9 repeats."
+      },
+      {
+        "k": "full",
+        "name": "Definition + register + playbook",
+        "expect": "2 hours to classify, 95% on time, 2 repeats."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Recognise 90%, notify 95% on time, and keep repeats to 2 a year.",
+        "hint": "All three pieces."
+      },
+      {
+        "k": "clock",
+        "text": "Show that a notification playbook alone still misses deadlines.",
+        "hint": "Nobody recognises the incident in time."
+      },
+      {
+        "k": "learn",
+        "text": "Cut repeats to 4 or fewer without a notification playbook.",
+        "hint": "Verified closure in a register."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Incident register (Jira, ServiceNow, GRC tool)",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "One record per incident with workflow.",
+        "ex": "AI-incident issue type with severity and clocks.",
+        "pros": [
+          "Audit trail",
+          "Workflows"
+        ],
+        "cons": [
+          "Needs configuration"
+        ],
+        "url": "https://www.atlassian.com/software/jira"
+      },
+      {
+        "n": "OECD AI Incidents Monitor",
+        "type": "Public resource",
+        "start": 3,
+        "prod": 2,
+        "best": "Learning from incidents elsewhere.",
+        "ex": "Review incidents in insurance each quarter.",
+        "pros": [
+          "Global coverage",
+          "Free"
+        ],
+        "cons": [
+          "Media-sourced"
+        ],
+        "url": "https://oecd.ai/en/incidents"
+      },
+      {
+        "n": "AI Incident Database",
+        "type": "Public resource",
+        "start": 3,
+        "prod": 2,
+        "best": "Searchable case studies.",
+        "ex": "Find chatbot privacy incidents.",
+        "pros": [
+          "Rich cases",
+          "Taxonomies"
+        ],
+        "cons": [
+          "Uneven detail"
+        ],
+        "url": "https://incidentdatabase.ai"
+      },
+      {
+        "n": "NIST AI RMF",
+        "type": "Framework",
+        "start": 2,
+        "prod": 3,
+        "best": "Structuring govern, map, measure and manage.",
+        "ex": "Map incident handling to the Manage function.",
+        "pros": [
+          "Widely used",
+          "Free"
+        ],
+        "cons": [
+          "Voluntary; needs tailoring"
+        ],
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "First step",
+        "tool": "A written definition and severity scale"
+      },
+      {
+        "need": "Never miss a deadline",
+        "tool": "Playbook with clocks and templates"
+      },
+      {
+        "need": "Stop repeats",
+        "tool": "Register with verified closure"
+      }
+    ],
+    "goals": [
+      "Define and grade AI incidents beyond outages",
+      "Know the notification clocks that may apply",
+      "Close incidents with verified corrective actions"
+    ]
+  },
+  "practice": {
+    "scenario": "Arogya Kosh, a fictional health insurer, found that its claims triage model had rejected 1,240 valid claims from one region, and that its chatbot had shown 38 customers another person’s policy number. Neither caused an outage, so the IT process ignored them for days. It now has a written AI-incident definition with an S1–S4 scale, one register with owners and evidence, and a playbook listing the notifications that may apply (the DPDP breach steps, CERT-In for cyber incidents, IRDAI for claims decisions) with deadlines and pre-approved templates. Incidents are classified in about 2 hours, notifications go out on time, and repeats fall from 9 a year to 2. This is an educational example, not legal advice.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Claims triage errors and chatbot privacy slips"
+      },
+      {
+        "industry": "Lending",
+        "use": "Unfair credit decisions reported to the risk committee and RBI where required"
+      },
+      {
+        "industry": "Securities",
+        "use": "Advice or trading assistants whose errors reach investors"
+      }
+    ],
+    "analogy": "A hospital’s adverse-event reporting system: not only when the lights go out, but whenever a patient could have been harmed, with a form, a severity grade, a deadline and a follow-up review.",
+    "library": {
+      "name": "pydantic",
+      "what": "A typed incident record makes the register consistent and easy to export for audits.",
+      "install": "pip install pydantic"
+    },
+    "note": "The notification rules listed are illustrative examples; which apply, and their exact deadlines, must be confirmed with legal and compliance for your sector and the current rules.",
+    "samples": [
+      {
+        "file": "incident_record.py",
+        "language": "python",
+        "code": "from datetime import datetime, timedelta\nfrom pydantic import BaseModel\n\nCLOCKS = {                       # illustrative; confirm with legal and compliance\n    \"cyber_incident\": (\"CERT-In report\", timedelta(hours=6)),\n    \"personal_data_breach\": (\"DPDP: detailed report to the Board\", timedelta(hours=72)),\n}\n\nclass AIIncident(BaseModel):\n    title: str\n    system: str\n    harm: str                    # unfair, false, privacy, unsafe, security\n    severity: str                # S1..S4\n    detected_at: datetime\n    owner: str\n    triggers: list[str] = []\n\n    def deadlines(self):\n        return {CLOCKS[t][0]: self.detected_at + CLOCKS[t][1] for t in self.triggers if t in CLOCKS}\n\ninc = AIIncident(title=\"Chatbot showed another customer's policy number\", system=\"support-bot\",\n                 harm=\"privacy\", severity=\"S2\", detected_at=datetime(2026, 9, 14, 10, 30),\n                 owner=\"risk-oncall\", triggers=[\"personal_data_breach\"])\nprint(inc.deadlines())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A privacy breach is detected at 10:30 on Monday. If a detailed report is due within 72 hours, by what time on which day is it due? Give the number of hours after Monday 00:00.",
+    "answer": "10.5 + 72 = 82.5 hours after Monday 00:00, which is Thursday at 10:30.",
+    "expected": {
+      "value": 82.5,
+      "tolerance": 0.5,
+      "label": "hours ="
+    },
+    "interview": [
+      {
+        "question": "How is AI incident management different from IT incident response?",
+        "answer": "IT response restores service. AI incident management also covers harms that never cause an outage, such as unfair decisions, false or harmful outputs and privacy leaks, and adds a definition, severity scale, register, notification clocks, root cause and verified corrective action, and reporting to the risk committee and regulators."
+      },
+      {
+        "question": "What would you put in an AI incident playbook?",
+        "answer": "Harm types and severity criteria, owners, which notifications may apply with deadlines and templates, evidence to capture, and closure criteria. Confirm the rules with legal and compliance."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Counting only outages",
+        "fix": "Define harms such as unfair outcomes and privacy leaks as incidents"
+      },
+      {
+        "mistake": "Closing on an unverified fix",
+        "fix": "Require root cause and a verified corrective action"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ag01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which is an AI incident even though nothing crashed?",
+      "options": [
+        "A model unfairly rejects many valid claims",
+        "A planned maintenance window",
+        "A slow page load",
+        "A font change"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Harm counts."
+    },
+    {
+      "id": "ag02",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which harm types should an AI-incident definition cover? Select all that apply.",
+      "options": [
+        "Unfair outcomes",
+        "Privacy leaks",
+        "Unsafe actions",
+        "Cosmetic UI changes"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus false or harmful outputs and security."
+    },
+    {
+      "id": "ag03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What should every incident get first?",
+      "options": [
+        "A register entry with an owner and evidence",
+        "A press release",
+        "A new model",
+        "Deletion of logs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Then a severity."
+    },
+    {
+      "id": "ag04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "CERT-In’s 2022 directions require reporting cyber incidents within?",
+      "options": [
+        "6 hours",
+        "72 hours",
+        "15 days",
+        "30 days"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Educational summary."
+    },
+    {
+      "id": "ag05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Detected Monday 10:30, 72-hour report due?",
+      "options": [
+        "Wednesday 10:30",
+        "Thursday 10:30",
+        "Friday 10:30",
+        "Monday 22:30"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Three days later."
+    },
+    {
+      "id": "ag06",
+      "kind": "single",
+      "industry": "Securities",
+      "question": "Why prepare notification templates in advance?",
+      "options": [
+        "So deadlines can be met under pressure",
+        "To avoid reporting",
+        "To save paper",
+        "They are required by LoRA"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pre-approved wording."
+    },
+    {
+      "id": "ag07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "When can an AI incident be closed?",
+      "options": [
+        "When root cause is found and the fix is verified",
+        "After a week",
+        "When the owner is busy",
+        "Never"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Verified CAPA."
+    },
+    {
+      "id": "ag08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a severity scale consider?",
+      "options": [
+        "People affected, harm, reversibility, regulatory exposure",
+        "Only cost",
+        "Only the model size",
+        "The weather"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "S1–S4."
+    },
+    {
+      "id": "ag09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Repeats fall from 9 to 2 a year. Reduction?",
+      "options": [
+        "7",
+        "2",
+        "9",
+        "11"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "9 − 2."
+    },
+    {
+      "id": "ag10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique covers on-call response and trace replay?",
+      "options": [
+        "Incident Response in module 11",
+        "AI incident management",
+        "Grounding",
+        "Vector compression"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one is governance."
+    },
+    {
+      "id": "ag11",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "What belongs in an AI incident playbook? Select all that apply.",
+      "options": [
+        "Which notifications may apply",
+        "Deadlines and templates",
+        "Owners and approvers",
+        "Marketing slogans"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus evidence to keep."
+    },
+    {
+      "id": "ag12",
+      "kind": "single",
+      "industry": "Securities",
+      "question": "Under the EU AI Act, serious incidents with high-risk systems are generally reported within?",
+      "options": [
+        "15 days, shorter in some cases",
+        "1 year",
+        "Never",
+        "6 hours always"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Article 73; confirm with counsel."
+    },
+    {
+      "id": "ag13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Who should agree the AI-incident definition?",
+      "options": [
+        "Risk, legal, compliance and engineering together",
+        "Only engineering",
+        "Only marketing",
+        "The vendor"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Shared ownership."
+    },
+    {
+      "id": "ag14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Time to classify falls from 72 to 2 hours. How many hours saved?",
+      "options": [
+        "70",
+        "36",
+        "2",
+        "74"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "72 − 2."
+    },
+    {
+      "id": "ag15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A chatbot shows another customer’s policy number. Which Indian law’s breach steps may apply?",
+      "options": [
+        "DPDP Act, 2023",
+        "Motor Vehicles Act",
+        "Copyright Act",
+        "Companies Act only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Personal data breach."
+    },
+    {
+      "id": "ag16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which public resources track AI incidents? Select all that apply.",
+      "options": [
+        "OECD AI Incidents Monitor",
+        "AI Incident Database",
+        "Company incident registers of competitors",
+        "ImageNet"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Competitor registers are private."
+    },
+    {
+      "id": "ag17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is CAPA?",
+      "options": [
+        "Corrective and preventive action",
+        "A GPU type",
+        "A prompt format",
+        "A cloud region"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fix and prevent."
+    },
+    {
+      "id": "ag18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A playbook exists but nobody recognises privacy slips as incidents. Result?",
+      "options": [
+        "Clocks start too late and deadlines are missed",
+        "All deadlines met",
+        "No effect",
+        "Faster fixes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Definition comes first."
+    },
+    {
+      "id": "ag19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should incident themes be reported?",
+      "options": [
+        "To the board or risk committee",
+        "Only to the vendor",
+        "Nowhere",
+        "Social media"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Oversight."
+    },
+    {
+      "id": "ag20",
+      "kind": "single",
+      "industry": "Securities",
+      "question": "Is this technique legal advice?",
+      "options": [
+        "No, an educational summary; confirm with counsel",
+        "Yes",
+        "Only in India",
+        "Only for banks"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Rules change and depend on sector."
+    }
+  ]
+}

@@ -1,0 +1,798 @@
+{
+  "id": "decide",
+  "moduleSlug": "fine-tuning",
+  "name": "Prompt vs RAG vs Fine-Tune",
+  "shortName": "Decide",
+  "question": "Should I change the prompt, the context or the weights?",
+  "summary": "Most problems are solved without touching weights. Change the prompt when instructions or examples are missing; add retrieval when the model needs facts, especially facts that change; fine-tune when you need consistent behaviour, format, style or a narrow skill at high volume, and have good examples. Fine-tuning teaches behaviour better than knowledge: tuning on new facts can even raise hallucination.",
+  "useCases": [
+    "Before any fine-tuning project",
+    "When a vendor proposes training a model on your documents",
+    "When prompt and RAG results have plateaued on evals"
+  ],
+  "keyFacts": {
+    "label": "Rules of thumb",
+    "items": [
+      {
+        "term": "Prompt first",
+        "detail": "instructions, examples and structured outputs are cheapest to change"
+      },
+      {
+        "term": "RAG for knowledge",
+        "detail": "facts, documents and anything that changes; cite sources"
+      },
+      {
+        "term": "Fine-tune for behaviour",
+        "detail": "format, tone, style, a narrow skill, or shorter prompts at scale"
+      },
+      {
+        "term": "Both",
+        "detail": "a tuned model that reads retrieved context well"
+      },
+      {
+        "term": "Volume",
+        "detail": "fixed costs of tuning only pay off at high volume"
+      },
+      {
+        "term": "Upkeep",
+        "detail": "retune when the base model or the task changes"
+      }
+    ]
+  },
+  "steps": [
+    "Measure the prompted baseline on a real eval set",
+    "Ask what is missing: instructions, knowledge or behaviour",
+    "Try the cheapest fix first and measure again",
+    "Fine-tune only with enough good examples, enough volume and an owner for upkeep"
+  ],
+  "pitfalls": [
+    "Fine-tuning to “teach” facts that change monthly",
+    "Skipping a strong prompt baseline, so gains are overstated",
+    "Forgetting the cost of retuning when the base model is retired"
+  ],
+  "tools": [
+    "Promptfoo or Inspect for baselines",
+    "LlamaIndex or LangChain for RAG",
+    "Hugging Face TRL",
+    "OpenAI fine-tuning",
+    "Amazon Bedrock and Vertex AI tuning"
+  ],
+  "remember": "Prompt for instructions, retrieve for facts, tune for behaviour.",
+  "caption": "Illustrative rules; measure your own baseline first.",
+  "comparison": {
+    "scope": "Where to intervene",
+    "cost": 1,
+    "needs": "A baseline eval",
+    "best": "Tuning for facts that change"
+  },
+  "diagram": {
+    "file": "diagrams/decide.svg"
+  },
+  "lesson": {
+    "file": "decide.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def choose_approach(task, evals, volume_per_month, n_examples):",
+        "steps": []
+      },
+      {
+        "text": "    bar = task.required_accuracy               # from a real eval set",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if evals[\"prompt\"] >= bar:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return \"prompt\"                        # cheapest, easiest to change",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if task.needs_facts and evals[\"rag\"] >= bar:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return \"rag\"                           # facts live in retrieval",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    worth_tuning = volume_per_month >= 100_000 and n_examples >= 1_000",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if not worth_tuning:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"rag\" if task.needs_facts else \"prompt + better examples\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if task.needs_facts:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return \"rag + fine-tuned model\"        # tune behaviour, retrieve facts",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return \"fine-tune\"                         # format, style, narrow skill",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Re-run this when the base model, prices or the task change",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Measure a baseline and set the bar",
+        "text": "The insurer built 500 real questions with checked answers before choosing anything. Without that, every option “seems to work”."
+      },
+      {
+        "title": "Try the prompt first",
+        "text": "A structured prompt with examples and structured outputs is the cheapest change and the easiest to undo. It answered 71% here."
+      },
+      {
+        "title": "Facts go in retrieval",
+        "text": "Policy wordings change, and answers need citations. Retrieval over the current PDFs reached 93%; tuning on them reached 76% and went stale."
+      },
+      {
+        "title": "Tuning has to pay for itself",
+        "text": "Training, evaluation, hosting and retraining are fixed costs. Below about 100,000 calls a month, or without a thousand good examples, they are rarely recovered."
+      },
+      {
+        "title": "Tune for behaviour, retrieve facts",
+        "text": "When the gap is format, tone or a narrow skill, tuning helps. When both matter, a tuned model reads retrieved context."
+      },
+      {
+        "title": "Revisit the decision",
+        "text": "A new base model can make a tuned one obsolete, and a price change can move the break-even. Re-run the comparison."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">eval set: 500 real questions, bar 90%</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"49\" style=\"text-anchor:end;--d:0s\">prompt</text><rect x=\"118\" y=\"39\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"39\" width=\"134.9\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"49\" style=\"text-anchor:start;--d:0.2s\">71%</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"71\" style=\"text-anchor:end;--d:0s\">RAG</text><rect x=\"118\" y=\"61\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"61\" width=\"176.70000000000002\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"71\" style=\"text-anchor:start;--d:0.2s\">93%</text><text class=\"tl a\" x=\"112\" y=\"93\" style=\"text-anchor:end;--d:0.15s\">fine-tune</text><rect x=\"118\" y=\"83\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"83\" width=\"144.4\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.25s\"/><text class=\"mono a\" x=\"314\" y=\"93\" style=\"text-anchor:start;--d:0.35s\">76%</text><text class=\"sb a\" x=\"118\" y=\"112\" style=\"text-anchor:start;--d:0.3s\">tuned on wordings: stale after one revision</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"124\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"139\" text-anchor=\"middle\">volume ≥ 100k / month</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"124\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"139\" text-anchor=\"middle\">≥ 1,000 good examples</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"154\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"62\" y=\"169\" text-anchor=\"middle\">prompt: rules</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"154\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"178\" y=\"169\" text-anchor=\"middle\">RAG: facts</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"240\" y=\"154\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"169\" text-anchor=\"middle\">tune: behaviour</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"186\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"201\" text-anchor=\"middle\">new base model or price → rerun the comparison</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"232\" style=\"text-anchor:middle;fill:var(--ink-2)\">insurer case; numbers illustrative</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Avoids expensive projects that do not help",
+      "Puts facts where they can be updated and cited",
+      "Keeps the cheapest option that meets the bar",
+      "Makes the tuning budget a measured decision"
+    ],
+    "cons": [
+      "Needs a real eval set before anything else",
+      "Break-even depends on volume and prices that change",
+      "Hybrid setups add moving parts",
+      "Easy to under-invest in the prompt baseline"
+    ],
+    "avoidWhen": [
+      "Deciding by what is fashionable rather than measured",
+      "Fine-tuning to add knowledge that changes"
+    ],
+    "tools": [
+      {
+        "name": "Promptfoo",
+        "type": "Open source",
+        "what": "Compare prompt, RAG and tuned models on the same cases",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "Inspect (UK AISI)",
+        "type": "Open source",
+        "what": "Evaluation framework for models and tasks",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "Build the RAG baseline",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "OpenAI fine-tuning guide",
+        "type": "Documentation",
+        "what": "When fine-tuning helps and when it does not",
+        "url": "https://platform.openai.com/docs/guides/model-optimization"
+      },
+      {
+        "name": "Hugging Face TRL",
+        "type": "Open source",
+        "what": "Train the tuned option when it is justified",
+        "url": "https://huggingface.co/docs/trl"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An assistant falls short of the accuracy bar on a real eval set, and someone has proposed fine-tuning. Say what is missing (facts, a style, a narrow skill, or facts in a house format), how often the facts change, how many good examples you have, the monthly volume and how well a good prompt already does. Compare the accuracy and monthly cost of prompting, RAG, fine-tuning and both.",
+    "controls": [
+      "Choose what is missing: facts, style, a narrow skill, or both facts and a format.",
+      "Set how often the facts change and how many good training examples you have.",
+      "Set the monthly volume and the prompted baseline, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Accuracy of each option",
+        "meaning": "Illustrative accuracy on the eval set for prompt only, RAG, fine-tuning, and RAG plus a fine-tuned model."
+      },
+      {
+        "name": "Monthly cost",
+        "meaning": "Per-query cost times volume, plus about ₹60,000 a month of fixed costs for tuned options."
+      },
+      {
+        "name": "Recommended (★)",
+        "meaning": "The most accurate option you can justify; within 2 points, the simpler option wins."
+      },
+      {
+        "name": "Volume check",
+        "meaning": "Tuned options are ruled out below 100,000 queries a month, where fixed costs are not recovered."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Style gap, no examples",
+        "expect": "Prompt 60%, RAG 62%, no fine-tuning possible: keep the prompt and collect examples."
+      },
+      {
+        "k": "fees",
+        "name": "Fees that change monthly",
+        "expect": "RAG reaches 98%; fine-tuning only 70% and goes stale. RAG at ₹5.5 lakh a month."
+      },
+      {
+        "k": "style",
+        "name": "House style at 1M a month",
+        "expect": "Fine-tuning reaches 97% at ₹1.6 lakh a month; RAG adds little."
+      },
+      {
+        "k": "both",
+        "name": "Current facts in a house format",
+        "expect": "RAG 90%, fine-tuning 87%, both together 98%: RAG plus a fine-tuned model."
+      }
+    ],
+    "missions": [
+      {
+        "k": "rag",
+        "text": "Find a facts problem where RAG is the recommendation.",
+        "hint": "Facts that change often are what retrieval is for."
+      },
+      {
+        "k": "ft",
+        "text": "Find a case where fine-tuning alone is the recommendation.",
+        "hint": "A style or skill gap, plenty of examples and high volume."
+      },
+      {
+        "k": "volume",
+        "text": "Find a case where fine-tuning would score highest but volume rules it out.",
+        "hint": "Keep a style gap and 5,000 examples, then lower the volume."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Compare a prompt, a RAG pipeline and a tuned model on the same test cases.",
+        "ex": "Score all three options on 500 real policy questions before choosing.",
+        "pros": [
+          "Side-by-side results",
+          "Runs in CI"
+        ],
+        "cons": [
+          "You must write good test cases",
+          "Model-graded checks cost money"
+        ],
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "n": "Inspect (UK AISI)",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Structured evaluations of models and tasks with solvers and scorers.",
+        "ex": "Build the baseline eval once and reuse it for every option.",
+        "pros": [
+          "Flexible and well documented",
+          "Good for agent tasks too"
+        ],
+        "cons": [
+          "More code than config tools",
+          "Learning curve"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "n": "LlamaIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Build the RAG option quickly over your own documents.",
+        "ex": "Index current fee schedules and answer with citations.",
+        "pros": [
+          "Many loaders and retrievers",
+          "Built-in evaluation helpers"
+        ],
+        "cons": [
+          "Abstractions to learn",
+          "Defaults need tuning"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "OpenAI model optimisation guide",
+        "type": "Documentation",
+        "start": 3,
+        "prod": 2,
+        "best": "When to use prompting, RAG, fine-tuning or distillation.",
+        "ex": "Check the provider’s advice before scoping a tuning project.",
+        "pros": [
+          "Clear decision guidance",
+          "Covers hosted tuning options"
+        ],
+        "cons": [
+          "Provider-specific",
+          "No measurement of your own data"
+        ],
+        "url": "https://platform.openai.com/docs/guides/model-optimization"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "The model lacks facts that change",
+        "tool": "Retrieval, not fine-tuning"
+      },
+      {
+        "need": "The format or tone is inconsistent at high volume",
+        "tool": "Fine-tune after a strong prompt baseline"
+      },
+      {
+        "need": "I am not sure what is missing",
+        "tool": "Build an eval set and measure prompt and RAG first"
+      }
+    ],
+    "goals": [
+      "Tell a knowledge gap from a behaviour gap",
+      "See why facts that change belong in retrieval",
+      "See when volume makes tuning pay"
+    ]
+  },
+  "practice": {
+    "scenario": "An Indian insurer was offered a project to fine-tune a model on its policy wordings so its agent would “know the products”. The team measured first. A structured prompt answered 71% of 500 real questions correctly, and adding retrieval over the current policy PDFs raised that to 93%, with citations. Fine-tuning on the wordings reached only 76% and went stale when two products were revised the next month. They kept retrieval and later tuned a small model for tone only.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Policy questions: retrieval for wordings that change, tuning only for tone"
+      },
+      {
+        "industry": "Fintech",
+        "use": "Fee and limit questions change with every circular, so they belong in retrieval"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Clinical note formatting at scale suits tuning; drug facts belong in retrieval"
+      }
+    ],
+    "analogy": "A new employee: give them a clear brief (prompt), a well-indexed handbook they can look things up in (retrieval), and training only for the skills they will use every day (fine-tuning). You would not make them memorise a price list that changes each month.",
+    "library": {
+      "name": "Promptfoo",
+      "what": "Compare the prompted baseline, the RAG pipeline and a tuned model on the same test cases before deciding.",
+      "install": "npm install -g promptfoo"
+    },
+    "note": "The thresholds are illustrative. Always measure the prompted and RAG baselines on your own eval set before starting a tuning project.",
+    "samples": [
+      {
+        "file": "decide.py",
+        "language": "python",
+        "code": "def choose_approach(task, evals, volume_per_month, n_examples):\n    \"\"\"Return the cheapest approach that meets the bar on your own eval set.\"\"\"\n    bar = task.required_accuracy\n    if evals[\"prompt\"] >= bar:\n        return \"prompt\"                          # cheapest, easiest to change\n    if task.needs_facts and evals[\"rag\"] >= bar:\n        return \"rag\"                             # facts that change live in retrieval\n    worth_tuning = volume_per_month >= 100_000 and n_examples >= 1_000\n    if not worth_tuning:\n        return \"rag\" if task.needs_facts else \"prompt + better examples\"\n    if task.needs_facts:\n        return \"rag + fine-tuned model\"          # tune behaviour, retrieve facts\n    return \"fine-tune\"                           # format, style or a narrow skill"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Answering with RAG on a large model costs ₹0.55 a query. A fine-tuned small model costs ₹0.10 a query plus ₹60,000 a month for training refreshes, evaluation and hosting. Above what monthly volume is the tuned model cheaper?",
+    "answer": "Set 0.55v = 0.10v + 60,000, so 0.45v = 60,000 and v ≈ 133,333 queries a month. Below that, the fixed cost of tuning is not recovered, before counting the engineering time to keep it current.",
+    "expected": {
+      "value": 133333,
+      "tolerance": 500,
+      "label": "queries a month ="
+    },
+    "interview": [
+      {
+        "question": "When would you fine-tune rather than use RAG?",
+        "answer": "When the gap is behaviour rather than knowledge: a consistent format, tone or narrow skill, or a shorter prompt at high volume, and you have enough good examples. Facts, especially ones that change, belong in retrieval, where they can be updated and cited. The two combine well: a tuned model that reads retrieved context."
+      },
+      {
+        "question": "Why not fine-tune a model on your documents so it knows them?",
+        "answer": "Fine-tuning is poor at adding new facts reliably, the facts go stale as documents change, and the model cannot cite a source. Research has found that tuning on unfamiliar facts can even raise hallucination. Retrieval updates instantly and shows where each answer came from."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Tuning on facts that change every month",
+        "fix": "Put them in retrieval and cite sources"
+      },
+      {
+        "mistake": "Comparing a tuned model with a weak prompt",
+        "fix": "Beat the best prompted and RAG baseline first"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dc01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An assistant gets policy details wrong, and the wordings are revised every quarter. What is the best first fix?",
+      "options": [
+        "Fine-tune on the policy wordings",
+        "Retrieval over the current wordings, with citations",
+        "A higher temperature",
+        "A larger context window only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Facts that change belong in retrieval, where they can be updated and cited."
+    },
+    {
+      "id": "dc02",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Why is fine-tuning a poor way to teach a model fees that change monthly?",
+      "options": [
+        "Fine-tuning cannot change weights",
+        "The facts go stale and the model cannot cite a source",
+        "It is always too expensive",
+        "Models cannot learn numbers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Weights are frozen at training time; retrieval reflects the current schedule."
+    },
+    {
+      "id": "dc03",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Product descriptions must follow a strict brand voice across 2 million SKUs a year. Prompting reaches 78% on the style rubric. What is most likely to help?",
+      "options": [
+        "Retrieval over the brand guide",
+        "Fine-tuning on a few thousand approved descriptions",
+        "Removing the system prompt",
+        "Few-shot with one example"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Consistent style at high volume is the classic case for tuning."
+    },
+    {
+      "id": "dc04",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What should you build before choosing between prompting, RAG and fine-tuning?",
+      "options": [
+        "A GPU cluster",
+        "An eval set of real cases with checked answers",
+        "A vector database",
+        "A fine-tuning dataset"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without a baseline measurement every option “seems to work”."
+    },
+    {
+      "id": "dc05",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "RAG costs ₹0.55 a query; a tuned small model costs ₹0.10 plus ₹60,000 a month fixed. Roughly above what monthly volume is tuning cheaper?",
+      "options": [
+        "13,000",
+        "133,000",
+        "1.3 million",
+        "13 million"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.45v = 60,000, so v ≈ 133,333."
+    },
+    {
+      "id": "dc06",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which gaps suit fine-tuning better than retrieval? Select all that apply.",
+      "options": [
+        "A consistent discharge-summary format",
+        "A drug formulary that changes monthly",
+        "A concise clinical tone at high volume",
+        "Today’s bed availability"
+      ],
+      "correct": [
+        0,
+        2
+      ],
+      "explanation": "Format and tone are behaviour; changing facts belong in retrieval or tools."
+    },
+    {
+      "id": "dc07",
+      "kind": "single",
+      "industry": "Research",
+      "question": "What did Gekhman et al. (2024) find about fine-tuning on new knowledge?",
+      "options": [
+        "It reliably adds facts",
+        "New facts are learned slowly and can raise hallucination",
+        "It has no effect",
+        "It improves citation quality"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unfamiliar facts are learned slowly and encourage hallucination."
+    },
+    {
+      "id": "dc08",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "A tuned model is proposed for 8,000 queries a month. What is the usual objection?",
+      "options": [
+        "It will be too accurate",
+        "Fixed training and hosting costs are unlikely to be recovered",
+        "Small volumes cannot be tuned",
+        "Tuned models cannot run at low volume"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Volume must be high enough to pay back fixed costs."
+    },
+    {
+      "id": "dc09",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "When would you combine RAG with a fine-tuned model?",
+      "options": [
+        "Never",
+        "When you need current facts and a specific behaviour at scale",
+        "Only for images",
+        "When the prompt is short"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieve the facts, tune the behaviour."
+    },
+    {
+      "id": "dc10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A strong prompt meets the accuracy bar. What should you do?",
+      "options": [
+        "Fine-tune anyway",
+        "Keep the prompt: it is the cheapest option that works",
+        "Add retrieval to be safe",
+        "Distil immediately"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The cheapest option that meets the bar wins."
+    },
+    {
+      "id": "dc11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which is NOT a hidden cost of fine-tuning?",
+      "options": [
+        "Retraining when the base model is retired",
+        "Hosting a custom model",
+        "Maintaining an eval set",
+        "Editing a system prompt"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Prompt edits are cheap; the others recur with tuning."
+    },
+    {
+      "id": "dc12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A model gives wrong answers because the syllabus is not in its context. What is the gap?",
+      "options": [
+        "Knowledge",
+        "Behaviour",
+        "Latency",
+        "Safety"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Missing information is a knowledge gap: retrieval."
+    },
+    {
+      "id": "dc13",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which should you check before approving a tuning project? Select all that apply.",
+      "options": [
+        "A strong prompted and RAG baseline on real cases",
+        "Enough high-quality examples",
+        "The colour of the dashboard",
+        "The model’s logo"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Baselines and data decide whether tuning can help."
+    },
+    {
+      "id": "dc14",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Why might a tuned model need retraining later?",
+      "options": [
+        "Models forget after a month",
+        "The base model is retired or the task changes",
+        "Tuned weights expire by licence",
+        "Tokens get more expensive"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Upkeep is part of the cost of tuning."
+    },
+    {
+      "id": "dc15",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "A vendor promises that tuning on your help pages will make the bot “know the business”. The best response?",
+      "options": [
+        "Agree and start",
+        "Measure RAG first; tuning adds facts poorly and they go stale",
+        "Buy a larger GPU",
+        "Tune on customer chats instead of anything else"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Knowledge gaps are fixed by retrieval first."
+    },
+    {
+      "id": "dc16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Structured outputs already produce valid JSON. Is fine-tuning needed for format?",
+      "options": [
+        "Usually not",
+        "Always",
+        "Only for small models",
+        "Only on weekends"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Constrained decoding solves many format problems without training."
+    },
+    {
+      "id": "dc17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What is the main benefit of trying the prompt first?",
+      "options": [
+        "It is cheapest and easiest to change or undo",
+        "It is always the most accurate",
+        "It needs no evaluation",
+        "It removes hallucination"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Low cost and reversibility."
+    },
+    {
+      "id": "dc18",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Tuning scored 97% and RAG 77% on a style task. Which statement is right?",
+      "options": [
+        "The gap was behaviour, so tuning fits",
+        "RAG is broken",
+        "Both are equivalent",
+        "Style needs retrieval"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Style is behaviour."
+    },
+    {
+      "id": "dc19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An assistant’s answers are correct but too long. Which is the cheapest first try?",
+      "options": [
+        "A prompt with a length limit and examples",
+        "Pretraining a new model",
+        "RLVR",
+        "Distillation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Try the prompt before training."
+    },
+    {
+      "id": "dc20",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Which kind of fact is safest to leave to a tuned model’s weights?",
+      "options": [
+        "Stable, general domain vocabulary",
+        "Next month’s fees",
+        "Today’s court listings",
+        "A customer’s balance"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only stable knowledge; anything that changes belongs in retrieval or tools."
+    }
+  ]
+}

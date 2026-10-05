@@ -1,0 +1,910 @@
+{
+  "id": "tooldesign",
+  "moduleSlug": "tool-use",
+  "name": "Tool Interface Design",
+  "shortName": "Tool design",
+  "question": "Will the model use this tool well?",
+  "summary": "A tool’s name, description, parameters, results and errors are a prompt the model reads every turn. Good design consolidates several API calls into one task-shaped tool, names parameters without ambiguity, returns only high-signal fields, and turns errors into instructions the model can act on. Measure it on a task set, like any prompt.",
+  "useCases": [
+    "Agents with many overlapping tools that pick the wrong one",
+    "Tools that return large raw records or opaque error codes",
+    "Wrapping an existing API for use by agents"
+  ],
+  "keyFacts": {
+    "label": "Design rules",
+    "items": [
+      {
+        "term": "Descriptions",
+        "detail": "by far the most important factor; 3–4 sentences or more"
+      },
+      {
+        "term": "Task-shaped tools",
+        "detail": "one schedule_event instead of list_users + list_events + create_event"
+      },
+      {
+        "term": "Parameters",
+        "detail": "unambiguous names (user_id, not user), enums, defaults"
+      },
+      {
+        "term": "Results",
+        "detail": "semantic fields, pagination and a concise response_format"
+      },
+      {
+        "term": "Errors",
+        "detail": "say what was wrong and how to fix it"
+      },
+      {
+        "term": "Many tools",
+        "detail": "load definitions on demand with tool search past roughly 30–50 tools"
+      }
+    ]
+  },
+  "steps": [
+    "Start from real tasks and merge chains of thin endpoints into task-shaped tools",
+    "Write descriptions: what it does, when to use it, when not to, and caveats",
+    "Trim results to the fields the next step needs; add pagination and a concise mode",
+    "Return actionable errors, then evaluate on a task set and read the wrong-choice transcripts"
+  ],
+  "pitfalls": [
+    "Near-duplicate tools (search_txn, find_transaction) split the model’s choices",
+    "Raw payloads fill the context and bury the field that matters",
+    "Opaque codes such as E422 leave the model retrying blind"
+  ],
+  "tools": [
+    "FastMCP",
+    "Anthropic tool search",
+    "MCP Inspector",
+    "Pydantic AI",
+    "promptfoo"
+  ],
+  "remember": "Design tools for the model that reads them, not for the API behind them.",
+  "caption": "Illustrative results on a 10-task set. Token counts echo Anthropic’s example of concise responses.",
+  "comparison": {
+    "scope": "The tool interface",
+    "cost": 2,
+    "needs": "Low to medium: task set, rewrites",
+    "best": "Needs evals to confirm"
+  },
+  "diagram": {
+    "file": "diagrams/tooldesign.svg"
+  },
+  "lesson": {
+    "file": "opd_tools.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from datetime import date",
+        "steps": []
+      },
+      {
+        "text": "from typing import Annotated, Literal",
+        "steps": []
+      },
+      {
+        "text": "from fastmcp import FastMCP",
+        "steps": []
+      },
+      {
+        "text": "from fastmcp.exceptions import ToolError",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "mcp = FastMCP(\"opd-scheduling\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@mcp.tool                                                    # one task, one tool",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "def find_free_slot(",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    department: Literal[\"cardiology\", \"orthopaedics\", \"general_medicine\"],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    on_date: Annotated[date, \"Clinic date, ISO 8601, e.g. 2026-10-03\"],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    response_format: Literal[\"concise\", \"detailed\"] = \"concise\",",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": ") -> list[dict]:",
+        "steps": []
+      },
+      {
+        "text": "    \"\"\"Find doctors with free OPD slots in one department on one date.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    Use it before book_opd_slot: it already checks rosters, leave and bookings.",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    Do not use it for a patient's existing appointments.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    Returns at most 10 doctors; 'concise' gives id, name and free times only.\"\"\"",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "    if on_date < date.today():",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        raise ToolError(f\"on_date must be today or later; you sent {on_date}. \"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                        \"Check the year and call again.\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    rows = ehr.free_slots(department, on_date)[:10]",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    if response_format == \"concise\":",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return [{\"doctor_id\": r.id, \"name\": r.name, \"free\": r.times} for r in rows]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return [r.model_dump() for r in rows]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Evaluate on real requests; read every transcript with a wrong choice",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "for case in load_cases(\"opd_requests.jsonl\"):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    run = agent.run(case.prompt)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    report(case.expected_tool, run.tool_calls, run.retries)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Start from the task",
+        "text": "Booking needs one question answered: who is free, and when? One find_free_slot tool replaces four thin endpoints the model had to chain in the right order."
+      },
+      {
+        "title": "Write the description",
+        "text": "Say what it does, when to use it, when not to, and what it returns. Anthropic calls the description by far the most important factor in tool performance."
+      },
+      {
+        "title": "Make parameters unambiguous",
+        "text": "An enum for the department, a typed date with an example, and a default for response_format. The model cannot invent a department that does not exist."
+      },
+      {
+        "title": "Return only what the next step needs",
+        "text": "The concise mode returns ids, names and free times, about 380 tokens instead of a 4,100-token roster record, and never more than 10 rows."
+      },
+      {
+        "title": "Turn errors into instructions",
+        "text": "A past date gets a message that names the problem, the value sent and the fix. The model corrects the year in one retry instead of guessing."
+      },
+      {
+        "title": "Evaluate on a task set",
+        "text": "Run real requests, score which tool was chosen and with which arguments, and read the wrong-choice transcripts. Tool design is prompt design, so measure it."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"120\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"21\" text-anchor=\"middle\">list_doctors</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"8\" y=\"30\" width=\"120\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"43\" text-anchor=\"middle\">get_roster</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"8\" y=\"52\" width=\"120\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"65\" text-anchor=\"middle\">get_leaves</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"8\" y=\"74\" width=\"120\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"87\" text-anchor=\"middle\">booked_slots</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln acc\" d=\"M132 44L176 44\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"180\" y=\"33\" width=\"172\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"266\" y=\"49\" text-anchor=\"middle\">find_free_slot</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"180\" y=\"80\" style=\"--d:0s\">Description</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"180\" y=\"86\" width=\"36\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"198\" y=\"99\" text-anchor=\"middle\">what</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx pass\" x=\"220\" y=\"86\" width=\"36\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"238\" y=\"99\" text-anchor=\"middle\">when</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx pass\" x=\"260\" y=\"86\" width=\"30\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"275\" y=\"99\" text-anchor=\"middle\">not</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx pass\" x=\"294\" y=\"86\" width=\"52\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"320\" y=\"99\" text-anchor=\"middle\">returns</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"110\" style=\"--d:0s\">Parameters</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"116\" width=\"112\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"64\" y=\"130\" text-anchor=\"middle\">enum dept</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"124\" y=\"116\" width=\"112\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"130\" text-anchor=\"middle\">date · e.g.</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx soft\" x=\"240\" y=\"116\" width=\"112\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"130\" text-anchor=\"middle\">default</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"84\" y=\"160\" style=\"text-anchor:end;--d:0s\">raw</text><rect x=\"90\" y=\"150\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"90\" y=\"150\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"286\" y=\"160\" style=\"--d:0.2s\">4,100</text><text class=\"tl a\" x=\"84\" y=\"178\" style=\"text-anchor:end;--d:0.1s\">concise</text><rect x=\"90\" y=\"168\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"90\" y=\"168\" width=\"17.609756097560975\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.2s\"/><text class=\"mono l a\" x=\"286\" y=\"178\" style=\"--d:0.3s\">380</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"190\" width=\"124\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"70\" y=\"205\" text-anchor=\"middle\">E_VALIDATION_422</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"138\" y=\"190\" width=\"214\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"245\" y=\"205\" text-anchor=\"middle\">you sent 2025-10-03; use 2026</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"236\" style=\"--d:0s\">Right tool</text><rect x=\"90\" y=\"227\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"90\" y=\"227\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"286\" y=\"237\" style=\"--d:0.2s\">10 / 10</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Fewer wrong tool choices with the same model",
+      "Smaller results cut tokens and cost on every later turn",
+      "Actionable errors turn failures into one-step corrections",
+      "Task-shaped tools need fewer calls per task"
+    ],
+    "cons": [
+      "Consolidating tools takes design work and domain knowledge",
+      "Descriptions need maintenance when behaviour changes",
+      "Concise results can hide a field the model later needs",
+      "Gains must be measured on a task set, not assumed"
+    ],
+    "avoidWhen": [
+      "A single, obvious tool with one argument",
+      "A third-party server you cannot change: wrap it or choose another instead"
+    ],
+    "tools": [
+      {
+        "name": "FastMCP",
+        "type": "Open source",
+        "what": "Python tools where type hints and docstrings become the schema and description",
+        "url": "https://gofastmcp.com"
+      },
+      {
+        "name": "Anthropic tool search",
+        "type": "API feature",
+        "what": "Loading tool definitions on demand when there are dozens of tools",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "name": "MCP Inspector",
+        "type": "Open source",
+        "what": "Calling tools by hand and reading their raw results and errors",
+        "url": "https://github.com/modelcontextprotocol/inspector"
+      },
+      {
+        "name": "Pydantic AI",
+        "type": "Open source",
+        "what": "Typed tools with validation errors sent back to the model",
+        "url": "https://ai.pydantic.dev/"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Evaluating tool choice and arguments across a task set",
+        "url": "https://www.promptfoo.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A Pune hospital’s scheduling agent handles OPD bookings. Each booking task needs 3 correct tool calls. Every turn resends 1,500 tokens of instructions plus the tool definitions, and each tool result stays in the history for about 1.5 later turns. Input tokens cost ₹250 per million. A wrong tool choice costs one wasted call; a bad argument costs one or more retries.",
+    "controls": [
+      "Drag the number of tools exposed, from 5 to 60.",
+      "Choose terse or full descriptions, raw or concise results, and bare or actionable errors.",
+      "Turn on tool search, which loads only 5 relevant tools per turn."
+    ],
+    "outputs": [
+      {
+        "name": "Right tool chosen",
+        "meaning": "Share of calls where the model picks the correct tool."
+      },
+      {
+        "name": "Definition tokens per turn",
+        "meaning": "Tool definitions sent on every turn."
+      },
+      {
+        "name": "Result tokens per call",
+        "meaning": "Tokens one tool result adds to the history."
+      },
+      {
+        "name": "Retries after a bad date",
+        "meaning": "Attempts the model needs to fix a bad argument."
+      },
+      {
+        "name": "Calls per task",
+        "meaning": "3 needed calls plus wrong choices and retries."
+      },
+      {
+        "name": "Cost per 1,000 tasks",
+        "meaning": "Input tokens per task × 1,000 at ₹250 per million."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "48 thin tools",
+        "expect": "48 terse tools, raw results and bare codes: 65% right choices, 5.39 calls per task and ₹15,295 per 1,000 tasks."
+      },
+      {
+        "k": "good",
+        "name": "Full descriptions, raw results",
+        "expect": "12 tools with full descriptions: 98% right choices and 1 retry, but 4,100-token results keep the cost at ₹9,293 per 1,000 tasks."
+      },
+      {
+        "k": "many",
+        "name": "40 good tools, all loaded",
+        "expect": "Full descriptions do not save 40 always-loaded tools: 88% right choices, 8,800 definition tokens a turn and ₹12,113 per 1,000 tasks."
+      },
+      {
+        "k": "terse",
+        "name": "Cheap but terse",
+        "expect": "12 terse tools with concise results: only ₹3,275 per 1,000 tasks, but just 85% right choices."
+      }
+    ],
+    "missions": [
+      {
+        "k": "many",
+        "text": "Reach at least 95% right choices with 40 or more tools.",
+        "hint": "Full descriptions alone reach 88% at 40 tools. Load tools on demand so the model sees only a few at a time."
+      },
+      {
+        "k": "lean",
+        "text": "Keep results under 500 tokens per call while holding at least 90% right choices.",
+        "hint": "Concise results, plus descriptions good enough to keep choices accurate."
+      },
+      {
+        "k": "retry",
+        "text": "With all 60 tools, recover from a bad date in one retry and keep the cost under ₹5,000 per 1,000 tasks.",
+        "hint": "Three changes are needed: actionable errors, concise results and on-demand loading."
+      }
+    ],
+    "tools": [
+      {
+        "n": "FastMCP",
+        "type": "Open source · Python framework",
+        "start": 3,
+        "prod": 3,
+        "best": "Writing tools where type hints become the schema, docstrings the description and ToolError an actionable message.",
+        "ex": "find_free_slot with a Literal department and a typed date replaces four EHR endpoints.",
+        "pros": [
+          "Little boilerplate",
+          "Serves the same tools over MCP"
+        ],
+        "cons": [
+          "Python only",
+          "Framework releases move quickly"
+        ],
+        "url": "https://gofastmcp.com"
+      },
+      {
+        "n": "Anthropic tool search",
+        "type": "API feature · Anthropic",
+        "start": 2,
+        "prod": 3,
+        "best": "Keeping dozens or hundreds of tools available while loading only the relevant definitions each turn.",
+        "ex": "An operations agent with 120 tools marks most as deferred and lets the search tool find them.",
+        "pros": [
+          "Large cut in definition tokens",
+          "Keeps selection accurate with many tools"
+        ],
+        "cons": [
+          "An extra search step per new tool",
+          "Descriptions must still be good to be found"
+        ],
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "n": "MCP Inspector",
+        "type": "Open source · developer tool",
+        "start": 3,
+        "prod": 1,
+        "best": "Calling tools by hand to read exactly what the model will see: schemas, results and errors.",
+        "ex": "Call find_free_slot with last year’s date and check that the error says how to fix it.",
+        "pros": [
+          "Fast feedback while designing",
+          "No model needed"
+        ],
+        "cons": [
+          "Manual, not an evaluation",
+          "MCP servers only"
+        ],
+        "url": "https://github.com/modelcontextprotocol/inspector"
+      },
+      {
+        "n": "Pydantic AI",
+        "type": "Open source · framework",
+        "start": 3,
+        "prod": 2,
+        "best": "Typed tools whose validation errors go back to the model as retry prompts.",
+        "ex": "A booking tool with a validated date lets the model correct a past date automatically.",
+        "pros": [
+          "Validation and retries built in",
+          "Type-safe tool definitions"
+        ],
+        "cons": [
+          "Framework to adopt",
+          "Python only"
+        ],
+        "url": "https://ai.pydantic.dev/"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source · evaluation",
+        "start": 2,
+        "prod": 3,
+        "best": "Scoring tool choice and arguments across a task set before and after a redesign.",
+        "ex": "50 real booking requests, each asserting the expected tool and department argument.",
+        "pros": [
+          "Repeatable before-and-after comparisons",
+          "Runs in CI"
+        ],
+        "cons": [
+          "You must write the task set",
+          "Assertions need care for multi-step runs"
+        ],
+        "url": "https://www.promptfoo.dev"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Write better tools in Python",
+        "tool": "FastMCP"
+      },
+      {
+        "need": "Dozens of tools in one agent",
+        "tool": "Anthropic tool search"
+      },
+      {
+        "need": "Prove the redesign helped",
+        "tool": "promptfoo on a task set"
+      }
+    ],
+    "goals": [
+      "Rewrite a set of thin endpoints as task-shaped tools",
+      "Explain why descriptions, result size and error text change accuracy and cost",
+      "Calculate the token cost of tool definitions and results per task"
+    ]
+  },
+  "practice": {
+    "scenario": "A Pune hospital’s scheduling agent was given 30 thin EHR endpoints, such as list_doctors, get_roster, get_leaves and list_booked_slots. It often chained them wrongly and read whole roster records. The team replaced them with 8 task tools such as find_doctor_availability and book_opd_slot, with full descriptions, concise results and errors that say how to fix the input.",
+    "industries": [
+      {
+        "industry": "Healthcare",
+        "use": "OPD booking tools that already combine rosters, leave and booked slots"
+      },
+      {
+        "industry": "Banking",
+        "use": "One search_transactions tool with filters instead of three overlapping search functions"
+      },
+      {
+        "industry": "SaaS",
+        "use": "Namespaced tools (crm_contacts_search, crm_deals_update) across several integrations"
+      }
+    ],
+    "analogy": "A good form at a government office. It asks for exactly what the clerk needs, gives an example for each box, and says why a form was rejected, so you can fix it at the counter instead of starting again.",
+    "library": {
+      "name": "FastMCP",
+      "what": "A Python framework for MCP servers: type hints become the input schema, the docstring becomes the description, and ToolError returns an actionable error.",
+      "install": "pip install fastmcp"
+    },
+    "note": "roster stands for your own EHR client. The same design rules apply to plain function-calling tools.",
+    "samples": [
+      {
+        "file": "opd_tools.py",
+        "language": "python",
+        "code": "from datetime import date\nfrom typing import Annotated, Literal\nfrom fastmcp import FastMCP\nfrom fastmcp.exceptions import ToolError\n\nmcp = FastMCP(\"opd-scheduling\")\n\n@mcp.tool\ndef find_doctor_availability(\n    department: Literal[\"cardiology\", \"orthopaedics\", \"paediatrics\", \"general_medicine\"],\n    on_date: Annotated[date, \"Clinic date in ISO 8601, e.g. 2026-10-03\"],\n    response_format: Literal[\"concise\", \"detailed\"] = \"concise\",\n) -> list[dict]:\n    \"\"\"Find doctors with free OPD slots in one department on one date.\n    Use this before book_opd_slot: it already combines the roster, leave and booked slots.\n    Do not use it for a patient's existing appointments (use get_patient_appointments).\n    Returns at most 10 doctors; 'concise' gives doctor_id, name and free slot times only.\"\"\"\n    today = date.today()\n    if on_date < today:\n        raise ToolError(f\"on_date must be today ({today.isoformat()}) or later; \"\n                        f\"you sent {on_date.isoformat()}. Check the year and try again.\")\n    rows = roster.free_slots(department, on_date)[:10]\n    if response_format == \"concise\":\n        return [{\"doctor_id\": r.id, \"name\": r.name, \"free\": r.slots} for r in rows]\n    return [r.model_dump() for r in rows]"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent exposes 40 tools, each with a 350-token definition, on every one of 6 turns. With tool search, each turn carries only a 500-token search tool plus the 5 tools it loads. How many definition tokens does one task save?",
+    "answer": "Before: 40 × 350 × 6 = 84,000 tokens. After: (500 + 5 × 350) × 6 = 2,250 × 6 = 13,500. Saved: 70,500 tokens, about 84%.",
+    "expected": {
+      "value": 70500,
+      "tolerance": 100,
+      "label": "tokens saved ="
+    },
+    "interview": [
+      {
+        "question": "How would you improve an agent that keeps choosing the wrong tool?",
+        "answer": "Read the transcripts where it chose wrongly. Usually tools overlap or descriptions are thin. Merge near-duplicates into one task-shaped tool, write descriptions that say what, when, when not and caveats, use unambiguous parameter names and enums, and load tools on demand when there are dozens. Then re-run a task set to confirm the fix."
+      },
+      {
+        "question": "What makes a good tool result and a good tool error?",
+        "answer": "A result returns only high-signal, human-readable fields, with pagination, filters and a concise mode, because every token is read by the model. An error says what was wrong and how to fix it, for example the expected format and the value received, so the model can correct itself in one retry."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Wrapping every API endpoint one-to-one as a tool",
+        "fix": "Design task-shaped tools that do what the user asked in one call"
+      },
+      {
+        "mistake": "Returning bare error codes such as E422",
+        "fix": "Say what was wrong, what was expected, and what was received"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "td01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A support agent has search_txn, find_transaction and lookup_payment, and uses them interchangeably with poor results. What is the best first fix?",
+      "options": [
+        "Add a fourth search tool for edge cases",
+        "Merge them into one search_transactions tool with clear filters and a full description",
+        "Remove all descriptions to save tokens",
+        "Force the model to call all three every time"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Overlapping tools split the model’s choices; one task-shaped tool with a clear description removes the ambiguity."
+    },
+    {
+      "id": "td02",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "According to Anthropic’s guidance, what is by far the most important factor in tool performance?",
+      "options": [
+        "The length of the tool name",
+        "Detailed tool descriptions",
+        "The number of tools",
+        "The output format of the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic calls detailed descriptions by far the most important factor, aiming for 3–4 sentences or more."
+    },
+    {
+      "id": "td03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A calendar agent must list users, list events and then create an event to book a meeting. What does good tool design suggest?",
+      "options": [
+        "Keep three separate tools",
+        "One schedule_event tool that finds availability and books",
+        "Expose the raw calendar database",
+        "Add a fourth tool that calls the other three"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Consolidate chains of thin calls into one task-shaped tool that does what the user asked."
+    },
+    {
+      "id": "td04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A tool returns full 4,100-token product records when the next step needs only id, price and stock. With concise results of 380 tokens, and 3 calls per task, how many result tokens are saved per task?",
+      "options": [
+        "3,720",
+        "7,440",
+        "11,160",
+        "12,300"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "(4,100 − 380) × 3 = 3,720 × 3 = 11,160 tokens per task."
+    },
+    {
+      "id": "td05",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A booking tool returns {\"error\": \"E422\"} when the date is in the past. What happens next, typically?",
+      "options": [
+        "The model corrects the date immediately",
+        "The model retries blindly or gives up, because the code gives no hint",
+        "The API fixes the date",
+        "The user is automatically asked"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Opaque codes give the model nothing to act on; actionable errors let it correct itself in one retry."
+    },
+    {
+      "id": "td06",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which make a parameter unambiguous? Select all that apply.",
+      "options": [
+        "Naming it customer_id rather than user",
+        "Using an enum for plan_type",
+        "Giving an example format for dates",
+        "Naming it data"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Specific names, enums and examples remove ambiguity; a generic name such as data does the opposite."
+    },
+    {
+      "id": "td07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An agent loads 60 tools on every turn and accuracy has dropped. What does Anthropic suggest past roughly 30–50 tools?",
+      "options": [
+        "Train a new model",
+        "Load tool definitions on demand with tool search",
+        "Shorten every description to one word",
+        "Split the agent into 60 agents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Selection accuracy degrades with many tools; tool search loads only relevant definitions."
+    },
+    {
+      "id": "td08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "40 tools of 350 definition tokens each are sent on each of 6 turns. With tool search, each turn carries a 500-token search tool plus 5 loaded tools. How many definition tokens are saved per task?",
+      "options": [
+        "56,000",
+        "70,500",
+        "84,000",
+        "13,500"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Before: 40 × 350 × 6 = 84,000. After: (500 + 5 × 350) × 6 = 13,500. Saved: 70,500."
+    },
+    {
+      "id": "td09",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "You connect tools from several services to one agent. Which help the model tell them apart? Select all that apply.",
+      "options": [
+        "Namespacing names, such as crm_contacts_search",
+        "Descriptions that say when not to use a tool",
+        "Identical names across services",
+        "Removing the input schemas"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Namespaces and explicit “when not to use” guidance separate similar tools; identical names or missing schemas add confusion."
+    },
+    {
+      "id": "td10",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Which error message best helps the model self-correct?",
+      "options": [
+        "“Invalid input.”",
+        "“E_VALIDATION_422”",
+        "“pickup_date must be today or later; you sent 2025-10-03. Check the year.”",
+        "“Something went wrong, try later.”"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "It names the rule, the value received and the fix."
+    },
+    {
+      "id": "td11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Claude Code caps tool responses by default at about how many tokens?",
+      "options": [
+        "2,500",
+        "25,000",
+        "250,000",
+        "No cap"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic’s engineering post notes Claude Code restricts tool responses to 25,000 tokens by default."
+    },
+    {
+      "id": "td12",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "An agent’s search tool returns long raw JSON with UUIDs. Which result changes help? Select all that apply.",
+      "options": [
+        "Return human-readable names alongside or instead of opaque ids",
+        "Paginate and cap rows",
+        "Offer a concise response_format",
+        "Return every field so nothing is missed"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Semantic fields, pagination and a concise mode make results high-signal. Returning everything floods the context."
+    },
+    {
+      "id": "td13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "How should you confirm a redesign of tool descriptions actually helped?",
+      "options": [
+        "Ask the model which version it prefers",
+        "Run a task set, score tool choice and arguments, and read failing transcripts",
+        "Count characters in the descriptions",
+        "Check that the server starts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tool design is prompt design: evaluate it on realistic tasks before and after."
+    },
+    {
+      "id": "td14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A tool definition averages 250 tokens. An agent exposes 32 tools on every turn of a 5-turn task. How many definition tokens per task?",
+      "options": [
+        "8,000",
+        "32,000",
+        "40,000",
+        "160,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "32 × 250 × 5 = 40,000 tokens."
+    },
+    {
+      "id": "td15",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which are signs of poor tool design in agent transcripts? Select all that apply.",
+      "options": [
+        "The model calls two tools that do almost the same thing in one task",
+        "The model retries the same bad argument several times",
+        "The model calls a tool once and answers",
+        "The model asks the user for a missing account number"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Near-duplicate calls and blind retries point to overlapping tools and unhelpful errors. The other two are good behaviour."
+    },
+    {
+      "id": "td16",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Anthropic’s example cut a Slack-thread result from 206 tokens to 72 with a concise format. Roughly what fraction was removed?",
+      "options": [
+        "About one third",
+        "About half",
+        "About two thirds",
+        "About nine tenths"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "(206 − 72) ÷ 206 = 134 ÷ 206 ≈ 0.65, about two thirds."
+    },
+    {
+      "id": "td17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "In MCP, how should a tool report that an input failed validation, so the model can self-correct?",
+      "options": [
+        "As a JSON-RPC protocol error only",
+        "As a tool execution error in the result, with isError true",
+        "By closing the connection",
+        "By returning an empty result"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "MCP puts input-validation failures in tool execution errors (isError true) so the model can see and fix them."
+    },
+    {
+      "id": "td18",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A hospital replaces 30 thin EHR endpoints with 8 task tools. Which benefits should you expect? Select all that apply.",
+      "options": [
+        "Fewer calls per task",
+        "Fewer wrong tool choices",
+        "Fewer definition tokens per turn",
+        "A guarantee of zero errors"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Task-shaped tools reduce calls, ambiguity and definition tokens, but nothing guarantees zero errors."
+    },
+    {
+      "id": "td19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Which description is best for a refund tool?",
+      "options": [
+        "“Refund.”",
+        "“Issues a refund.”",
+        "“Refunds a settled UPI payment by UTR, up to the original amount. Use only after the dispute is approved; do not use for failed payments, which auto-reverse. Returns refund id and status.”",
+        "“Use this tool for everything related to money.”"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "It says what, when, when not and what it returns."
+    },
+    {
+      "id": "td20",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which tools help you design and test tool interfaces? Select all that apply.",
+      "options": [
+        "MCP Inspector, to call tools by hand and read raw results",
+        "promptfoo, to score tool choice across a task set",
+        "A CDN, to cache tool definitions",
+        "A load balancer, to spread tool calls"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Inspector shows exactly what the model sees; promptfoo measures behaviour across tasks. The others are infrastructure."
+    }
+  ]
+}

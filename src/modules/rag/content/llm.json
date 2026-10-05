@@ -1,0 +1,869 @@
+{
+  "id": "llm",
+  "moduleSlug": "rag",
+  "name": "Query Rewriting and HyDE",
+  "shortName": "Query rewriting",
+  "question": "Can a model turn the question into a better search?",
+  "summary": "Uses an LLM before retrieval to make the question searchable. It rewrites a chatty follow-up into a standalone query using the conversation, generates a few alternative phrasings and fuses their results (multi-query), splits a multi-part question into sub-queries, or writes a hypothetical answer and embeds that instead of the question (HyDE). Each trick raises recall at the cost of an LLM call. Ordering the results afterwards is a separate step: re-ranking.",
+  "useCases": [
+    "Conversational follow-ups such as “and the other one?”",
+    "Documents that use different words from the users",
+    "Multi-part questions that need several searches"
+  ],
+  "keyFacts": {
+    "label": "Techniques",
+    "items": [
+      {
+        "term": "Query rewriting",
+        "detail": "turn chatty or vague input into a standalone search query"
+      },
+      {
+        "term": "Multi-query",
+        "detail": "search several phrasings and merge with reciprocal rank fusion"
+      },
+      {
+        "term": "HyDE",
+        "detail": "embed a hypothetical answer instead of the question"
+      },
+      {
+        "term": "Decomposition",
+        "detail": "split a complex question into sub-queries"
+      },
+      {
+        "term": "Step-back query",
+        "detail": "search a more general question alongside the specific one"
+      }
+    ]
+  },
+  "steps": [
+    "Rewrite follow-ups into standalone queries using the chat history",
+    "Add multi-query with fusion when documents use varied wording",
+    "Try HyDE for short or vague questions and compare with the plain query",
+    "Measure recall and latency before and after each addition"
+  ],
+  "pitfalls": [
+    "Every LLM step adds latency and cost",
+    "Rewrites can drift from what the user meant",
+    "HyDE can invent details that pull retrieval off course"
+  ],
+  "tools": [
+    "LangChain MultiQueryRetriever",
+    "LlamaIndex HyDEQueryTransform",
+    "LlamaIndex SubQuestionQueryEngine",
+    "DSPy"
+  ],
+  "remember": "Fix the question before you search.",
+  "caption": "Rewriting puts the right passage in the pool; re-ranking then moves it up.",
+  "comparison": {
+    "scope": "Before retrieval",
+    "cost": 3,
+    "needs": "Vague or conversational questions",
+    "best": "Latency; drift from intent"
+  },
+  "diagram": {
+    "file": "diagrams/llm.svg"
+  },
+  "lesson": {
+    "file": "rewrite_rerank.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from sentence_transformers import CrossEncoder",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "history  = \"User asked about the exit load on the Flexi Cap Fund.\"",
+        "steps": []
+      },
+      {
+        "text": "followup = \"and what about the other one, the balanced fund?\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "query = llm(\"Rewrite as one standalone search query.\\n\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            f\"Chat so far: {history}\\nQuestion: {followup}\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# -> \"exit load Balanced Advantage Fund\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "variants = llm(f\"Give 3 different search phrasings of: {query}\").splitlines()",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "pools = [hybrid_search(v, k=50) for v in [query, *variants]]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "candidates = rrf(pools)[:50]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "reranker = CrossEncoder(\"cross-encoder/ms-marco-MiniLM-L-6-v2\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "scores = reranker.predict([(query, c.text) for c in candidates])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "ranked = [c for _, c in sorted(zip(scores, candidates), key=lambda x: -x[0])]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "context = ranked[:5]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "answer = llm(prompt(question=query, context=context))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for name, pipeline in [(\"baseline\", base), (\"rewrite+rerank\", full)]:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    r5 = recall_at_k(pipeline, eval_set, k=5)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(name, f\"recall@5={r5:.2f}\", f\"p95={p95_ms(pipeline)} ms\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Rewrite the follow-up",
+        "text": "“and what about the other one?” has nothing to search on. An LLM uses the chat history to write a standalone query."
+      },
+      {
+        "title": "Generate alternative phrasings",
+        "text": "Multi-query asks for a few rephrasings, because documents may use different words: exit load, redemption charge, exit fee."
+      },
+      {
+        "title": "Retrieve wide and merge",
+        "text": "Run hybrid search for every phrasing, merge the lists with reciprocal rank fusion and keep 50 candidates. The right passage is in the pool, at rank 23."
+      },
+      {
+        "title": "Re-rank with a cross-encoder",
+        "text": "A cross-encoder reads the query and each passage together, which is more accurate than comparing two vectors. The right passage moves from 23 to 2."
+      },
+      {
+        "title": "Send only the top 5 to the model",
+        "text": "Only the best few passages go into the prompt, so the model sees the right one without a pile of noise."
+      },
+      {
+        "title": "Measure what each step buys",
+        "text": "Compare recall@5 and latency with and without each step. Here recall@5 rises from 0.62 to 0.88 for about 410 ms more per query."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"150\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"83\" y=\"25\" text-anchor=\"middle\">“and the other one?”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M160 21L176 21\" marker-end=\"url(#arr)\"/></g><g class=\"a dark-t\" style=\"--d:0.2s\"><rect class=\"bx dark\" x=\"178\" y=\"6\" width=\"56\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"206\" y=\"25.5\">LLM</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln acc\" d=\"M236 21L252 21\" marker-end=\"url(#arrA)\"/></g><text class=\"sb a\" x=\"302\" y=\"25\" text-anchor=\"middle\" style=\"--d:0.35s;text-anchor:middle\">+ chat history</text><g class=\"a\" style=\"--d:0.45s\"><rect class=\"bx acc\" x=\"8\" y=\"46\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"63\" text-anchor=\"middle\">exit load Balanced Advantage Fund</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"84\" width=\"92\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"54\" y=\"100\" text-anchor=\"middle\">BAF exit load</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"112\" y=\"84\" width=\"142\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"183\" y=\"100\" text-anchor=\"middle\">BAF redemption charge</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"266\" y=\"84\" width=\"86\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"309\" y=\"100\" text-anchor=\"middle\">BAF exit fee</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"120\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"134\">Hybrid search × 4 → RRF → 50 candidates</text><text class=\"sb\" x=\"180\" y=\"149\">right passage at rank 23</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"166\" width=\"150\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"182\">Cross-encoder</text><text class=\"sb\" x=\"83\" y=\"197\">reads query + passage</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M160 185L176 185\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"178\" y=\"173\" width=\"174\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"265\" y=\"189\" text-anchor=\"middle\">rank 23 → rank 2</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"228\" style=\"--d:0s\">Top 5 → prompt</text><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"130\" y=\"214\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"142\" y=\"228\" text-anchor=\"middle\" style=\"text-anchor:middle\">1</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx pass\" x=\"160\" y=\"214\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"172\" y=\"228\" text-anchor=\"middle\" style=\"text-anchor:middle\">2</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx soft\" x=\"190\" y=\"214\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"202\" y=\"228\" text-anchor=\"middle\" style=\"text-anchor:middle\">3</text></g><g class=\"a\" style=\"--d:0.42000000000000004s\"><rect class=\"bx soft\" x=\"220\" y=\"214\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"232\" y=\"228\" text-anchor=\"middle\" style=\"text-anchor:middle\">4</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"250\" y=\"214\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"262\" y=\"228\" text-anchor=\"middle\" style=\"text-anchor:middle\">5</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"240\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"254\" text-anchor=\"middle\">recall@5: 0.62 → 0.88 · latency +410 ms</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Fixes vague, conversational and follow-up queries",
+      "Multi-query finds documents that use different words",
+      "Works with any retriever you already have",
+      "Each step can be switched on only where it pays"
+    ],
+    "cons": [
+      "Every LLM call adds latency and cost",
+      "Rewrites can drift from what the user meant",
+      "HyDE can invent details that bias retrieval",
+      "More moving parts to monitor and evaluate"
+    ],
+    "avoidWhen": [
+      "Queries are already short and precise, and latency is tight",
+      "The right passage is in the pool but ranked low (re-rank instead)"
+    ],
+    "tools": [
+      {
+        "name": "LangChain",
+        "type": "Open source framework",
+        "what": "MultiQueryRetriever and query-rewriting chains",
+        "url": "https://docs.langchain.com"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source framework",
+        "what": "HyDE and sub-question query transforms",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "DSPy",
+        "type": "Open source",
+        "what": "Optimises the rewriting prompt against your own metric",
+        "url": "https://dspy.ai"
+      },
+      {
+        "name": "Haystack",
+        "type": "Open source framework",
+        "what": "Query expansion components in retrieval pipelines",
+        "url": "https://haystack.deepset.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A mutual-fund chatbot receives the follow-up “and what about the other one, the balanced fund?”. The answer sits in one passage about the Balanced Advantage Fund’s exit load. Only the top 5 passages go into the prompt, and the whole retrieval must finish within 800 ms.",
+    "controls": [
+      "Switch LLM query rewriting and multi-query on or off.",
+      "Switch cross-encoder re-ranking on or off.",
+      "Drag the number of candidates retrieved before re-ranking."
+    ],
+    "outputs": [
+      {
+        "name": "First-stage rank",
+        "meaning": "Where hybrid search puts the right passage before any re-ranking."
+      },
+      {
+        "name": "In the candidate pool",
+        "meaning": "Whether that rank is inside the number of candidates retrieved."
+      },
+      {
+        "name": "Final rank",
+        "meaning": "The passage’s position after re-ranking, or its first-stage rank without it."
+      },
+      {
+        "name": "Latency",
+        "meaning": "Total time: 40 ms search plus each LLM call and the re-ranker."
+      },
+      {
+        "name": "LLM calls per query",
+        "meaning": "Extra generation calls, the main driver of cost."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Raw follow-up",
+        "expect": "The follow-up alone puts the passage beyond rank 100, outside the 10 candidates. 40 ms, but no answer."
+      },
+      {
+        "k": "norerank",
+        "name": "Rewrite only",
+        "expect": "The rewritten query finds it at rank 23 of 50, but without re-ranking it never reaches the top 5. 390 ms."
+      },
+      {
+        "k": "mq",
+        "name": "Multi-query only",
+        "expect": "Phrasings of the raw follow-up find it at rank 41 of 50, still outside the top 5. 460 ms."
+      },
+      {
+        "k": "all",
+        "name": "Everything on",
+        "expect": "Rank 12, then 2 after re-ranking 100 candidates, but 1,030 ms is over the 800 ms budget."
+      }
+    ],
+    "missions": [
+      {
+        "k": "hit",
+        "text": "Get the right passage into the top 5 within the 800 ms budget.",
+        "hint": "Rewrite the query, turn on re-ranking and retrieve 50 candidates."
+      },
+      {
+        "k": "blind",
+        "text": "Show that re-ranking cannot rescue a passage that retrieval never found.",
+        "hint": "Turn on only re-ranking, so the passage is still beyond rank 100."
+      },
+      {
+        "k": "lean",
+        "text": "Get the passage into the top 5 in under 500 ms.",
+        "hint": "Rewrite and re-rank, but retrieve only as many candidates as you need: 25 to 40."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Cohere Rerank",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Re-ranking a candidate list with a hosted, multilingual model.",
+        "ex": "Re-rank the top 50 hybrid results for an insurer’s policy chatbot before building the prompt.",
+        "pros": [
+          "One API call; strong multilingual quality",
+          "No GPUs to run"
+        ],
+        "cons": [
+          "Per-search pricing",
+          "Adds a network round trip"
+        ],
+        "url": "https://docs.cohere.com/docs/rerank-overview"
+      },
+      {
+        "n": "bge-reranker-v2-m3",
+        "type": "Open model · BAAI",
+        "start": 2,
+        "prod": 3,
+        "best": "A self-hosted multilingual cross-encoder.",
+        "ex": "Re-rank Hindi and English passages inside a bank’s own infrastructure.",
+        "pros": [
+          "Open weights, runs on your hardware",
+          "Strong multilingual quality"
+        ],
+        "cons": [
+          "Needs a GPU for low latency at volume",
+          "You operate and scale it"
+        ],
+        "url": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+      },
+      {
+        "n": "sentence-transformers CrossEncoder",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 2,
+        "best": "Loading and running open cross-encoders such as ms-marco-MiniLM with a few lines.",
+        "ex": "Re-rank 50 candidates in a notebook to measure recall@5 before and after.",
+        "pros": [
+          "Simple predict() on (query, passage) pairs",
+          "Many small, fast models"
+        ],
+        "cons": [
+          "Serving at scale is up to you",
+          "Small models are English-first"
+        ],
+        "url": "https://www.sbert.net"
+      },
+      {
+        "n": "Jina Reranker",
+        "type": "Commercial API · open models",
+        "start": 3,
+        "prod": 2,
+        "best": "Re-ranking with long-document and multilingual options, hosted or open.",
+        "ex": "Re-rank long legal documents where each candidate is several thousand tokens.",
+        "pros": [
+          "Hosted and open-weight variants",
+          "Long inputs"
+        ],
+        "cons": [
+          "Some open weights have non-commercial licences",
+          "Another vendor to evaluate"
+        ],
+        "url": "https://jina.ai/reranker/"
+      },
+      {
+        "n": "LlamaIndex",
+        "type": "Open source framework",
+        "start": 3,
+        "prod": 2,
+        "best": "Ready-made query transforms (including HyDE), sub-question decomposition and re-ranking post-processors.",
+        "ex": "Split “compare the exit loads of fund A and fund B” into two sub-queries and merge the answers.",
+        "pros": [
+          "Many retrieval patterns ready to use",
+          "Works with most vector stores"
+        ],
+        "cons": [
+          "Abstractions can hide what each step costs",
+          "Fast-moving APIs"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "LangChain",
+        "type": "Open source framework",
+        "start": 3,
+        "prod": 2,
+        "best": "Multi-query and contextual-compression retrievers that wrap an existing retriever.",
+        "ex": "Wrap a vector retriever so every question is searched with three LLM-written phrasings.",
+        "pros": [
+          "Large ecosystem of integrations",
+          "Quick to wire up"
+        ],
+        "cons": [
+          "Extra layers to debug",
+          "APIs change often"
+        ],
+        "url": "https://docs.langchain.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype re-ranking today",
+        "tool": "sentence-transformers CrossEncoder"
+      },
+      {
+        "need": "Hosted re-ranking in production",
+        "tool": "Cohere Rerank"
+      },
+      {
+        "need": "Self-hosted, multilingual",
+        "tool": "bge-reranker-v2-m3"
+      }
+    ],
+    "goals": [
+      "Explain query rewriting, multi-query and HyDE, and when each helps",
+      "Explain why re-ranking needs a wide first-stage candidate pool",
+      "Weigh recall gains against latency and cost for each LLM step"
+    ]
+  },
+  "practice": {
+    "scenario": "A mutual-fund chatbot receives “and what about the other one, the balanced fund?” in the middle of a conversation. An LLM rewrites it as “exit load Balanced Advantage Fund” using the chat history, hybrid search pulls 50 candidates, and a cross-encoder keeps the best 5.",
+    "industries": [
+      {
+        "industry": "Fintech & insurance chat",
+        "use": "Rewrite follow-up questions using the conversation history"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Re-rank product results before showing the top 10"
+      },
+      {
+        "industry": "Enterprise knowledge",
+        "use": "Split multi-part questions across several wikis"
+      }
+    ],
+    "analogy": "A reference librarian who first asks what exactly you need, then hands you the best three books from the pile.",
+    "library": {
+      "name": "sentence-transformers CrossEncoder",
+      "what": "Open-source re-rankers that read the query and passage together. Cohere Rerank is the common hosted alternative.",
+      "install": "pip install sentence-transformers"
+    },
+    "samples": [
+      {
+        "file": "rewrite_rerank.py",
+        "language": "python",
+        "code": "from sentence_transformers import CrossEncoder\n\nhistory  = \"User asked about the exit load on the Flexi Cap Fund.\"\nfollowup = \"and what about the other one, the balanced fund?\"\n\nquery = llm(f\"Rewrite as a standalone search query.\\n\"\n            f\"Context: {history}\\nQuestion: {followup}\")\n# -> \"exit load Balanced Advantage Fund\"\n\ncandidates = hybrid_search(query, k=50)              # wide recall first\nreranker = CrossEncoder(\"cross-encoder/ms-marco-MiniLM-L-6-v2\")\nscores = reranker.predict([(query, c) for c in candidates])\ntop5 = [c for _, c in sorted(zip(scores, candidates), reverse=True)[:5]]"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Retrieval returns 50 candidates and the right passage is at rank 23. Your prompt uses the top 5. After re-ranking it moves to rank 2. What happens to recall@5 for this query?",
+    "answer": "It goes from 0 (rank 23 is outside the top 5) to 1. The retriever had found it; the ranking was the problem, which is exactly what re-ranking fixes.",
+    "interview": [
+      {
+        "question": "What is HyDE, and when does it help?",
+        "answer": "Hypothetical Document Embeddings: an LLM writes a plausible answer and you embed that instead of the question. It helps when questions are short or phrased very differently from the documents, and can hurt if the hypothetical answer invents false details."
+      },
+      {
+        "question": "Where does a re-ranker go in the pipeline?",
+        "answer": "After a wide, cheap retrieval step (hybrid top 50–100) and before building the prompt. It improves precision at the very top, which is what the model sees."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Re-ranking only the top 5 you already had",
+        "fix": "Retrieve wide (50–100), then re-rank"
+      },
+      {
+        "mistake": "Rewriting every query",
+        "fix": "Rewrite vague or conversational queries; skip clear ones to save latency"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ll01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Mid-chat, “what about the second one?” retrieves unrelated documents. What is the fix?",
+      "options": [
+        "Rewrite the query with an LLM using the chat history",
+        "Retrieve more chunks",
+        "Use int8 vectors",
+        "Switch embedding model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The query alone has nothing to search on. A standalone rewrite restores the missing context."
+    },
+    {
+      "id": "ll02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Where does a cross-encoder re-ranker belong in a product-search pipeline?",
+      "options": [
+        "Before retrieval, to pick the index",
+        "After a wide first-stage retrieval, before building the results",
+        "Instead of retrieval, over the full catalogue",
+        "After the LLM writes its answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieve many cheap candidates, then re-rank a short list precisely."
+    },
+    {
+      "id": "ll03",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which statements about HyDE are true? Select all that apply.",
+      "options": [
+        "It embeds a hypothetical answer instead of the question",
+        "It can help when questions are short or phrased unlike the documents",
+        "It can bias retrieval if the hypothetical answer invents details",
+        "It removes the need for a retriever"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "HyDE changes what is embedded; retrieval still happens, and invented details are its main risk."
+    },
+    {
+      "id": "ll04",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "The right passage is at rank 23 of 50 candidates and the prompt uses the top 5. Re-ranking moves it to rank 2. What happens to recall@5 for this query?",
+      "options": [
+        "It goes from 0 to 1",
+        "It stays at 0",
+        "It goes from 0.5 to 1",
+        "It drops"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Rank 23 is outside the top 5; rank 2 is inside. The retriever found it; re-ranking fixed the order."
+    },
+    {
+      "id": "ll05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Search takes 40 ms, the rewrite call 350 ms, and re-ranking costs 20 ms plus 2 ms per candidate. What is the latency with 50 candidates?",
+      "options": [
+        "510 ms",
+        "490 ms",
+        "410 ms",
+        "610 ms"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "40 + 350 + 20 + 2 × 50 = 510 ms."
+    },
+    {
+      "id": "ll06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "“Compare roaming charges in the UAE and the UK” retrieves only UAE documents. What helps most?",
+      "options": [
+        "Decompose it into one sub-query per country",
+        "Raise the similarity threshold",
+        "Binary quantization",
+        "Use a smaller chunk size"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Multi-part questions need several searches whose results are merged."
+    },
+    {
+      "id": "ll07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why not run a cross-encoder over all 5 million passages for every query?",
+      "options": [
+        "Cross-encoders are less accurate than bi-encoders",
+        "Nothing can be precomputed, so each query needs 5 million forward passes",
+        "Cross-encoders cannot score medical text",
+        "They only accept one passage per day"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A cross-encoder reads each query–passage pair together, so the cost grows with the corpus for every query."
+    },
+    {
+      "id": "ll08",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "What are the risks of adding LLM query rewriting? Select all that apply.",
+      "options": [
+        "The rewrite can drift from what the user meant",
+        "Added latency",
+        "Added cost per query",
+        "It guarantees answers free of hallucination"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Rewriting helps recall but costs time and money and can change the meaning. It guarantees nothing about answers."
+    },
+    {
+      "id": "ll09",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Multi-query search runs four phrasings and returns four ranked lists. How are they usually merged?",
+      "options": [
+        "Reciprocal rank fusion",
+        "Keep only the longest list",
+        "Average the raw scores",
+        "Pick one list at random"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "RRF combines rankings robustly without comparing raw scores."
+    },
+    {
+      "id": "ll10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A rewrite call costs ₹0.02 per query and the site serves 3 lakh queries a day. What is the daily cost?",
+      "options": [
+        "₹6,000",
+        "₹600",
+        "₹60,000",
+        "₹3,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "300,000 × ₹0.02 = ₹6,000 per day."
+    },
+    {
+      "id": "ll11",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Before indexing, an LLM writes a one-sentence note on where each chunk sits in its document, and the note is embedded with the chunk. What is this called?",
+      "options": [
+        "Contextual retrieval",
+        "HyDE",
+        "Query decomposition",
+        "Binary quantization"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Anthropic’s contextual retrieval prepends chunk-specific context before embedding and BM25 indexing."
+    },
+    {
+      "id": "ll12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A pipeline retrieves 5 candidates, re-ranks them and keeps the top 5. Recall did not improve. Why?",
+      "options": [
+        "The re-ranker is too small",
+        "Re-ranking can only reorder the same 5 passages; retrieve wider first",
+        "The top 5 should be the top 3",
+        "Cross-encoders reduce recall"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "To improve recall at 5, the first stage must surface the right passage somewhere in a larger pool."
+    },
+    {
+      "id": "ll13",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is it reasonable to skip LLM query rewriting? Select all that apply.",
+      "options": [
+        "The query is a precise policy number",
+        "The latency budget is tight and the query is already clear",
+        "The query is a clear, complete question",
+        "The query is a follow-up full of pronouns"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Rewrite where it pays: vague and follow-up questions. Clear queries can skip it to save latency."
+    },
+    {
+      "id": "ll14",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Your budget is 600 ms. Rewrite plus re-ranking takes 520 ms, and multi-query would add 420 ms. What do you do?",
+      "options": [
+        "Keep rewrite and re-ranking; skip multi-query or trigger it only for hard queries",
+        "Add multi-query anyway",
+        "Remove re-ranking and add multi-query",
+        "Double the candidate pool"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "940 ms breaks the budget. Add expensive steps only where they are measured to pay off."
+    },
+    {
+      "id": "ll15",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "What should you log to evaluate query rewriting in production? Select all that apply.",
+      "options": [
+        "The original query",
+        "The rewritten query",
+        "The IDs of retrieved passages",
+        "Only the final answer text"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Comparing original, rewrite and retrieved results shows drift and recall problems. The answer alone hides them."
+    },
+    {
+      "id": "ll16",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "First-stage recall@50 is 0.92. Even with a perfect re-ranker, what is the highest recall@5 you can reach?",
+      "options": [
+        "0.92",
+        "1.00",
+        "0.46",
+        "0.50"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A re-ranker cannot surface passages outside the 50 candidates."
+    },
+    {
+      "id": "ll17",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which of these act before retrieval runs? Select all that apply.",
+      "options": [
+        "Query rewriting",
+        "HyDE",
+        "Cross-encoder re-ranking",
+        "Query decomposition"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Rewriting, HyDE and decomposition shape the search; re-ranking works on its results."
+    },
+    {
+      "id": "ll18",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "With HyDE, the hypothetical answer mentions the wrong dosage, and retrieval returns a page about a different drug. What went wrong?",
+      "options": [
+        "The hypothetical answer invented details that steered retrieval",
+        "BM25 IDF was too high",
+        "The index was quantized",
+        "Chunks overlapped too much"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "HyDE’s main risk: invented details bias which documents look similar."
+    },
+    {
+      "id": "ll19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "You need multilingual re-ranking in production with no GPUs to manage. Which tool fits?",
+      "options": [
+        "Cohere Rerank",
+        "scikit-learn PCA",
+        "rank_bm25",
+        "OpenCLIP"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A hosted re-ranking API avoids running models yourself."
+    },
+    {
+      "id": "ll20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What does a cross-encoder take as input and return?",
+      "options": [
+        "A query–passage pair; a relevance score",
+        "A single text; a vector",
+        "An image; a caption",
+        "A vector; a text"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It scores pairs directly instead of producing vectors to compare."
+    }
+  ]
+}

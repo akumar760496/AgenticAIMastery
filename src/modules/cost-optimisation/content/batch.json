@@ -1,0 +1,877 @@
+{
+  "id": "batch",
+  "moduleSlug": "cost-optimisation",
+  "name": "Batch Processing",
+  "shortName": "Batch processing",
+  "question": "Can this wait a few hours for half the price?",
+  "summary": "Submit large sets of non-urgent requests as one asynchronous batch. Major providers price batch jobs at about half the standard rate and return results within 24 hours, often much sooner. Ideal for evaluations, classification, enrichment and summaries over large datasets.",
+  "useCases": [
+    "Nightly or weekly jobs nobody waits on",
+    "Running eval suites and backfills",
+    "Tagging, extraction or summarization over large archives"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Discount",
+        "detail": "about 50% off standard pricing on major providers"
+      },
+      {
+        "term": "Turnaround",
+        "detail": "results within a 24-hour window"
+      },
+      {
+        "term": "Format",
+        "detail": "a file of requests, each with a custom ID"
+      },
+      {
+        "term": "Stacking",
+        "detail": "can combine with prompt caching for further savings"
+      },
+      {
+        "term": "Good fits",
+        "detail": "evals, tagging, summaries, backfills"
+      }
+    ]
+  },
+  "steps": [
+    "Find workloads nobody waits on: nightly jobs, evals, backfills",
+    "Write requests to a JSONL file with a custom ID per item",
+    "Submit, poll for completion, and match results back by ID",
+    "Retry only the failed items in a follow-up batch"
+  ],
+  "pitfalls": [
+    "No streaming and no real-time answers",
+    "Partial failures must be tracked by ID",
+    "Very large jobs hit size and rate limits, so split them"
+  ],
+  "tools": [
+    "Anthropic Message Batches API",
+    "OpenAI Batch API",
+    "Vertex AI batch prediction",
+    "Amazon Bedrock batch inference"
+  ],
+  "remember": "Not urgent? Batch it and pay half.",
+  "caption": "Check your provider’s current batch pricing and limits.",
+  "comparison": {
+    "scope": "Price per token",
+    "cost": 4,
+    "needs": "Low",
+    "best": "Hours of delay; async only"
+  },
+  "diagram": {
+    "file": "diagrams/batch.svg"
+  },
+  "lesson": {
+    "file": "batch.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json, time",
+        "steps": []
+      },
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "client = OpenAI()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "with open(\"tickets.jsonl\", \"w\") as f:",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    for t in tickets:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        f.write(json.dumps({\"custom_id\": t.id, \"method\": \"POST\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"url\": \"/v1/chat/completions\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"body\": {\"model\": \"gpt-4o-mini\", \"max_tokens\": 200,",
+        "steps": []
+      },
+      {
+        "text": "                     \"messages\": [{\"role\": \"user\", \"content\": PROMPT + t.text}]}}) + \"\\n\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "upload = client.files.create(file=open(\"tickets.jsonl\", \"rb\"), purpose=\"batch\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "batch = client.batches.create(input_file_id=upload.id,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                              endpoint=\"/v1/chat/completions\",",
+        "steps": []
+      },
+      {
+        "text": "                              completion_window=\"24h\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "while (b := client.batches.retrieve(batch.id)).status not in (",
+        "steps": []
+      },
+      {
+        "text": "        \"completed\", \"failed\", \"expired\", \"cancelled\"):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    time.sleep(300)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for line in client.files.content(b.output_file_id).text.splitlines():",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    r = json.loads(line)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    save(r[\"custom_id\"], r[\"response\"][\"body\"][\"choices\"][0][\"message\"][\"content\"])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "failed = [json.loads(l)[\"custom_id\"] for l in",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "          client.files.content(b.error_file_id).text.splitlines()] if b.error_file_id else []",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "resubmit(failed)                        # a small follow-up batch",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# Bill check: batch requests are billed at 50% of standard rates",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Find work nobody waits on",
+        "text": "Nightly tagging and eval suites fit; live chat and agent loops that need each answer immediately do not."
+      },
+      {
+        "title": "Write one request per line",
+        "text": "Each line of the JSONL file is a complete request with a unique custom_id, so results can be matched later."
+      },
+      {
+        "title": "Upload, submit and poll",
+        "text": "Create the batch with a 24-hour completion window, then poll every few minutes. Many batches finish much sooner."
+      },
+      {
+        "title": "Match results by ID",
+        "text": "Results are not guaranteed to come back in input order. Join each one to its ticket by custom_id."
+      },
+      {
+        "title": "Retry only what failed",
+        "text": "The error file lists the failed IDs. Resubmit just those in a small follow-up batch, never the whole job."
+      },
+      {
+        "title": "Check the bill",
+        "text": "100,000 tickets at $0.0075 each cost $750 through the real-time API and $375 as a batch."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"64\" y=\"24\" text-anchor=\"middle\">nightly tagging ✓</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"24\" text-anchor=\"middle\">eval suite ✓</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"24\" text-anchor=\"middle\">live chat ✗</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"44\" width=\"150\" height=\"80\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"62\">tickets.jsonl</text></g><text class=\"mono a\" x=\"18\" y=\"82\" style=\"--d:0.15s\">custom_id: t-00001</text><text class=\"mono a\" x=\"18\" y=\"97\" style=\"--d:0.25s\">custom_id: t-00002</text><text class=\"mono a\" x=\"18\" y=\"112\" style=\"--d:0.35s\">custom_id: t-00003</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M160 84L176 84\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"178\" y=\"54\" width=\"174\" height=\"60\" rx=\"7\"/><text class=\"lb\" x=\"265\" y=\"81\">Batch API</text><text class=\"sb\" x=\"265\" y=\"96\">24 h window · 50% price</text></g><g class=\"a\" style=\"--d:0.4s\"><text class=\"tag-t\" x=\"265\" y=\"130\" style=\"text-anchor:middle;fill:var(--accent)\">in_progress → completed</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"142\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"64\" y=\"158\" text-anchor=\"middle\">t-00001 ✓</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"142\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"158\" text-anchor=\"middle\">t-00002 ✓</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"240\" y=\"142\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"158\" text-anchor=\"middle\">t-00003 ✗</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M296 166L296 178\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"240\" y=\"180\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"195\" text-anchor=\"middle\">retry: 1 ID</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"180\" width=\"228\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"122\" y=\"195\" text-anchor=\"middle\">only failed IDs are resubmitted</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"84\" y=\"224\" style=\"text-anchor:end;--d:0s\">Real-time</text><rect x=\"90\" y=\"214\" width=\"220\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"90\" y=\"214\" width=\"220\" height=\"13\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><text class=\"mono a\" x=\"316\" y=\"224\" style=\"--d:0.3s\">$750</text><text class=\"tl a\" x=\"84\" y=\"246\" style=\"text-anchor:end;--d:0.2s\">Batch</text><rect x=\"90\" y=\"236\" width=\"220\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"90\" y=\"236\" width=\"110\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.3s\"/><text class=\"mono a\" x=\"206\" y=\"246\" style=\"--d:0.5s\">$375</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "About half the price on major providers",
+      "No rate-limit juggling: the provider schedules the work",
+      "Simple format: one file of requests with IDs",
+      "Stacks with prompt caching and small models"
+    ],
+    "cons": [
+      "No streaming and no immediate answers",
+      "Completion is guaranteed only within the window, often 24 hours",
+      "Partial failures must be tracked and retried by ID",
+      "Batch size limits force large jobs to be split"
+    ],
+    "avoidWhen": [
+      "Someone is waiting for the answer",
+      "Each result decides the next request, as in an agent loop"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic Message Batches API",
+        "type": "Provider feature",
+        "what": "Up to 100,000 requests per batch at 50% of standard price",
+        "url": "https://docs.anthropic.com/en/docs/build-with-claude/batch-processing"
+      },
+      {
+        "name": "OpenAI Batch API",
+        "type": "Provider feature",
+        "what": "JSONL batches with a 24-hour completion window at 50% off",
+        "url": "https://platform.openai.com/docs/guides/batch"
+      },
+      {
+        "name": "Gemini API batch mode",
+        "type": "Provider feature",
+        "what": "Asynchronous jobs at a discount to interactive pricing",
+        "url": "https://ai.google.dev/gemini-api/docs/batch-mode"
+      },
+      {
+        "name": "Vertex AI batch prediction",
+        "type": "Google Cloud",
+        "what": "Batch jobs from Cloud Storage or BigQuery",
+        "url": "https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/batch-prediction-gemini"
+      },
+      {
+        "name": "Amazon Bedrock batch inference",
+        "type": "AWS",
+        "what": "Batch jobs from S3 for supported models",
+        "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/batch-inference.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Every night a bank tags support tickets with intent and sentiment for the next morning's dashboard. You decide how many tickets, whether they go through the real-time API or a batch API, when the results are needed, how failures are retried, and whether the shared instructions are cached.",
+    "controls": [
+      "Drag the slider to set the number of tickets.",
+      "Choose the API, the deadline and the retry strategy.",
+      "Tick the box to cache the 1,000 tokens of shared instructions."
+    ],
+    "outputs": [
+      {
+        "name": "Cost vs real-time baseline",
+        "meaning": "Total cost as a share of running the same tickets through the real-time API without caching."
+      },
+      {
+        "name": "Cost per ticket",
+        "meaning": "Input plus output cost for one ticket with your settings."
+      },
+      {
+        "name": "Turnaround",
+        "meaning": "How long the job takes, or what the provider promises."
+      },
+      {
+        "name": "Deadline",
+        "meaning": "Guaranteed, likely or at risk, given the API and the deadline."
+      },
+      {
+        "name": "Batches to submit",
+        "meaning": "Jobs above 100,000 requests must be split."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Real-time API",
+        "expect": "100,000 tickets at $0.0075 each plus 2% retries: $765, done in about 51 minutes."
+      },
+      {
+        "k": "batch",
+        "name": "Batch API",
+        "expect": "The same job as one batch: $382.50, 50% of real-time, guaranteed within the 24-hour deadline."
+      },
+      {
+        "k": "urgent",
+        "name": "Urgent, via batch",
+        "expect": "200,000 tickets due in 2 hours: the batch costs $765 but its delivery is not guaranteed in time."
+      }
+    ],
+    "missions": [
+      {
+        "k": "stack",
+        "text": "Bring the cost down to 35% of the real-time baseline or less.",
+        "hint": "Batch alone gives 50%. Stack prompt caching on the shared instructions."
+      },
+      {
+        "k": "deadline",
+        "text": "With at least 200,000 tickets due in 2 hours, choose a setup that is guaranteed to finish.",
+        "hint": "A batch only promises 24 hours. The real-time API can push 2,000 requests a minute."
+      },
+      {
+        "k": "waste",
+        "text": "Use the batch API but wipe out almost all of its saving through the retry strategy.",
+        "hint": "Resubmit the whole job instead of the failed IDs, with caching off."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic Message Batches API",
+        "type": "Provider feature · Claude API",
+        "start": 3,
+        "prod": 3,
+        "best": "Asynchronous batches of up to 100,000 requests at 50% of standard prices, with results by custom ID.",
+        "ex": "Tag 100,000 call transcripts overnight and read results by custom_id the next morning.",
+        "pros": [
+          "Half price, and stacks with prompt caching",
+          "Most batches finish in under an hour"
+        ],
+        "cons": [
+          "Only 24 hours is guaranteed",
+          "Results must be matched by ID, not order"
+        ],
+        "url": "https://docs.anthropic.com/en/docs/build-with-claude/batch-processing"
+      },
+      {
+        "n": "OpenAI Batch API",
+        "type": "Provider feature · OpenAI API",
+        "start": 3,
+        "prod": 3,
+        "best": "JSONL batch files with a 24-hour completion window at a 50% discount.",
+        "ex": "Run a 20,000-case eval suite as one batch file and download the output and error files when done.",
+        "pros": [
+          "Simple file-based workflow",
+          "Separate, higher rate limits for batches"
+        ],
+        "cons": [
+          "Per-batch size limits force splitting",
+          "Error file must be handled explicitly"
+        ],
+        "url": "https://platform.openai.com/docs/guides/batch"
+      },
+      {
+        "n": "Gemini API batch mode",
+        "type": "Provider feature · Google",
+        "start": 3,
+        "prod": 2,
+        "best": "Asynchronous Gemini jobs submitted inline or as a file, at a discount to interactive pricing.",
+        "ex": "Summarize 50,000 product reviews overnight as one batch job.",
+        "pros": [
+          "Discounted pricing for large jobs",
+          "Inline requests or file input"
+        ],
+        "cons": [
+          "Newer than the other batch APIs",
+          "Turnaround target rather than a fixed time"
+        ],
+        "url": "https://ai.google.dev/gemini-api/docs/batch-mode"
+      },
+      {
+        "n": "Vertex AI batch prediction",
+        "type": "Managed service · Google Cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Batch jobs that read from Cloud Storage or BigQuery and write results back.",
+        "ex": "Classify a BigQuery table of 2 million support tickets and write intents to a new table.",
+        "pros": [
+          "Fits data already in BigQuery",
+          "Enterprise controls from Google Cloud"
+        ],
+        "cons": [
+          "Google Cloud setup and permissions",
+          "Heavier than a single API call"
+        ],
+        "url": "https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/batch-prediction-gemini"
+      },
+      {
+        "n": "Amazon Bedrock batch inference",
+        "type": "Managed service · AWS",
+        "start": 2,
+        "prod": 3,
+        "best": "Batch jobs over S3 input files for supported Bedrock models.",
+        "ex": "Extract fields from 500,000 insurance claim notes stored in S3 and write JSON results to another bucket.",
+        "pros": [
+          "Stays inside your AWS account",
+          "Discounted for supported models"
+        ],
+        "cons": [
+          "Model and region support varies",
+          "Job setup is more involved"
+        ],
+        "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/batch-inference.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Nightly jobs on Claude",
+        "tool": "Anthropic Message Batches API"
+      },
+      {
+        "need": "Eval suites on OpenAI",
+        "tool": "OpenAI Batch API"
+      },
+      {
+        "need": "Data already in BigQuery",
+        "tool": "Vertex AI batch prediction"
+      }
+    ],
+    "goals": [
+      "Identify which workloads fit a batch API and which do not",
+      "Calculate batch cost, including retries and stacked caching",
+      "Design ID-based tracking so only failed items are retried"
+    ]
+  },
+  "practice": {
+    "scenario": "Every night a bank tags 100,000 support transcripts with intent and sentiment for the next morning's dashboard. Nobody is waiting on the results, so the job goes through a batch API at about half the standard price.",
+    "industries": [
+      {
+        "industry": "Banking & telecom",
+        "use": "Nightly tagging of calls, chats and complaints"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Bulk product descriptions and attribute extraction"
+      },
+      {
+        "industry": "AI teams",
+        "use": "Run large eval suites at half the cost"
+      }
+    ],
+    "analogy": "Sending parcels by standard post instead of courier. It arrives by tomorrow and costs half as much.",
+    "library": {
+      "name": "Anthropic Message Batches API",
+      "what": "Submit up to thousands of requests in one call, poll for completion, and read results by custom ID.",
+      "install": "pip install anthropic"
+    },
+    "samples": [
+      {
+        "file": "batch.py",
+        "language": "python",
+        "code": "import time, anthropic\nclient = anthropic.Anthropic()\n\nbatch = client.messages.batches.create(requests=[\n    {\"custom_id\": f\"call-{i}\",\n     \"params\": {\"model\": \"claude-haiku-4-5\", \"max_tokens\": 200,\n                \"messages\": [{\"role\": \"user\",\n                              \"content\": f\"Return JSON with intent and sentiment:\\n{t}\"}]}}\n    for i, t in enumerate(transcripts)\n])\n\nwhile client.messages.batches.retrieve(batch.id).processing_status != \"ended\":\n    time.sleep(60)\n\nfor r in client.messages.batches.results(batch.id):\n    if r.result.type == \"succeeded\":\n        save(r.custom_id, r.result.message.content[0].text)\n    else:\n        retry_later(r.custom_id)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "10,000 requests, each 1,500 input and 200 output tokens. Standard prices: $3/M input, $15/M output. What's the batch cost at 50% off, in $?",
+    "answer": "Standard: 15M input × $3 = $45, plus 2M output × $15 = $30, total $75. Batch: $37.50.",
+    "expected": {
+      "value": 37.5,
+      "tolerance": 0.1,
+      "label": "$ batch ="
+    },
+    "interview": [
+      {
+        "question": "Which workloads fit batch APIs, and which don't?",
+        "answer": "Fit: anything nobody waits on, such as nightly tagging, evals, backfills and bulk summaries. Don't fit: interactive chat, agent loops that need each result before the next step, or jobs due within a few hours."
+      },
+      {
+        "question": "How do you handle partial failures in a batch?",
+        "answer": "Give every request a unique custom ID, record status per ID when results arrive, and resubmit only failed or expired IDs in a follow-up batch, with idempotent writes on your side."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Running nightly jobs through the real-time API",
+        "fix": "Send anything nobody waits on through the batch API"
+      },
+      {
+        "mistake": "Losing track of which item failed",
+        "fix": "Custom IDs and per-item status tracking"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "bp01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank tags 200,000 support tickets every night for a dashboard read the next morning. What is the cheapest suitable approach?",
+      "options": [
+        "The real-time API on a large model",
+        "Streaming responses",
+        "A batch API",
+        "Speculative decoding"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Nobody waits on it, so a batch API at about half price is the natural fit."
+    },
+    {
+      "id": "bp02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "20,000 requests each use 2,000 input and 300 output tokens, at $3 and $15 per million. What does the job cost as a batch at 50% off?",
+      "options": [
+        "$210",
+        "$60",
+        "$150",
+        "$105"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Input: 40M × $3 = $120. Output: 6M × $15 = $90. Standard $210; batch $105."
+    },
+    {
+      "id": "bp03",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which jobs are good fits for a batch API? Select all that apply.",
+      "options": [
+        "Descriptions for 80,000 new products",
+        "A 5,000-case eval suite",
+        "A shopper’s live question",
+        "Backfilling sentiment for last year’s reviews"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Batch suits large independent jobs nobody is waiting on. A live question needs an immediate answer."
+    },
+    {
+      "id": "bp04",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Batch results for 30,000 claim notes came back in a different order from the input file. How do you pair them with notes?",
+      "options": [
+        "By line number",
+        "By custom_id",
+        "By timestamp",
+        "By output length"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Results can arrive in any order, so each request carries a custom_id to match it back."
+    },
+    {
+      "id": "bp05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A 50,000-request batch finished with 2% failed. How many requests go into the follow-up batch?",
+      "options": [
+        "50,000",
+        "49,000",
+        "1,000",
+        "2,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2% of 50,000 = 1,000 failed IDs. Resubmit only those."
+    },
+    {
+      "id": "bp06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Each request has 1,000 shared input tokens read from cache at 0.1×, 500 unique input tokens and 100 output tokens. Prices are $3 and $15 per million, and the batch discount is 50%. What does one request cost?",
+      "options": [
+        "$0.00330",
+        "$0.00165",
+        "$0.00300",
+        "$0.00150"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Input: 1,000 × $0.30/M + 500 × $3/M = $0.0018. Output: 100 × $15/M = $0.0015. $0.0033 × 0.5 = $0.00165."
+    },
+    {
+      "id": "bp07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A churn report is needed within one hour. Is a batch API a safe choice?",
+      "options": [
+        "Yes: batches always finish within an hour",
+        "Yes, if the file is small",
+        "No: completion is only guaranteed within the batch window, often 24 hours",
+        "Only if you poll every minute"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Many batches finish quickly, but only the window is promised. Tight deadlines need the real-time API."
+    },
+    {
+      "id": "bp08",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which make a workload a poor fit for a batch API? Select all that apply.",
+      "options": [
+        "A user is waiting for the answer",
+        "Each result decides the next request",
+        "The deadline is shorter than the completion window",
+        "The job has 50,000 independent requests"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Batch needs independent requests and time to wait. Large independent jobs are exactly what it is for."
+    },
+    {
+      "id": "bp09",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Two million support tickets already sit in a BigQuery table. Which batch option fits best?",
+      "options": [
+        "Vertex AI batch prediction",
+        "Celery",
+        "GPTCache",
+        "tiktoken"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Vertex AI batch prediction reads from and writes to BigQuery directly."
+    },
+    {
+      "id": "bp10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "You run Claude and want up to 100,000 requests in one asynchronous job at half price. Which do you use?",
+      "options": [
+        "Prompt caching alone",
+        "Anthropic Message Batches API",
+        "LiteLLM budgets",
+        "Letta"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The Message Batches API accepts up to 100,000 requests per batch at 50% of standard prices."
+    },
+    {
+      "id": "bp11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A job has 250,000 requests and the provider allows 100,000 per batch. How many batches do you submit?",
+      "options": [
+        "2",
+        "25",
+        "1",
+        "3"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "250,000 ÷ 100,000 = 2.5, rounded up to 3 batches."
+    },
+    {
+      "id": "bp12",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "What should you track for every request in a batch? Select all that apply.",
+      "options": [
+        "Its custom_id",
+        "Its status: succeeded, errored or expired",
+        "Where its result was written",
+        "Its position in the input file"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "ID, status and destination make retries and audits reliable. Position is not reliable because order is not guaranteed."
+    },
+    {
+      "id": "bp13",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Summarizing 12,000 contracts costs $0.02 each through the real-time API. How much does a batch at 50% off save?",
+      "options": [
+        "$240",
+        "$120",
+        "$60",
+        "$12"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "12,000 × $0.02 = $240 standard; half of that, $120, is saved."
+    },
+    {
+      "id": "bp14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A nightly regression eval runs 8,000 test cases, and results are reviewed the next morning. What is the best way to run it?",
+      "options": [
+        "Real-time, one case at a time",
+        "Streaming each case",
+        "A batch API job",
+        "A semantic cache"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Eval suites are a textbook batch workload: independent requests and nobody waiting."
+    },
+    {
+      "id": "bp15",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Some requests in a batch expired before processing. What should you do?",
+      "options": [
+        "Resubmit the whole batch",
+        "Assume they succeeded",
+        "Move the whole pipeline to real-time for good",
+        "Resubmit only the expired IDs in a new batch"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Track status per ID and retry only what did not complete."
+    },
+    {
+      "id": "bp16",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Apart from price, what advantages do batch APIs offer? Select all that apply.",
+      "options": [
+        "Separate, typically higher rate limits for batch work",
+        "No need to pace requests yourself",
+        "Tokens streamed as they are generated",
+        "Simple file- or list-based submission"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "The provider schedules the work within its own limits. Batch results are not streamed."
+    },
+    {
+      "id": "bp17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Through the real-time API, a job of 180,000 requests runs at a rate limit of 1,500 requests a minute. How long does it take?",
+      "options": [
+        "180 min",
+        "120 min",
+        "90 min",
+        "12 min"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "180,000 ÷ 1,500 = 120 minutes."
+    },
+    {
+      "id": "bp18",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A 60,000-request grading batch had 600 failures, and the team resubmitted the whole batch. What should they have done?",
+      "options": [
+        "Retry only the 600 failed IDs",
+        "Ignore the failures",
+        "Split the job into 600 batches",
+        "Resubmit everything twice"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Resubmitting everything pays for 60,000 requests again to fix 600, wiping out the discount."
+    },
+    {
+      "id": "bp19",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which statements about batch APIs are true? Select all that apply.",
+      "options": [
+        "Results are not streamed",
+        "Results can arrive in any order",
+        "On some providers the discount stacks with prompt caching",
+        "Completion is guaranteed within one hour"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Batches return complete results in any order, and discounts can stack. Only the completion window, often 24 hours, is guaranteed."
+    },
+    {
+      "id": "bp20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A million eval requests cost $4,000 in real time. You move them to a batch at 50% off and to a model costing a quarter as much per request. What do they cost now?",
+      "options": [
+        "$1,000",
+        "$2,000",
+        "$500",
+        "$250"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "$4,000 × 0.5 × 0.25 = $500. Batching and routing stack."
+    }
+  ]
+}

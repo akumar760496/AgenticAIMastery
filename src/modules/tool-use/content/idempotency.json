@@ -1,0 +1,920 @@
+{
+  "id": "idempotency",
+  "moduleSlug": "tool-use",
+  "name": "Retries, Timeouts and Idempotency",
+  "shortName": "Safe retries",
+  "question": "Is it safe to try that again?",
+  "summary": "Tool calls time out, drop connections and return 5xx errors. Reads can be retried freely. A write that moves money or sends a message needs an idempotency key, created once per logical action, so a retry returns the first result instead of repeating the action. Every call gets a timeout, and retries use capped exponential backoff with jitter. This technique makes one call safe to repeat; the AgentOps module covers protecting the whole system when a dependency keeps failing.",
+  "useCases": [
+    "Tools that pay, refund, debit, book or send messages",
+    "Gateways and partner APIs that time out under load",
+    "Durable workflows that replay steps after a crash"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Classify tools",
+        "detail": "read, idempotent write, non-idempotent write"
+      },
+      {
+        "term": "Retry only",
+        "detail": "timeouts, 429 and 5xx; never a 4xx that will fail again"
+      },
+      {
+        "term": "Full jitter",
+        "detail": "wait = random(0, min(cap, base × 2^attempt))"
+      },
+      {
+        "term": "Idempotency key",
+        "detail": "one per logical action, reused on every retry"
+      },
+      {
+        "term": "Server side",
+        "detail": "store the first response per key; replay it; reject a changed payload"
+      },
+      {
+        "term": "MCP hints",
+        "detail": "idempotentHint defaults to false, destructiveHint to true"
+      }
+    ]
+  },
+  "steps": [
+    "Label every tool as a read, an idempotent write or a non-idempotent write",
+    "Put a timeout on every call and retry only timeouts, 429 and 5xx",
+    "Back off exponentially with full jitter and a cap on attempts",
+    "Create the key once per action; have the server store and replay results by key"
+  ],
+  "pitfalls": [
+    "A fresh key on every attempt looks safe but repeats the action",
+    "Retrying in lockstep turns a brief outage into a retry storm",
+    "A lost response after success is the dangerous case: the action happened, the client does not know"
+  ],
+  "tools": [
+    "tenacity",
+    "Stripe idempotent requests",
+    "Powertools for AWS Lambda",
+    "Temporal",
+    "Redis SET NX"
+  ],
+  "remember": "One action, one key, every retry.",
+  "caption": "Illustrative UPI refund. The retry reuses key 7f3c, so the gateway replays the stored result.",
+  "comparison": {
+    "scope": "Side-effecting calls",
+    "cost": 2,
+    "needs": "Medium: key store on the server",
+    "best": "Duplicate payments"
+  },
+  "diagram": {
+    "file": "diagrams/idempotency.svg"
+  },
+  "lesson": {
+    "file": "refund_client.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import httpx",
+        "steps": []
+      },
+      {
+        "text": "from tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "KIND = {\"get_refund_status\": \"read\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"set_mandate_limit\": \"idempotent_write\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"create_refund\": \"non_idempotent_write\"}   # needs a key",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def retryable(e: BaseException) -> bool:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if isinstance(e, httpx.TransportError):        # timeouts, resets",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return True",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return isinstance(e, httpx.HTTPStatusError) and (",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        e.response.status_code == 429 or e.response.status_code >= 500)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@retry(retry=retry_if_exception(retryable),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "       wait=wait_random_exponential(multiplier=0.5, max=8),  # full jitter",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "       stop=stop_after_attempt(4), reraise=True)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "def post(path: str, body: dict, key: str) -> dict:",
+        "steps": []
+      },
+      {
+        "text": "    r = http.post(path, json=body, timeout=10.0,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                  headers={\"Idempotency-Key\": key})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    r.raise_for_status()",
+        "steps": []
+      },
+      {
+        "text": "    return r.json()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def create_refund(dispute_id: str, amount_paise: int) -> dict:",
+        "steps": []
+      },
+      {
+        "text": "    key = keys.get_or_create(f\"refund/{dispute_id}\")  # once per action",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return post(\"/v1/refunds\", {\"dispute\": dispute_id, \"amount\": amount_paise}, key)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Server side: the first request with a key runs; repeats get the stored response",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "def handle_refund(key: str, body: dict):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if not redis.set(f\"idem:{key}\", \"running\", nx=True, ex=86_400):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return replay(key, body)   # stored result; 409 if running, 422 if body differs",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    resp = do_refund(body); store(key, body, resp)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return resp",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Classify the tools",
+        "text": "Reads are always safe to retry. An idempotent write, such as setting a limit to ₹50,000, is safe too. A refund is a non-idempotent write: running it twice pays twice."
+      },
+      {
+        "title": "Give every call a timeout",
+        "text": "The refund call waits at most 10 s. Without a timeout, a hung connection holds the agent’s turn for ever."
+      },
+      {
+        "title": "Retry only what can succeed",
+        "text": "Timeouts, dropped connections, 429 and 5xx are worth another try. A 400 or 422 will fail the same way again, so it goes back to the model instead."
+      },
+      {
+        "title": "Back off with full jitter",
+        "text": "Each retry waits a random time between zero and min(8 s, 0.5 s × 2^attempt), with at most 4 attempts, so clients that failed together do not retry together."
+      },
+      {
+        "title": "Create the key once per action",
+        "text": "The key is derived from the dispute and stored, so every retry, and even a resumed agent, sends the same key for the same refund."
+      },
+      {
+        "title": "Store and replay on the server",
+        "text": "The first request with a key runs and its response is stored for 24 hours. A repeat gets the stored response; a repeat with a different body gets 422."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"8\" width=\"108\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"22\" text-anchor=\"middle\">read</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx pass\" x=\"122\" y=\"8\" width=\"114\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"22\" text-anchor=\"middle\">idempotent</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx fail\" x=\"242\" y=\"8\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"297\" y=\"22\" text-anchor=\"middle\">refund</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"38\" width=\"100\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"58\" y=\"52\">Agent</text><text class=\"sb\" x=\"58\" y=\"67\">refund ₹2,499</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln acc\" d=\"M110 50L250 50\" marker-end=\"url(#arrA)\"/></g><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"252\" y=\"38\" width=\"100\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"302\" y=\"52\">Gateway</text><text class=\"sb\" x=\"302\" y=\"67\">runs refund</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln fail\" d=\"M250 66 L112 66\" stroke-dasharray=\"4 3\"/><text class=\"tag-t fail\" x=\"181\" y=\"84\">response lost at 10 s</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"94\" width=\"168\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"108\" text-anchor=\"middle\">retry: timeout, 429, 5xx</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx warn\" x=\"184\" y=\"94\" width=\"168\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"108\" text-anchor=\"middle\">return: 400, 422</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<rect x=\"40\" y=\"124\" width=\"60\" height=\"10\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"82\" y=\"124\" width=\"4\" height=\"10\" rx=\"3\" class=\"bar grow \" style=\"--d:0s\"/><text class=\"mono l a\" x=\"8\" y=\"133\" style=\"--d:0s\">#1</text><rect x=\"40\" y=\"140\" width=\"120\" height=\"10\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"76\" y=\"140\" width=\"4\" height=\"10\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"8\" y=\"149\" style=\"--d:0s\">#2</text><rect x=\"40\" y=\"156\" width=\"240\" height=\"10\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"172\" y=\"156\" width=\"4\" height=\"10\" rx=\"3\" class=\"bar grow \" style=\"--d:0.2s\"/><text class=\"mono l a\" x=\"8\" y=\"165\" style=\"--d:0s\">#3</text><text class=\"mono l a\" x=\"292\" y=\"145\" style=\"--d:0.3s\">0.5 × 2^n</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"176\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"191\" text-anchor=\"middle\">Idempotency-Key 7f3c… reused on every attempt</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"208\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"224\" text-anchor=\"middle\">retry: stored result</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"208\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"224\" text-anchor=\"middle\">₹2,499 refunded once</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Retries become safe for payments, refunds and messages",
+      "Lost responses no longer cause duplicate actions",
+      "Backoff with jitter protects a recovering service",
+      "Works across agent restarts when the key is stored"
+    ],
+    "cons": [
+      "Needs a key store and replay logic on the server side",
+      "Keys must be scoped and expired correctly",
+      "Retries add latency to the slowest requests",
+      "Third-party APIs without key support need your own deduplication"
+    ],
+    "avoidWhen": [
+      "Pure reads, which are safe to retry without a key",
+      "Calls that must never be retried automatically, such as a trade the user must reconfirm"
+    ],
+    "tools": [
+      {
+        "name": "tenacity",
+        "type": "Open source",
+        "what": "Retry policies with exponential backoff, full jitter and stop rules",
+        "url": "https://github.com/jd/tenacity"
+      },
+      {
+        "name": "Stripe idempotent requests",
+        "type": "API feature",
+        "what": "A reference design: keys up to 255 characters, stored first responses",
+        "url": "https://docs.stripe.com/api/idempotent_requests"
+      },
+      {
+        "name": "Powertools for AWS Lambda",
+        "type": "Open source",
+        "what": "An idempotency decorator backed by DynamoDB, Redis or other stores",
+        "url": "https://docs.powertools.aws.dev/lambda/python/latest/utilities/idempotency/"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source · hosted option",
+        "what": "Durable workflows with retried, idempotent activities",
+        "url": "https://docs.temporal.io/activity-definition"
+      },
+      {
+        "name": "Redis SET NX",
+        "type": "Open source",
+        "what": "Claiming a key atomically with an expiry",
+        "url": "https://redis.io/docs/latest/commands/set/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A payments support agent issues 100 UPI refunds of ₹2,499 through a gateway with a 10 s timeout. Some attempts fail. In the dangerous case the refund runs but the reply is lost, so the agent cannot tell success from failure. Retries back off from 0.5 s, doubling up to 8 s. Figures are expected values.",
+    "controls": [
+      "Set the failure rate per attempt, and whether failures are lost responses (the refund ran) or failures before the refund.",
+      "Set the number of retries and the idempotency-key strategy.",
+      "Turn full jitter on or off."
+    ],
+    "outputs": [
+      {
+        "name": "Refunds confirmed to the agent",
+        "meaning": "1 − failure rate^(attempts)."
+      },
+      {
+        "name": "Duplicate refunds per 100",
+        "meaning": "Extra executions when a retry is not recognised as a repeat."
+      },
+      {
+        "name": "Peak retry burst",
+        "meaning": "Retries arriving in the busiest 100 ms after an outage."
+      },
+      {
+        "name": "p95 time to a confirmed refund",
+        "meaning": "Timeouts plus backoff waits for 95% of refunds to be confirmed."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Duplicates, reliability and burst together."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Retries, no key",
+        "expect": "30% lost responses and 2 retries: 97% confirmed, but 39.0 extra refunds per 100 and a burst of 100 retries at once; p95 24.0 s."
+      },
+      {
+        "k": "fresh",
+        "name": "New key per attempt",
+        "expect": "Exactly as bad: 39.0 extra refunds per 100, because every attempt looks like a new refund to the gateway."
+      },
+      {
+        "k": "safe",
+        "name": "One key per refund",
+        "expect": "The same retries with one key per refund: 0 duplicates. Still 97% confirmed and a burst of 100."
+      },
+      {
+        "k": "storm",
+        "name": "Many retries, no jitter",
+        "expect": "50% failures before the refund runs and 5 retries: no duplicates, 98% confirmed, but every retry wave hits at once (100) and p95 is 56.0 s."
+      }
+    ],
+    "missions": [
+      {
+        "k": "nodup",
+        "text": "With at least 30% lost responses and 2 or more retries, get zero duplicate refunds.",
+        "hint": "The key must stay the same across every attempt of one refund."
+      },
+      {
+        "k": "reliable",
+        "text": "Confirm at least 99% of refunds.",
+        "hint": "At a 30% failure rate, 1 − 0.3^attempts must reach 0.99."
+      },
+      {
+        "k": "calm",
+        "text": "Keep retrying, but hold the peak burst under 20 requests per 100 ms.",
+        "hint": "Full jitter spreads each retry wave over its backoff window."
+      }
+    ],
+    "tools": [
+      {
+        "n": "tenacity",
+        "type": "Open source · Python library",
+        "start": 3,
+        "prod": 3,
+        "best": "Retry decorators with exponential backoff, full jitter, stop rules and retry conditions.",
+        "ex": "Wrap the refund call in @retry with wait_random_exponential and stop_after_attempt(4).",
+        "pros": [
+          "Declarative and well known",
+          "Works for sync and async code"
+        ],
+        "cons": [
+          "Client side only: no deduplication",
+          "Easy to retry errors that will never succeed"
+        ],
+        "url": "https://github.com/jd/tenacity"
+      },
+      {
+        "n": "Stripe idempotent requests",
+        "type": "API reference design",
+        "start": 3,
+        "prod": 3,
+        "best": "Seeing how a payments API stores the first response per key and rejects reused keys with new parameters.",
+        "ex": "Send Idempotency-Key with every refund request and reuse it on every retry.",
+        "pros": [
+          "Well-documented, battle-tested semantics",
+          "Keys up to 255 characters"
+        ],
+        "cons": [
+          "Stripe-specific",
+          "Keys can be pruned after 24 hours"
+        ],
+        "url": "https://docs.stripe.com/api/idempotent_requests"
+      },
+      {
+        "n": "Powertools for AWS Lambda",
+        "type": "Open source · by AWS",
+        "start": 2,
+        "prod": 3,
+        "best": "An idempotency decorator for Lambda handlers, backed by DynamoDB or other persistence layers.",
+        "ex": "@idempotent on a refund handler, keyed by a hash of the dispute id and amount.",
+        "pros": [
+          "Stores and replays results for you",
+          "Handles in-progress and expired records"
+        ],
+        "cons": [
+          "Tied to Lambda",
+          "Needs a persistence table"
+        ],
+        "url": "https://docs.powertools.aws.dev/lambda/python/latest/utilities/idempotency/"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · hosted option",
+        "start": 1,
+        "prod": 3,
+        "best": "Durable workflows where activities are retried automatically and must be idempotent.",
+        "ex": "A refund workflow retries the gateway activity with the workflow id as the idempotency key.",
+        "pros": [
+          "Retries, timeouts and state survive crashes",
+          "Clear activity retry policies"
+        ],
+        "cons": [
+          "Significant platform to run or buy",
+          "Activities still need idempotent side effects"
+        ],
+        "url": "https://docs.temporal.io/activity-definition"
+      },
+      {
+        "n": "Redis SET NX",
+        "type": "Open source · data store",
+        "start": 3,
+        "prod": 2,
+        "best": "Claiming an idempotency key atomically with an expiry, as the core of your own store.",
+        "ex": "SET idem:<key> running NX EX 86400 before calling the gateway.",
+        "pros": [
+          "Tiny, fast building block",
+          "One atomic command"
+        ],
+        "cons": [
+          "You build replay and payload checks yourself",
+          "Needs persistence configured for durability"
+        ],
+        "url": "https://redis.io/docs/latest/commands/set/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Retries in Python",
+        "tool": "tenacity"
+      },
+      {
+        "need": "Server-side keys on Lambda",
+        "tool": "Powertools for AWS Lambda"
+      },
+      {
+        "need": "Long-running flows that must survive crashes",
+        "tool": "Temporal"
+      }
+    ],
+    "goals": [
+      "Classify tools by whether a retry is safe",
+      "Calculate expected duplicates from failure rate and retries",
+      "Design a key that stays the same across every attempt of one action"
+    ]
+  },
+  "practice": {
+    "scenario": "An NBFC collections agent presents a NACH debit for an overdue EMI. The payment gateway times out at 10 s, but the debit had already gone through. Retried without a key, the borrower is debited twice. With one idempotency key per debit, reused on every retry, the gateway returns the stored result of the first attempt and nothing is charged again.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Refunds, payouts and UPI collect requests keyed per business action"
+      },
+      {
+        "industry": "Messaging",
+        "use": "WhatsApp and SMS sends that must not reach a customer twice"
+      },
+      {
+        "industry": "Travel",
+        "use": "Seat holds and bookings retried after a partner API timeout"
+      }
+    ],
+    "analogy": "A cheque with a serial number. If the courier isn’t sure it arrived and you send a photocopy, the bank sees the same serial number and pays it once.",
+    "library": {
+      "name": "tenacity + httpx",
+      "what": "tenacity adds retry rules, capped exponential backoff with full jitter and attempt limits; httpx gives per-call timeouts.",
+      "install": "pip install tenacity httpx redis"
+    },
+    "note": "The client and server halves of one pattern. do_refund stands for your own payment call.",
+    "samples": [
+      {
+        "file": "client_retry.py",
+        "language": "python",
+        "code": "import uuid, httpx\nfrom tenacity import retry, retry_if_exception, stop_after_attempt, wait_random_exponential\n\ndef retryable(exc: BaseException) -> bool:\n    if isinstance(exc, httpx.TransportError):            # timeouts and dropped connections\n        return True\n    return isinstance(exc, httpx.HTTPStatusError) and (\n        exc.response.status_code == 429 or exc.response.status_code >= 500)\n\n@retry(retry=retry_if_exception(retryable),\n       wait=wait_random_exponential(multiplier=0.5, max=8),   # full jitter, capped at 8 s\n       stop=stop_after_attempt(4), reraise=True)\ndef post_refund(client: httpx.Client, body: dict, key: str) -> dict:\n    r = client.post(\"/v1/refunds\", json=body, headers={\"Idempotency-Key\": key}, timeout=10.0)\n    r.raise_for_status()\n    return r.json()\n\ndef refund(client: httpx.Client, dispute_id: str, amount_paise: int) -> dict:\n    # One key per logical action, derived from the dispute, so every retry reuses it\n    key = str(uuid.uuid5(uuid.NAMESPACE_URL, f\"refund/{dispute_id}\"))\n    return post_refund(client, {\"dispute_id\": dispute_id, \"amount\": amount_paise}, key)"
+      },
+      {
+        "file": "server_idem.py",
+        "language": "python",
+        "code": "import hashlib, json, redis\nr = redis.Redis()\n\ndef handle_refund(key: str, body: dict):\n    fp = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()\n    slot = f\"idem:{key}\"\n    if not r.set(slot, json.dumps({\"fp\": fp, \"state\": \"running\"}), nx=True, ex=86_400):\n        rec = json.loads(r.get(slot))\n        if rec[\"fp\"] != fp:\n            return 422, {\"error\": \"Idempotency-Key reused with a different payload\"}\n        if rec[\"state\"] == \"running\":\n            return 409, {\"error\": \"A request with this key is still being processed\"}\n        return rec[\"status\"], rec[\"body\"]                # replay the first response\n    status, resp = do_refund(body)\n    r.set(slot, json.dumps({\"fp\": fp, \"state\": \"done\", \"status\": status, \"body\": resp}), ex=86_400)\n    return status, resp"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "1,000 refunds. The gateway always executes the refund, but 30% of responses are lost on the way back, independently on each attempt. The client retries up to 2 times after a lost response, with no idempotency key. How many duplicate refunds do you expect?",
+    "answer": "Every lost response triggers a retry that executes again. Second executions: 1,000 × 0.3 = 300. Third executions: 1,000 × 0.3 × 0.3 = 90. Expected duplicates 390. With one key per refund the gateway replays the first result and duplicates are 0.",
+    "expected": {
+      "value": 390,
+      "tolerance": 1,
+      "label": "duplicate refunds ="
+    },
+    "interview": [
+      {
+        "question": "How do you make a payment tool safe for an agent to retry?",
+        "answer": "Classify it as a non-idempotent write. Create an idempotency key once per logical action, store it with the action, and send it on every attempt. The server records the first response per key and replays it on repeats, rejecting a reused key with a different payload. Add a timeout per call, and retry only timeouts, 429 and 5xx with capped exponential backoff and full jitter."
+      },
+      {
+        "question": "Why add jitter to exponential backoff?",
+        "answer": "Without jitter, clients that failed together retry together, so the retry waves hit the recovering service at the same instants. Full jitter picks a random wait between zero and the capped exponential value, spreading retries out. AWS found it did less total client work than the alternatives it tested."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Generating a new idempotency key inside the retry loop",
+        "fix": "Create the key once per action and reuse it on every attempt"
+      },
+      {
+        "mistake": "Retrying every error, including 400s",
+        "fix": "Retry only timeouts, 429 and 5xx; fix 4xx errors instead"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "id01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A refund call times out at 10 s but the refund had actually gone through. The agent retries without an idempotency key. What happens?",
+      "options": [
+        "The gateway ignores the retry",
+        "The customer is refunded twice",
+        "The first refund is cancelled",
+        "The retry fails automatically"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without a key the gateway cannot tell the retry from a new refund."
+    },
+    {
+      "id": "id02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Where should the idempotency key for a refund be created?",
+      "options": [
+        "Inside the retry loop, fresh on each attempt",
+        "Once per logical refund, stored and reused on every attempt",
+        "By the model in its arguments each time",
+        "By the gateway after the first attempt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One action, one key, reused on every retry, even after a restart."
+    },
+    {
+      "id": "id03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "1,000 refunds; 30% of responses are lost after the refund runs, independently per attempt. The client retries up to 2 times with no key. How many duplicate refunds are expected?",
+      "options": [
+        "300",
+        "390",
+        "600",
+        "90"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,000 × 0.3 = 300 second executions plus 1,000 × 0.09 = 90 third: 390."
+    },
+    {
+      "id": "id04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Stripe receives a repeat request with the same idempotency key but different parameters. What does it do?",
+      "options": [
+        "Processes it as a new request",
+        "Returns an error, because the parameters differ",
+        "Merges the two requests",
+        "Returns the first response silently"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stripe compares parameters and errors if a key is reused with different ones."
+    },
+    {
+      "id": "id05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which errors are generally worth retrying automatically?",
+      "options": [
+        "400 and 422",
+        "Timeouts, 429 and 5xx",
+        "401 and 403",
+        "Any error at all"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Transient errors can succeed on retry; other 4xx errors need a change."
+    },
+    {
+      "id": "id06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "AWS’s full jitter formula for the wait before a retry is:",
+      "options": [
+        "base × 2^attempt",
+        "random(0, min(cap, base × 2^attempt))",
+        "cap − base",
+        "base + attempt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Full jitter picks a random wait between 0 and the capped exponential value."
+    },
+    {
+      "id": "id07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "With base 0.5 s and cap 8 s, what is the maximum full-jitter wait before attempt 4 (using 2^4)?",
+      "options": [
+        "2 s",
+        "4 s",
+        "8 s",
+        "16 s"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "min(8, 0.5 × 16) = min(8, 8) = 8 s."
+    },
+    {
+      "id": "id08",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which tools need an idempotency key before an agent may retry them? Select all that apply.",
+      "options": [
+        "create_refund",
+        "send_whatsapp_message",
+        "initiate_payout",
+        "get_refund_status"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Writes that move money or send messages repeat their side effect; a status read is safe to retry."
+    },
+    {
+      "id": "id09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Each attempt fails 30% of the time independently. With 3 retries (4 attempts), what share of requests eventually succeed?",
+      "options": [
+        "91.0%",
+        "97.3%",
+        "99.19%",
+        "99.9%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1 − 0.3^4 = 1 − 0.0081 = 99.19%."
+    },
+    {
+      "id": "id10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Stripe keys can be up to how many characters?",
+      "options": [
+        "36",
+        "64",
+        "255",
+        "1,024"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Stripe allows idempotency keys of up to 255 characters."
+    },
+    {
+      "id": "id11",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Under the IETF Idempotency-Key draft, what status suits a duplicate request that arrives while the first is still being processed?",
+      "options": [
+        "200",
+        "404",
+        "409",
+        "500"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The draft recommends 409 Conflict for a concurrent duplicate, and 422 for a reused key with a different payload."
+    },
+    {
+      "id": "id12",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "A payout service shows retry storms after brief outages. Which changes help? Select all that apply.",
+      "options": [
+        "Add full jitter to the backoff",
+        "Cap the number of attempts",
+        "Cap the backoff wait",
+        "Retry immediately in a tight loop"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Jitter spreads retries; caps bound total load. Tight loops make storms worse."
+    },
+    {
+      "id": "id13",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "In MCP tool annotations, what is the default value of destructiveHint?",
+      "options": [
+        "false",
+        "true",
+        "null, meaning unknown",
+        "It has no default"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "destructiveHint defaults to true and idempotentHint to false, so hosts assume the worst."
+    },
+    {
+      "id": "id14",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which statements about MCP annotations are true? Select all that apply.",
+      "options": [
+        "idempotentHint defaults to false",
+        "Annotations from untrusted servers should be treated as untrusted",
+        "readOnlyHint guarantees the server cannot write",
+        "destructiveHint defaults to false"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Hints default to the cautious values and are only hints, especially from untrusted servers."
+    },
+    {
+      "id": "id15",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Temporal’s documentation says what about business-logic Activities?",
+      "options": [
+        "They must never be retried",
+        "You should always make them idempotent",
+        "They run exactly once by design",
+        "They cannot call external APIs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "“You should always make your business logic Activities idempotent,” because they may be retried."
+    },
+    {
+      "id": "id16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A refund of ₹2,499 is duplicated for 39 out of every 100 customers across 1,000 refunds. How much is overpaid?",
+      "options": [
+        "₹97,461",
+        "₹9,74,610",
+        "₹2,49,900",
+        "₹39,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,000 × 0.39 = 390 duplicates × ₹2,499 = ₹9,74,610."
+    },
+    {
+      "id": "id17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An idempotent write, such as setting a data cap to 10 GB, is retried after a timeout. What happens?",
+      "options": [
+        "The cap becomes 20 GB",
+        "The end state is the same: 10 GB",
+        "The retry is always rejected",
+        "The account is locked"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Repeating an idempotent write leaves the same state."
+    },
+    {
+      "id": "id18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "How should a server implement idempotency keys? Select all that apply.",
+      "options": [
+        "Claim the key atomically, for example with SET NX, before running the action",
+        "Store the first response and replay it for repeats with the same key",
+        "Generate a new key for each repeat",
+        "Delete the key as soon as the first response is sent"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Atomic claim plus stored responses make repeats safe; new or deleted keys defeat the purpose."
+    },
+    {
+      "id": "id19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The client times out while the server is still processing a charge. Which case is the dangerous one for duplicates?",
+      "options": [
+        "The request never reached the server",
+        "The action succeeded but the response was lost",
+        "The server returned 400",
+        "The client had no network at all"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "If the action happened but the client did not learn of it, a retry without a key repeats it."
+    },
+    {
+      "id": "id20",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "Which tools provide retry or idempotency support? Select all that apply.",
+      "options": [
+        "tenacity",
+        "Powertools for AWS Lambda idempotency",
+        "Temporal",
+        "A static site generator"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "tenacity handles client retries, Powertools stores and replays results, Temporal retries idempotent activities."
+    }
+  ]
+}

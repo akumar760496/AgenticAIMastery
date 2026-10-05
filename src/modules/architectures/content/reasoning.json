@@ -1,0 +1,915 @@
+{
+  "id": "reasoning",
+  "moduleSlug": "architectures",
+  "name": "Reasoning Models and Thinking Budgets",
+  "shortName": "Thinking budgets",
+  "question": "How much should the model think before answering?",
+  "summary": "Reasoning models are trained, largely with reinforcement learning, to think at length before they answer. You control that test-time compute with a thinking budget or an effort level. More thinking helps on hard problems and wastes money and time on easy ones, so the budget should follow difficulty.",
+  "useCases": [
+    "The difficulty sits inside one hard problem: maths, code, multi-constraint decisions",
+    "Mixed traffic where a router can separate easy from hard",
+    "Planner or judge steps, where one better call saves many later ones"
+  ],
+  "keyFacts": {
+    "label": "Controls",
+    "items": [
+      {
+        "term": "Claude manual budget",
+        "detail": "budget_tokens ≥ 1,024 and below max_tokens, on models that support it"
+      },
+      {
+        "term": "Claude adaptive thinking",
+        "detail": "thinking type “adaptive”; output_config.effort sets how much"
+      },
+      {
+        "term": "OpenAI effort",
+        "detail": "reasoning.effort, with model-dependent values such as low, medium, high"
+      },
+      {
+        "term": "Billing",
+        "detail": "thinking and reasoning tokens are billed as output tokens"
+      },
+      {
+        "term": "Context",
+        "detail": "reasoning tokens occupy the context window and the output limit"
+      },
+      {
+        "term": "Route by difficulty",
+        "detail": "low effort for routine cases, high for hard ones"
+      }
+    ]
+  },
+  "steps": [
+    "Measure accuracy and cost with no or low thinking first",
+    "Raise the budget on the hard slice and watch where the gains flatten",
+    "Route by difficulty so easy requests stay cheap",
+    "Log thinking tokens from usage and leave headroom in the output limit"
+  ],
+  "pitfalls": [
+    "A flat maximum budget pays for thinking on easy requests",
+    "An output limit that is too small truncates the answer or rejects the request",
+    "More thinking does not fix missing information or missing tools"
+  ],
+  "tools": [
+    "Claude extended and adaptive thinking",
+    "OpenAI reasoning models",
+    "vLLM reasoning outputs",
+    "DeepSeek-R1",
+    "Gemini thinking"
+  ],
+  "remember": "Spend thinking where the problem is hard, not everywhere.",
+  "caption": "Illustrative numbers for a fictional model, Gamma-R. Hard-case accuracy flattens while tokens keep rising.",
+  "comparison": {
+    "scope": "The model, inside one call",
+    "cost": 3,
+    "needs": "Low: one parameter",
+    "best": "Paying to think on easy work"
+  },
+  "diagram": {
+    "file": "diagrams/reasoning.svg"
+  },
+  "lesson": {
+    "file": "thinking_budget.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "claude, oai = anthropic.Anthropic(), OpenAI()",
+        "steps": []
+      },
+      {
+        "text": "MODEL = \"claude-sonnet-4-5\"       # a model that supports manual budgets",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def baseline(case):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return claude.messages.create(model=MODEL, max_tokens=1500,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": case}])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def think(case, budget):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    assert 1024 <= budget < 20000       # at least 1,024, below max_tokens",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return claude.messages.create(model=MODEL, max_tokens=20000,",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "        thinking={\"type\": \"enabled\", \"budget_tokens\": budget},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": case}])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def review(case, hard):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    r = think(case, 16000) if hard else baseline(case)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    log(output_tokens=r.usage.output_tokens)   # includes thinking",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return next(b.text for b in r.content if b.type == \"text\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def review_openai(case, hard):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    r = oai.responses.create(model=\"o4-mini\", input=case,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        reasoning={\"effort\": \"high\" if hard else \"low\"})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    log(reasoning=r.usage.output_tokens_details.reasoning_tokens)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return r.output_text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def agent_step(messages):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return claude.beta.messages.create(model=MODEL, max_tokens=16000,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        betas=[\"interleaved-thinking-2025-05-14\"], tools=TOOLS,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        thinking={\"type\": \"enabled\", \"budget_tokens\": 10000},",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        messages=messages)       # keep thinking blocks in the history",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Measure a baseline without thinking",
+        "text": "Run the underwriting cases with no thinking first. Easy top-ups are already 96% correct; hard thin-file cases only 41%. That gap is what a budget should close."
+      },
+      {
+        "title": "Enable thinking with a budget",
+        "text": "Pass thinking with type enabled and a budget_tokens value. At a 4,000-token budget, hard-case accuracy rises to 74%. The response now contains thinking blocks before the text."
+      },
+      {
+        "title": "Respect the limits",
+        "text": "The manual budget must be at least 1,024 tokens and below max_tokens, because thinking counts towards the output limit. Leave room for the answer itself."
+      },
+      {
+        "title": "Measure thinking in the usage",
+        "text": "Thinking tokens are billed as output. A hard case at a 16k budget used about 14,400 thinking tokens plus a 350-token answer, so log output tokens per request."
+      },
+      {
+        "title": "Route by difficulty",
+        "text": "Easy cases go without thinking and hard ones get 16k. With 80% easy traffic, average output falls from 6,430 tokens (16k for everyone) to 3,230. OpenAI's reasoning.effort works the same way."
+      },
+      {
+        "title": "Interleave thinking with tool calls",
+        "text": "In agent loops, interleaved thinking lets the model think again after each tool result. On Claude 4 models in manual mode it needs a beta header, and thinking blocks must stay in the history."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Hard-case accuracy</text><text class=\"tl a\" x=\"58\" y=\"34\" style=\"text-anchor:end;--d:0.1s\">budget 0</text><rect x=\"64\" y=\"24\" width=\"230\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"64\" y=\"24\" width=\"94.3\" height=\"14\" rx=\"3\" style=\"fill:var(--warn);--d:0.15s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.3s\" x=\"300\" y=\"35\" style=\"--d:0.3s\">41%</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"58\" y=\"56\" style=\"text-anchor:end;--d:0s\">budget 4k</text><rect x=\"64\" y=\"46\" width=\"230\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"64\" y=\"46\" width=\"170.2\" height=\"14\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><text class=\"mono a\" style=\"text-anchor:start;--d:0.25s\" x=\"300\" y=\"57\" style=\"--d:0.25s\">74%</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"86\" style=\"text-anchor:start;--d:0s\">max_tokens 20,000 = budget 16,000 + room for the answer</text><rect x=\"8\" y=\"92\" width=\"344\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"8\" y=\"92\" width=\"275.2\" height=\"14\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><rect class=\"a\" x=\"284.2\" y=\"92\" width=\"67.8\" height=\"14\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"116\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"131\" text-anchor=\"middle\">output_tokens 14,750 = thinking 14,400 + answer 350</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"150\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"165\" text-anchor=\"middle\">easy → no thinking · 350</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"184\" y=\"150\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"165\" text-anchor=\"middle\">hard → 16k · 14,750</text></g><text class=\"tl a\" x=\"180\" y=\"190\" style=\"text-anchor:middle;--d:0.25s\">average 3,230 output tokens, against 6,430 flat</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"208\" width=\"60\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"38\" y=\"224\" text-anchor=\"middle\">think</text></g><g class=\"a\" style=\"--d:0.05s\"><path class=\"ln \" d=\"M69 220L78 220\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"79\" y=\"208\" width=\"60\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"109\" y=\"224\" text-anchor=\"middle\">tool</text></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><path class=\"ln \" d=\"M140 220L149 220\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"150\" y=\"208\" width=\"60\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"224\" text-anchor=\"middle\">think</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M211 220L220 220\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx acc\" x=\"221\" y=\"208\" width=\"60\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"251\" y=\"224\" text-anchor=\"middle\">tool</text></g><g class=\"a\" style=\"--d:0.35000000000000003s\"><path class=\"ln \" d=\"M282 220L291 220\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"292\" y=\"208\" width=\"60\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"322\" y=\"224\" text-anchor=\"middle\">answer</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "One parameter; no orchestration code",
+      "Large gains on hard, multi-step problems",
+      "Effort can be set per request, so routing is easy",
+      "Often cheaper than adding search or extra agents"
+    ],
+    "cons": [
+      "Thinking tokens are billed as output and add latency",
+      "A flat high budget wastes money on easy requests",
+      "Output limits must leave room for thinking",
+      "Cannot fix missing data, tools or instructions"
+    ],
+    "avoidWhen": [
+      "Requests are simple lookups or formatting (think little or not at all)",
+      "The failure is missing information, not hard reasoning"
+    ],
+    "tools": [
+      {
+        "name": "Claude extended and adaptive thinking",
+        "type": "Model API (Anthropic)",
+        "what": "budget_tokens, adaptive thinking with effort, interleaved thinking",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+      },
+      {
+        "name": "OpenAI reasoning models",
+        "type": "Model API (OpenAI)",
+        "what": "reasoning.effort and reasoning-token usage",
+        "url": "https://developers.openai.com/api/docs/guides/reasoning"
+      },
+      {
+        "name": "vLLM reasoning outputs",
+        "type": "Open source",
+        "what": "Serving open reasoning models with separated reasoning content",
+        "url": "https://docs.vllm.ai/en/latest/features/reasoning_outputs.html"
+      },
+      {
+        "name": "DeepSeek-R1",
+        "type": "Open weights",
+        "what": "Self-hosted reasoning model trained largely with RL",
+        "url": "https://github.com/deepseek-ai/DeepSeek-R1"
+      },
+      {
+        "name": "Gemini thinking",
+        "type": "Model API (Google)",
+        "what": "Thinking budgets on Gemini models",
+        "url": "https://ai.google.dev/gemini-api/docs/thinking"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An NBFC's underwriting assistant reviews loan files using Gamma-R, a fictional reasoning model with illustrative prices. Routine top-ups for salaried customers are easy; thin-file MSME loans are hard. You set the thinking budget, the traffic mix and whether a router sends easy files through without thinking.",
+    "controls": [
+      "Click a thinking budget: off, 1k, 4k, 16k or 32k tokens.",
+      "Choose the traffic mix of easy and hard files.",
+      "Tick routing to give easy files no thinking and hard files the chosen budget. Or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Hard files correct",
+        "meaning": "Accuracy on thin-file cases, with the change from the previous budget step."
+      },
+      {
+        "name": "Easy files correct",
+        "meaning": "Accuracy on routine top-ups."
+      },
+      {
+        "name": "Output tokens per file",
+        "meaning": "Thinking plus answer tokens, averaged over the traffic mix."
+      },
+      {
+        "name": "Cost per 1,000 files",
+        "meaning": "₹0.50 input per file plus ₹1 per 1,000 output tokens (illustrative)."
+      },
+      {
+        "name": "p95 latency",
+        "meaning": "Time for the slowest 5% of files, at about 150 output tokens a second."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Thinking off",
+        "expect": "Easy files 96.0%, hard files 41.0%, 350 tokens per file, ₹850 per 1,000."
+      },
+      {
+        "k": "flat",
+        "name": "16k for every file",
+        "expect": "Hard files 86.0%, but easy files think too: 6,430 tokens per file, ₹6,930 per 1,000."
+      },
+      {
+        "k": "routed",
+        "name": "16k, routed by difficulty",
+        "expect": "Hard files 85.1%, easy files 96.0%: 3,172 tokens per file, ₹3,672 per 1,000 (47% less)."
+      },
+      {
+        "k": "max",
+        "name": "32k for every file",
+        "expect": "Hard files 86.6%, only 0.6 points above 16k, at ₹13,010 per 1,000."
+      }
+    ],
+    "missions": [
+      {
+        "k": "hard",
+        "text": "Get hard-file accuracy to 85% or more.",
+        "hint": "A 16k budget reaches 86%."
+      },
+      {
+        "k": "routed",
+        "text": "Keep hard files at 85% or more while cutting cost at least 40% against the same budget for every file.",
+        "hint": "Tick routing with a 16k budget: easy files stop paying to think."
+      },
+      {
+        "k": "flat",
+        "text": "Find the budget past which hard-file accuracy gains less than 1 point.",
+        "hint": "Step from 16k to 32k with routing off and read the change on the hard-files bar."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude extended and adaptive thinking",
+        "type": "Model API · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Manual budget_tokens on models that support it, adaptive thinking with an effort setting on newer models, and interleaved thinking between tool calls.",
+        "ex": "Route thin-file loans to a 16k budget and top-ups to no thinking, logging output tokens per request.",
+        "pros": [
+          "Fine control over thinking per request",
+          "Thinking blocks can be inspected"
+        ],
+        "cons": [
+          "Parameters differ by model generation",
+          "Thinking bills as output tokens"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+      },
+      {
+        "n": "OpenAI reasoning models",
+        "type": "Model API · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "reasoning.effort per request, with reasoning-token counts in usage.",
+        "ex": "Low effort for routine classification, high effort for complex credit memos, with max_output_tokens set generously.",
+        "pros": [
+          "One parameter to tune",
+          "Usage shows reasoning tokens"
+        ],
+        "cons": [
+          "Reasoning content is hidden",
+          "Effort values vary by model"
+        ],
+        "url": "https://developers.openai.com/api/docs/guides/reasoning"
+      },
+      {
+        "n": "vLLM reasoning outputs",
+        "type": "Open source · inference engine",
+        "start": 2,
+        "prod": 3,
+        "best": "Serving open reasoning models with the reasoning separated from the final content.",
+        "ex": "Self-host an open reasoning model and log reasoning length per request for cost planning.",
+        "pros": [
+          "Runs on your own infrastructure",
+          "Reasoning parsers for several model families"
+        ],
+        "cons": [
+          "You run and size the GPUs",
+          "Budget control depends on the model"
+        ],
+        "url": "https://docs.vllm.ai/en/latest/features/reasoning_outputs.html"
+      },
+      {
+        "n": "DeepSeek-R1",
+        "type": "Open weights",
+        "start": 2,
+        "prod": 2,
+        "best": "A reasoning model trained largely with reinforcement learning, available to self-host, with smaller distilled versions.",
+        "ex": "Run a distilled R1 model on-premises where loan data cannot leave the data centre.",
+        "pros": [
+          "Open weights and a detailed paper",
+          "Distilled sizes for cheaper hosting"
+        ],
+        "cons": [
+          "Hosting large versions is costly",
+          "Long reasoning traces add latency"
+        ],
+        "url": "https://github.com/deepseek-ai/DeepSeek-R1"
+      },
+      {
+        "n": "Gemini thinking",
+        "type": "Model API · Google",
+        "start": 3,
+        "prod": 3,
+        "best": "Thinking budgets on Gemini models, including the option to turn thinking down for simple requests.",
+        "ex": "Set a small thinking budget for routine document checks and a larger one for complex cases.",
+        "pros": [
+          "Budget set per request",
+          "Thinking summaries available"
+        ],
+        "cons": [
+          "Controls differ between model versions",
+          "Thinking tokens are billed"
+        ],
+        "url": "https://ai.google.dev/gemini-api/docs/thinking"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Claude with explicit budgets",
+        "tool": "Extended thinking"
+      },
+      {
+        "need": "OpenAI models",
+        "tool": "reasoning.effort"
+      },
+      {
+        "need": "Data must stay on-premises",
+        "tool": "Open reasoning model on vLLM"
+      }
+    ],
+    "goals": [
+      "Explain how thinking budgets and effort levels trade accuracy for cost",
+      "Find where extra thinking stops paying off",
+      "Design routing by difficulty for mixed traffic"
+    ]
+  },
+  "practice": {
+    "scenario": "An Indian NBFC's underwriting assistant reviews loan files. Routine top-up loans for existing salaried customers need little thought, so they run with thinking off or low effort. Thin-file MSME loans, with GST returns, bank statements and a patchy bureau record, go to high effort. A difficulty router keeps average cost close to the low-effort bill while hard-case accuracy stays near the high-effort level.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Low effort for routine top-ups, high effort for thin-file or complex applications"
+      },
+      {
+        "industry": "Software engineering",
+        "use": "High effort for debugging and refactors, low for boilerplate"
+      },
+      {
+        "industry": "Healthcare operations",
+        "use": "High effort for complex coding and billing disputes, low for routine claims"
+      }
+    ],
+    "analogy": "An examiner who glances at easy questions and works through the hard ones on rough paper. The rough paper costs time, so it is used only where it pays.",
+    "library": {
+      "name": "Anthropic SDK (extended thinking)",
+      "what": "Set thinking with a budget_tokens value on models that support manual budgets; the response includes thinking blocks, and thinking tokens bill as output.",
+      "install": "pip install anthropic openai"
+    },
+    "note": "Model names change often. Check which models support manual budgets, adaptive thinking or reasoning.effort before copying.",
+    "samples": [
+      {
+        "file": "underwrite.py",
+        "language": "python",
+        "code": "import anthropic\n\nclaude = anthropic.Anthropic()\n\ndef review(case: str, hard: bool):\n    kwargs = {\"max_tokens\": 20000}\n    if hard:                                           # route by difficulty\n        kwargs[\"thinking\"] = {\"type\": \"enabled\", \"budget_tokens\": 16000}\n    r = claude.messages.create(model=\"claude-sonnet-4-5\",   # use your current model\n        messages=[{\"role\": \"user\", \"content\": case}], **kwargs)\n    answer = next(b.text for b in r.content if b.type == \"text\")\n    return answer, r.usage.output_tokens               # includes thinking tokens"
+      },
+      {
+        "file": "underwrite_openai.py",
+        "language": "python",
+        "code": "from openai import OpenAI\nclient = OpenAI()\n\ndef review(case: str, hard: bool):\n    r = client.responses.create(\n        model=\"o4-mini\",                                 # any reasoning model\n        reasoning={\"effort\": \"high\" if hard else \"low\"},\n        input=case,\n        max_output_tokens=25000,                         # leave room for reasoning\n    )\n    used = r.usage.output_tokens_details.reasoning_tokens\n    return r.output_text, used"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Traffic is 80% easy and 20% hard. A flat high-effort setting produces 6,000 output tokens per answer. Routing by difficulty uses 400 tokens for easy answers and 6,000 for hard ones. By what percentage does routing cut output tokens?",
+    "answer": "Flat: 6,000 per answer. Routed: 0.8 × 400 + 0.2 × 6,000 = 320 + 1,200 = 1,520. Saving: 1 − 1,520 ÷ 6,000 = 74.7%.",
+    "expected": {
+      "value": 74.7,
+      "tolerance": 0.2,
+      "label": "% saved ="
+    },
+    "interview": [
+      {
+        "question": "How do you choose a thinking budget?",
+        "answer": "Measure accuracy and tokens on a labelled set at several budgets, find where gains flatten on the hard slice, and set the budget just past that point. Route easy requests to low effort or no thinking so they stay cheap."
+      },
+      {
+        "question": "Why can a large thinking budget cause failed requests?",
+        "answer": "Thinking tokens count towards the output limit. With Claude's manual budget, budget_tokens must be below max_tokens (interleaved thinking with tools is the exception), and on OpenAI reasoning models a small max_output_tokens can be used up by reasoning before any visible answer appears."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Setting the maximum budget on every request",
+        "fix": "Route by difficulty and measure where gains flatten"
+      },
+      {
+        "mistake": "Using thinking to fix missing data or tools",
+        "fix": "Give the model the information or tools; more thinking cannot invent them"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rm01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC’s underwriting assistant is accurate on routine top-ups but poor on thin-file MSME loans. What should the team try first?",
+      "options": [
+        "A larger thinking budget for the hard cases",
+        "Tree search on every file",
+        "A multi-agent debate",
+        "Removing tools"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "When the difficulty sits inside one hard problem, raising the thinking budget for those cases is the simplest lever."
+    },
+    {
+      "id": "rm02",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A Claude request sets max_tokens=2000 and budget_tokens=4000 with manual extended thinking. What happens?",
+      "options": [
+        "The request is rejected: the budget must be below max_tokens",
+        "The model thinks for 4,000 tokens",
+        "max_tokens is raised automatically",
+        "The budget is ignored"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Thinking counts towards the output limit, so the manual budget must be below max_tokens (interleaved thinking is the exception)."
+    },
+    {
+      "id": "rm03",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Traffic is 80% easy and 20% hard. Flat high effort uses 6,000 output tokens per answer; routing uses 400 for easy and 6,000 for hard. What is the saving in output tokens?",
+      "options": [
+        "74.7%",
+        "80.0%",
+        "66.7%",
+        "93.3%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Routed: 0.8 × 400 + 0.2 × 6,000 = 1,520. Saving 1 − 1,520 ÷ 6,000 = 74.7%."
+    },
+    {
+      "id": "rm04",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "How are thinking tokens billed on Claude’s extended thinking?",
+      "options": [
+        "As output tokens",
+        "As input tokens",
+        "Free of charge",
+        "At the cached rate"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Thinking tokens are billed as output tokens."
+    },
+    {
+      "id": "rm05",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which statements about OpenAI reasoning models are true? Select all that apply.",
+      "options": [
+        "Reasoning tokens are billed as output tokens",
+        "Reasoning tokens occupy space in the context window",
+        "reasoning.effort values are the same on every model",
+        "Reasoning tokens are always shown in full to the caller"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Reasoning tokens are hidden but billed as output and take context space. Supported effort values vary by model."
+    },
+    {
+      "id": "rm06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Hard-case accuracy is 86% at a 16k budget and 86.6% at 32k, while tokens nearly double. What should the team do?",
+      "options": [
+        "Keep 16k for hard cases",
+        "Move everyone to 32k",
+        "Move everyone to 0",
+        "Add a second model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Past 16k the gain is under a point for almost twice the tokens; the budget should stop where gains flatten."
+    },
+    {
+      "id": "rm07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the minimum budget_tokens for Claude’s manual extended thinking?",
+      "options": [
+        "1,024",
+        "256",
+        "4,096",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The manual budget must be at least 1,024 tokens."
+    },
+    {
+      "id": "rm08",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "With 80% easy files at 350 + 4,000 thinking tokens and 20% hard at 350 + 14,400, what are the average output tokens per file on a flat 16k budget?",
+      "options": [
+        "6,430",
+        "4,350",
+        "14,750",
+        "5,210"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.8 × 4,350 + 0.2 × 14,750 = 3,480 + 2,950 = 6,430 tokens."
+    },
+    {
+      "id": "rm09",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "A SaaS assistant runs every request at maximum reasoning effort. Which problems follow? Select all that apply.",
+      "options": [
+        "Easy requests pay for thinking they do not need",
+        "Latency rises across all traffic",
+        "Missing data in the request is filled in correctly",
+        "Hard-case accuracy necessarily falls"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A flat maximum wastes money and adds latency on easy requests. Thinking cannot invent missing data, and it does not lower hard-case accuracy."
+    },
+    {
+      "id": "rm10",
+      "kind": "single",
+      "industry": "Software",
+      "question": "An OpenAI reasoning request returns an empty visible answer, and usage shows all output tokens were reasoning tokens. What is the likely fix?",
+      "options": [
+        "Raise max_output_tokens to leave room for reasoning and the answer",
+        "Lower the temperature",
+        "Remove the system prompt",
+        "Switch off streaming"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reasoning can use up the output limit before any visible text; OpenAI suggests reserving at least 25,000 tokens when starting out."
+    },
+    {
+      "id": "rm11",
+      "kind": "single",
+      "industry": "Education",
+      "question": "What did DeepSeek-R1 report about behaviours such as self-reflection and verification?",
+      "options": [
+        "They emerged from reinforcement learning without human-labelled reasoning traces",
+        "They were hand-coded rules",
+        "They required tree search at inference",
+        "They only appeared in distilled models"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The paper reports that such reasoning behaviours emerged during RL training without human-labelled traces."
+    },
+    {
+      "id": "rm12",
+      "kind": "single",
+      "industry": "Software",
+      "question": "On newer Claude models, adaptive thinking is configured how?",
+      "options": [
+        "thinking type \"adaptive\" with an effort level in output_config",
+        "budget_tokens below 1,024",
+        "A beta header only",
+        "A temperature above 1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Adaptive thinking uses the thinking type adaptive, with effort set in output_config instead of a manual token budget."
+    },
+    {
+      "id": "rm13",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "A router gives easy files no thinking and hard files a 16k budget. Which should the team monitor? Select all that apply.",
+      "options": [
+        "Accuracy on hard files that the router misjudged as easy",
+        "Output tokens per request by difficulty band",
+        "The length of the system prompt",
+        "Whether easy-file accuracy holds without thinking"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Misroutes, tokens by band and easy-file accuracy show whether routing is saving money safely."
+    },
+    {
+      "id": "rm14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Compute-optimal test-time scaling was reported as more efficient than best-of-N by roughly how much?",
+      "options": [
+        "More than 4x",
+        "About 1.1x",
+        "About 100x",
+        "No difference"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The study found compute-optimal allocation more than 4x as efficient as a best-of-N baseline."
+    },
+    {
+      "id": "rm15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Output costs ₹1 per 1,000 tokens. Moving hard files (20% of 1,000 files) from 350 to 14,750 output tokens raises cost per 1,000 files by how much?",
+      "options": [
+        "₹2,880",
+        "₹14,400",
+        "₹2,950",
+        "₹1,440"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "200 hard files × 14,400 extra tokens = 2,880,000 tokens; at ₹1 per 1,000 tokens that is ₹2,880."
+    },
+    {
+      "id": "rm16",
+      "kind": "single",
+      "industry": "Software",
+      "question": "In an agent loop on Claude 4 models with manual thinking, how do you let the model think between tool calls?",
+      "options": [
+        "Enable interleaved thinking with its beta header and keep thinking blocks in the history",
+        "Raise the step cap",
+        "Remove tools",
+        "Use temperature 0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Interleaved thinking needs the beta header in manual mode, and prior thinking blocks must be passed back with tool results."
+    },
+    {
+      "id": "rm17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is raising the thinking budget unlikely to help? Select all that apply.",
+      "options": [
+        "The answer depends on a document the model was never given",
+        "The request is a simple lookup that is already 97% correct",
+        "A multi-step pricing calculation with many constraints",
+        "A hard, novel coding problem"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Thinking cannot supply missing information, and easy tasks gain little. Hard multi-step problems are where it helps."
+    },
+    {
+      "id": "rm18",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Flat 16k costs ₹6,930 per 1,000 files and routed 16k costs ₹3,672. What is the saving?",
+      "options": [
+        "47.0%",
+        "53.0%",
+        "40.0%",
+        "35.2%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1 − 3,672 ÷ 6,930 = 0.470, so about 47.0%."
+    },
+    {
+      "id": "rm19",
+      "kind": "single",
+      "industry": "Software",
+      "question": "vLLM’s reasoning outputs feature is mainly for:",
+      "options": [
+        "Serving open reasoning models with reasoning content separated from the final answer",
+        "Setting Claude thinking budgets",
+        "Training reasoning models",
+        "Caching prompts"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "vLLM’s reasoning parsers separate reasoning content from the final answer for supported open models."
+    },
+    {
+      "id": "rm20",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "An EdTech tutor uses a reasoning model for hints. Which designs keep cost under control? Select all that apply.",
+      "options": [
+        "Low effort for simple factual hints, high effort for multi-step problems",
+        "Logging reasoning or thinking tokens per request",
+        "Maximum effort for every hint",
+        "Removing the output limit entirely"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Routing effort by difficulty and measuring tokens keep spend predictable. Flat maximum effort and unbounded output do the opposite."
+    }
+  ]
+}

@@ -1,0 +1,919 @@
+{
+  "id": "handoffs",
+  "moduleSlug": "multi-agent",
+  "name": "Handoffs",
+  "shortName": "Handoffs",
+  "question": "Who should own the conversation now?",
+  "summary": "One agent transfers the live conversation to a specialist, who then answers the user directly. A supervisor keeps control; a handoff gives it away. Handoffs are exposed to the model as tools, such as transfer_to_card_agent in the OpenAI Agents SDK, so routing depends on their names and descriptions. What history travels with the handoff decides whether the user must repeat themselves.",
+  "useCases": [
+    "Support bots with distinct specialist areas: cards, loans, fraud",
+    "Conversations whose owner should change midway",
+    "Specialists that need their own tools, permissions or instructions"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Handoff tool",
+        "detail": "transfer_to_<agent_name> by default (OpenAI Agents SDK)"
+      },
+      {
+        "term": "Descriptions",
+        "detail": "the triage model routes on them, so make them distinct"
+      },
+      {
+        "term": "input_type",
+        "detail": "structured payload the model fills in on handoff"
+      },
+      {
+        "term": "input_filter",
+        "detail": "trims what history the specialist sees"
+      },
+      {
+        "term": "max_turns",
+        "detail": "caps the loop; exceeding it raises MaxTurnsExceeded"
+      },
+      {
+        "term": "Active agent",
+        "detail": "the specialist owns the rest of the turn"
+      }
+    ]
+  },
+  "steps": [
+    "Build specialists with narrow, non-overlapping responsibilities",
+    "Write handoff descriptions that say exactly when to transfer",
+    "Pass the facts the specialist needs as a typed payload, not the whole transcript",
+    "Cap turns, and allow hand-backs only with a limit on hops"
+  ],
+  "pitfalls": [
+    "Overlapping descriptions cause misroutes and ping-pong",
+    "Passing no context makes users repeat themselves",
+    "Peer-to-peer handoffs without caps can loop"
+  ],
+  "tools": [
+    "OpenAI Agents SDK handoffs",
+    "LangGraph handoffs",
+    "langgraph-swarm",
+    "AutoGen HandoffTermination",
+    "Microsoft Agent Framework"
+  ],
+  "remember": "Distinct descriptions, typed payloads, capped hops.",
+  "caption": "Illustrative: a 3-field payload replaces 14 messages of history, and the user no longer has to repeat details.",
+  "comparison": {
+    "scope": "Who owns the conversation",
+    "cost": 2,
+    "needs": "Routing descriptions and payloads",
+    "best": "Misroutes and ping-pong"
+  },
+  "diagram": {
+    "file": "diagrams/handoffs.svg"
+  },
+  "lesson": {
+    "file": "bank_triage.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from dataclasses import dataclass",
+        "steps": []
+      },
+      {
+        "text": "from pydantic import BaseModel",
+        "steps": []
+      },
+      {
+        "text": "from agents import Agent, Runner, RunContextWrapper, handoff",
+        "steps": []
+      },
+      {
+        "text": "from agents.extensions import handoff_filters",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class CardCase(BaseModel):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    card_last4: str",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    reason: str",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@dataclass",
+        "steps": []
+      },
+      {
+        "text": "class Chat:",
+        "steps": []
+      },
+      {
+        "text": "    case: CardCase | None = None",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def keep_case(ctx: RunContextWrapper[Chat], case: CardCase):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    ctx.context.case = case                # the typed payload",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "card = Agent[Chat](name=\"Card agent\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    instructions=lambda ctx, a: f\"Resolve this case: {ctx.context.case}\",",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    handoff_description=\"Blocked or declined debit and credit cards.\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "loan = Agent[Chat](name=\"Loan agent\", instructions=\"Resolve loan EMIs.\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    handoff_description=\"Loan EMIs, bounced EMIs and foreclosure.\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "fraud = Agent[Chat](name=\"Fraud agent\", instructions=\"Freeze and report.\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    handoff_description=\"Transactions the customer does not recognise.\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "triage = Agent[Chat](name=\"Triage\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    instructions=\"Decide which specialist owns this, then hand off.\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    handoffs=[handoff(card, input_type=CardCase, on_handoff=keep_case,",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "                      input_filter=handoff_filters.remove_all_tools),",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "              loan, fraud])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "result = Runner.run_sync(triage, \"EMI bounced, card blocked?\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                         context=Chat(), max_turns=8)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "print(result.last_agent.name)             # Card agent",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Build specialists",
+        "text": "Three agents, each owning one area: cards, loans and fraud. Each has its own instructions and could have its own tools and permissions."
+      },
+      {
+        "title": "Write distinct descriptions",
+        "text": "Handoffs reach the model as tools named transfer_to_card_agent and so on. The triage model routes on these descriptions, so they must not overlap."
+      },
+      {
+        "title": "Attach them to triage",
+        "text": "handoffs=[...] gives triage one transfer tool per specialist. Triage only decides who owns the chat; it does not answer."
+      },
+      {
+        "title": "Pass a typed payload",
+        "text": "input_type makes the model fill in a CardCase (last four digits and reason) when it hands off, and on_handoff stores it where the card agent’s instructions can read it."
+      },
+      {
+        "title": "Trim the history",
+        "text": "input_filter removes earlier tool calls from what the card agent sees. It gets the conversation and the payload, not every intermediate step."
+      },
+      {
+        "title": "Cap the turns",
+        "text": "max_turns bounds the whole run; going past it raises MaxTurnsExceeded. The card agent now owns the chat and resolves it in 2 turns."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"210\" y=\"8\" width=\"142\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"281\" y=\"29.5\">Card agent</text></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx \" x=\"210\" y=\"86\" width=\"142\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"281\" y=\"107.5\">Loan agent</text></g><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx \" x=\"210\" y=\"164\" width=\"142\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"281\" y=\"185.5\">Fraud agent</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"sb a\" x=\"281\" y=\"56\" style=\"--d:0s\">blocked or declined cards</text><text class=\"sb a\" x=\"281\" y=\"134\" style=\"--d:0.1s\">loan EMIs, foreclosure</text><text class=\"sb a\" x=\"281\" y=\"212\" style=\"--d:0.2s\">unrecognised transactions</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"40\" width=\"84\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"50\" y=\"61.5\">Triage</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M92 57L206 25\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.28s\"><path class=\"ln \" d=\"M92 57L206 103\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.36s\"><path class=\"ln \" d=\"M92 57L206 181\" marker-end=\"url(#arr)\"/></g><text class=\"sb a\" x=\"50\" y=\"90\" style=\"--d:0.4s\">transfer_to_*</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"142\" width=\"150\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"83\" y=\"157\" text-anchor=\"middle\">payload: last4, reason</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"170\" width=\"150\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"83\" y=\"185\" text-anchor=\"middle\">history: tool calls removed</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln acc\" d=\"M92 57L206 25\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"8\" y=\"222\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"238\" text-anchor=\"middle\">max_turns=8 · the card agent answers in 2 turns</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "The specialist answers directly, so no manager relays every turn",
+      "Each specialist carries its own instructions, tools and permissions",
+      "Routing is plain tool calling that you can log and test",
+      "Typed payloads move only the facts the specialist needs"
+    ],
+    "cons": [
+      "Overlapping descriptions cause misroutes",
+      "Without context, users must repeat themselves",
+      "Peer-to-peer transfers can ping-pong or loop",
+      "Harder to keep one consistent voice across agents"
+    ],
+    "avoidWhen": [
+      "A manager should compose the final reply: call specialists as tools instead",
+      "The conversation never changes owner, as in back-office batch work"
+    ],
+    "tools": [
+      {
+        "name": "OpenAI Agents SDK handoffs",
+        "type": "Open source (OpenAI)",
+        "what": "handoff() with input_type, input_filter and on_handoff",
+        "url": "https://openai.github.io/openai-agents-python/handoffs/"
+      },
+      {
+        "name": "LangGraph handoffs",
+        "type": "Open source (LangChain)",
+        "what": "Handoff tools that return Command(goto=..., graph=Command.PARENT)",
+        "url": "https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs"
+      },
+      {
+        "name": "langgraph-swarm",
+        "type": "Open source (LangChain)",
+        "what": "create_swarm with an active_agent key for peer-to-peer handoffs",
+        "url": "https://github.com/langchain-ai/langgraph-swarm-py"
+      },
+      {
+        "name": "AutoGen HandoffTermination",
+        "type": "Open source (Microsoft, maintenance mode)",
+        "what": "Stops a team when a handoff to a given target (such as a human) occurs",
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html"
+      },
+      {
+        "name": "Microsoft Agent Framework",
+        "type": "Open source (Microsoft)",
+        "what": "Handoff orchestration between agents in workflows",
+        "url": "https://learn.microsoft.com/en-us/agent-framework/overview/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Tarang Telecom’s triage agent hands 20 sample chats to recharge, porting and roaming specialists. A chat that reaches the right specialist with the details it needs takes 3 turns of about 1.5k tokens each. A user asked to repeat details adds 3 turns; each extra hop adds a turn.",
+    "controls": [
+      "Set how much the specialists’ handoff descriptions overlap.",
+      "Choose what travels with the handoff: nothing, a summary, a typed payload or the full history.",
+      "Allow or forbid hand-backs to triage, and set max_turns."
+    ],
+    "outputs": [
+      {
+        "name": "Routing accuracy",
+        "meaning": "Chats sent to the right specialist first."
+      },
+      {
+        "name": "Handoffs per chat",
+        "meaning": "All transfers, including bounces between specialists."
+      },
+      {
+        "name": "Users asked to repeat",
+        "meaning": "Chats where the specialist lacked the details it needed."
+      },
+      {
+        "name": "Chats resolved",
+        "meaning": "Chats that ended with the right specialist within max_turns."
+      },
+      {
+        "name": "Tokens per resolved chat",
+        "meaning": "All turns and handoff context ÷ resolved chats."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Overlapping, cold start",
+        "expect": "60% overlap routes 14 of 20 correctly (70%). With hand-backs off, 6 chats are stuck; every user repeats their details. 14 resolved at 12.9k tokens each."
+      },
+      {
+        "k": "clear",
+        "name": "Distinct descriptions",
+        "expect": "10% overlap routes 19 of 20 (95%), but the specialist still starts cold, so all 20 users repeat themselves. 19 resolved at 9.5k tokens each."
+      },
+      {
+        "k": "full",
+        "name": "Full history",
+        "expect": "Passing all 14 messages ends the repeats (0), but adds 5.6k tokens to every handoff: 19 resolved at 10.6k each."
+      },
+      {
+        "k": "pingpong",
+        "name": "Ping-pong",
+        "expect": "80% overlap with hand-backs on: every chat is resolved, but misroutes bounce 4 times, so handoffs rise to 4.2 per chat; a summary still leaves 4 users repeating."
+      }
+    ],
+    "missions": [
+      {
+        "k": "route",
+        "text": "Reach 90% routing accuracy or better.",
+        "hint": "Make the descriptions distinct: 20% overlap or less."
+      },
+      {
+        "k": "norepeat",
+        "text": "Get “asked to repeat” to 0 without passing the full history.",
+        "hint": "Use the typed payload (input_type)."
+      },
+      {
+        "k": "back",
+        "text": "Allow hand-backs and keep handoffs per chat at 2 or fewer, with all 20 chats resolved.",
+        "hint": "Hand-backs rescue misroutes, but each misroute bounces more when descriptions overlap. Lower the overlap and leave enough turns."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenAI Agents SDK handoffs",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "handoff() turns an agent into a transfer tool, with input_type, input_filter, on_handoff and name and description overrides.",
+        "ex": "Triage hands a bounced-EMI chat to a card agent with a typed CardCase payload.",
+        "pros": [
+          "Handoffs are ordinary tool calls you can trace",
+          "Typed payloads and history filters built in"
+        ],
+        "cons": [
+          "Routing quality rests on your descriptions",
+          "Peer hand-backs need your own hop limits"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/handoffs/"
+      },
+      {
+        "n": "LangGraph handoffs",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Handoff tools that return a Command naming the next agent node, with a state update, in the parent graph.",
+        "ex": "A support graph moves from a billing agent to a refunds agent, passing only the handoff message pair.",
+        "pros": [
+          "Precise control of what state moves",
+          "Fits into larger graphs"
+        ],
+        "cons": [
+          "More wiring than a one-line handoff",
+          "State design is on you"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs"
+      },
+      {
+        "n": "langgraph-swarm",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "Peer-to-peer handoffs with create_swarm and an active_agent key that remembers who owns the chat.",
+        "ex": "A travel assistant swarm moves between flights and hotels agents and resumes with the last active one.",
+        "pros": [
+          "Quick to set up peer handoffs",
+          "Remembers the active agent across turns"
+        ],
+        "cons": [
+          "Peer transfers can loop without caps",
+          "Smaller community than core LangGraph"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph-swarm-py"
+      },
+      {
+        "n": "AutoGen handoff termination",
+        "type": "Open source · Microsoft (maintenance mode)",
+        "start": 2,
+        "prod": 2,
+        "best": "Stops a team when an agent hands off to a given target, such as a human user.",
+        "ex": "A Swarm team stops and waits when the agent hands off to “user” for a missing OTP.",
+        "pros": [
+          "Clean hand-back to a human",
+          "Combines with other termination conditions"
+        ],
+        "cons": [
+          "AutoGen is in maintenance mode",
+          "Swarm teams need firm caps"
+        ],
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html"
+      },
+      {
+        "n": "Microsoft Agent Framework",
+        "type": "Open source · Microsoft",
+        "start": 2,
+        "prod": 3,
+        "best": "Agents and multi-agent workflows for Python and .NET; the successor to AutoGen and Semantic Kernel.",
+        "ex": "A .NET bank team builds a workflow with sequential, concurrent and handoff steps.",
+        "pros": [
+          "Enterprise integrations and .NET support",
+          "Actively developed successor to AutoGen"
+        ],
+        "cons": [
+          "Newer, so fewer examples",
+          "APIs still settling"
+        ],
+        "url": "https://learn.microsoft.com/en-us/agent-framework/overview/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Support triage in Python",
+        "tool": "OpenAI Agents SDK handoffs"
+      },
+      {
+        "need": "Handoffs inside a larger graph",
+        "tool": "LangGraph handoffs"
+      },
+      {
+        "need": "Peer-to-peer specialists",
+        "tool": "langgraph-swarm, with hop caps"
+      }
+    ],
+    "goals": [
+      "Explain the difference between a handoff and calling an agent as a tool",
+      "Write handoff descriptions that route cleanly",
+      "Choose what context travels with a handoff"
+    ]
+  },
+  "practice": {
+    "scenario": "Tarang Telecom, a fictional operator, runs a support bot that first classifies each chat and then hands it to a recharge, porting or roaming specialist. Each handoff carries a small typed payload (mobile number, circle, issue) instead of the whole transcript, and each specialist has its own tools and permissions.",
+    "industries": [
+      {
+        "industry": "Telecom",
+        "use": "Triage to recharge, porting and roaming specialists"
+      },
+      {
+        "industry": "Banking",
+        "use": "Triage to card, loan and fraud agents with separate permissions"
+      },
+      {
+        "industry": "Airlines",
+        "use": "Triage to rebooking, baggage and refund agents"
+      }
+    ],
+    "analogy": "A hospital reception desk. The receptionist asks two questions, writes a short referral slip and sends you to the right department, which takes over your case.",
+    "library": {
+      "name": "OpenAI Agents SDK",
+      "what": "Agents list the specialists they can hand off to; each handoff is a tool the model can call, with optional typed input, history filters and a callback.",
+      "install": "pip install openai-agents"
+    },
+    "samples": [
+      {
+        "file": "tarang_support.py",
+        "language": "python",
+        "code": "import asyncio\nfrom pydantic import BaseModel\nfrom agents import Agent, Runner, RunContextWrapper, handoff\nfrom agents.extensions import handoff_filters\n\nclass PortRequest(BaseModel):\n    mobile: str\n    circle: str\n    issue: str\n\nasync def log_port(ctx: RunContextWrapper[None], data: PortRequest):\n    print(\"porting handoff:\", data.mobile, data.circle)\n\nrecharge = Agent(name=\"Recharge agent\",\n                 handoff_description=\"Failed or missing prepaid recharges and plan changes.\",\n                 instructions=\"Resolve recharge issues. Never ask again for details you were given.\")\nporting = Agent(name=\"Porting agent\",\n                handoff_description=\"Moving a number to or from Tarang (MNP), UPC codes.\",\n                instructions=\"Resolve porting issues using the payload you receive.\")\n\ntriage = Agent(\n    name=\"Triage\",\n    instructions=\"Classify the problem and hand off. Do not answer it yourself.\",\n    handoffs=[recharge,\n              handoff(porting, input_type=PortRequest, on_handoff=log_port,\n                      input_filter=handoff_filters.remove_all_tools)],\n)\n\nasync def main():\n    result = await Runner.run(triage, \"My UPC code expired before the port finished\",\n                              max_turns=8)\n    print(result.last_agent.name, \"->\", result.final_output)\n\nasyncio.run(main())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Without handoff payloads, 40% of 1,000 transferred chats make the user repeat details, adding 4 turns each. A typed payload removes the repeats. At 1.5k tokens per turn, how many tokens (in thousands) does the payload save across the 1,000 chats?",
+    "answer": "Chats with repeats: 0.4 × 1,000 = 400. Extra turns: 400 × 4 = 1,600. Tokens: 1,600 × 1.5k = 2,400k tokens, or 2.4 million.",
+    "expected": {
+      "value": 2400,
+      "tolerance": 1,
+      "label": "tokens saved (k) ="
+    },
+    "interview": [
+      {
+        "question": "When do you use a handoff rather than calling a specialist as a tool?",
+        "answer": "Use a handoff when the specialist should own the rest of the conversation and answer the user directly. Use agent-as-tool when a manager should keep control, call the specialist for a sub-answer and compose the reply itself."
+      },
+      {
+        "question": "Why do handoff descriptions matter so much?",
+        "answer": "Handoffs are exposed to the model as tools, so the triage model chooses among them from their names and descriptions. Overlapping descriptions leave it guessing, which causes misroutes and back-and-forth transfers."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t pass the whole transcript on every handoff.",
+        "fix": "Pass a small typed payload and filter the history."
+      },
+      {
+        "mistake": "Don’t allow unlimited back-handoffs.",
+        "fix": "Cap turns and hops so two specialists cannot ping-pong."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ho01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s triage agent keeps sending EMI questions to the card agent. The card and loan handoffs have almost identical descriptions. What is the fix?",
+      "options": [
+        "A larger model for triage",
+        "Distinct descriptions that say exactly when to transfer to each specialist",
+        "Passing the full history on every handoff",
+        "Raising max_turns"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Handoffs are tools, and the model routes on their descriptions. Overlapping descriptions leave it guessing."
+    },
+    {
+      "id": "ho02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "In the OpenAI Agents SDK, what is the default tool name for a handoff to an agent named “Refund agent”?",
+      "options": [
+        "handoff_refund",
+        "transfer_to_refund_agent",
+        "refund_agent_tool",
+        "call_refund_agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Handoffs appear to the model as tools named transfer_to_<agent_name> by default."
+    },
+    {
+      "id": "ho03",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "When should a telecom support bot use a handoff rather than calling a specialist as a tool? Select all that apply.",
+      "options": [
+        "The specialist should talk to the user directly for the rest of the chat",
+        "The specialist has its own permissions and should own the case",
+        "A manager must combine three specialists’ answers into one reply",
+        "The manager needs a one-off sub-answer inside its own reply"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A handoff transfers ownership. When one agent should keep control and compose the reply, call specialists as tools."
+    },
+    {
+      "id": "ho04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Of 2,000 transferred chats, 30% make the user repeat their details, adding 3 turns each at about 1.2k tokens a turn. How many tokens do the repeats cost?",
+      "options": [
+        "720k",
+        "2.16 million",
+        "7.2 million",
+        "2.4 million"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.3 × 2,000 = 600 chats × 3 turns × 1.2k = 2,160k tokens, about 2.16 million."
+    },
+    {
+      "id": "ho05",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An airline’s rebooking and baggage agents hand a chat back and forth until the run passes max_turns. What does the OpenAI Agents SDK do?",
+      "options": [
+        "Silently returns the last message",
+        "Raises MaxTurnsExceeded",
+        "Doubles max_turns and continues",
+        "Hands the chat to a human automatically"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Exceeding max_turns raises MaxTurnsExceeded, which you can catch to escalate."
+    },
+    {
+      "id": "ho06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What is input_filter for on a handoff?",
+      "options": [
+        "Choosing which agent receives the handoff",
+        "Controlling which parts of the conversation history the receiving agent sees",
+        "Validating the user’s identity",
+        "Setting the receiving agent’s model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An input filter transforms the history passed on, for example removing earlier tool calls."
+    },
+    {
+      "id": "ho07",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "An insurer’s claims bot bounces chats between its policy and claims agents. What can cause this? Select all that apply.",
+      "options": [
+        "Overlapping handoff descriptions",
+        "Unlimited hand-backs between specialists",
+        "No cap on turns",
+        "A typed payload on each handoff"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Ping-pong comes from ambiguous ownership and missing limits. A typed payload helps the receiver; it does not cause bouncing."
+    },
+    {
+      "id": "ho08",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In LangGraph, what does a handoff tool return to move control to another agent in the parent graph?",
+      "options": [
+        "A plain string naming the agent",
+        "Command(goto=..., update=..., graph=Command.PARENT)",
+        "A new StateGraph",
+        "An HTTP redirect"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "LangGraph handoff tools return a Command that names the next node, updates state and targets the parent graph."
+    },
+    {
+      "id": "ho09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s triage routes 500 chats with 88% accuracy. Each misroute costs 2 extra handoffs before the chat lands. How many extra handoffs is that?",
+      "options": [
+        "60",
+        "120",
+        "440",
+        "240"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "12% of 500 = 60 misroutes × 2 = 120 extra handoffs."
+    },
+    {
+      "id": "ho10",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An airline wants the triage model to supply the PNR and the reason when it hands off to the refunds agent. Which feature fits?",
+      "options": [
+        "max_turns",
+        "input_type on the handoff",
+        "tool_name_override",
+        "A larger context window"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "input_type makes the model fill in a structured payload when it calls the handoff."
+    },
+    {
+      "id": "ho11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A hospital’s intake agent hands patients to a scheduling agent. What should travel with the handoff? Select all that apply.",
+      "options": [
+        "A typed payload with the facts scheduling needs",
+        "The conversation with earlier tool calls filtered out",
+        "Every internal tool call and raw tool output",
+        "Nothing, so the specialist starts unbiased"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Pass the needed facts and a trimmed history. Raw tool output wastes tokens; nothing at all makes the patient repeat themselves."
+    },
+    {
+      "id": "ho12",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A travel assistant built with langgraph-swarm resumes a returning user’s chat. Which agent answers first?",
+      "options": [
+        "Always the first agent defined",
+        "The agent recorded in the active_agent state key",
+        "A random agent",
+        "The agent with the shortest description"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "langgraph-swarm tracks active_agent so a conversation resumes with whichever agent last owned it."
+    },
+    {
+      "id": "ho13",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A student-support triage agent hands a fee query to the fees agent. Who replies to the student next?",
+      "options": [
+        "The triage agent, relaying the fees agent’s answer",
+        "The fees agent, directly",
+        "Both agents, one after the other",
+        "No one until a human approves"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "After a handoff the specialist becomes the active agent and answers directly."
+    },
+    {
+      "id": "ho14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "How does a handoff differ from model routing?",
+      "options": [
+        "They are the same thing",
+        "Routing picks a model for one request; a handoff moves ownership of the conversation, with its state, to another agent",
+        "A handoff always uses a smaller model",
+        "Routing needs several agents; handoffs need one"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Routing is a per-request model choice. A handoff changes which agent owns the rest of the conversation."
+    },
+    {
+      "id": "ho15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Passing the full history adds 14 messages of about 0.4k tokens to each handoff, and chats average 1.4 handoffs. How many extra tokens per chat is that?",
+      "options": [
+        "5.6k",
+        "7.84k",
+        "4k",
+        "19.6k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "14 × 0.4k = 5.6k per handoff; 5.6k × 1.4 = 7.84k per chat."
+    },
+    {
+      "id": "ho16",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "What is the on_handoff callback useful for? Select all that apply.",
+      "options": [
+        "Logging or fetching data at the moment of the handoff",
+        "Storing the typed payload where the specialist can read it",
+        "Choosing which agent the handoff goes to",
+        "Raising max_turns during the run"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "on_handoff runs when the handoff happens, so it can log, fetch data or store the payload. The model chooses the target; max_turns is a run setting."
+    },
+    {
+      "id": "ho17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An AutoGen support team must pause when an agent needs the customer to supply an OTP. Which termination condition fits?",
+      "options": [
+        "MaxMessageTermination",
+        "HandoffTermination targeting the user",
+        "TokenUsageTermination",
+        "TimeoutTermination"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "HandoffTermination stops the team when an agent hands off to the named target, here the user."
+    },
+    {
+      "id": "ho18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The fraud agent can freeze cards; the triage agent cannot. Why keep permissions per specialist?",
+      "options": [
+        "It makes routing faster",
+        "Each agent gets only the privileges its job needs, so a misrouted or manipulated agent can do less harm",
+        "It reduces token use",
+        "The SDK requires it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Per-agent permissions apply least privilege: the tools that can change things sit only with the agent that owns that job."
+    },
+    {
+      "id": "ho19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which make good handoff descriptions for a telecom bot’s specialists? Select all that apply.",
+      "options": [
+        "Saying exactly when to transfer",
+        "Naming topics that are distinct for each specialist",
+        "Avoiding overlap with sibling specialists",
+        "Using one generic sentence for all of them, for consistency"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Specific, distinct, non-overlapping descriptions give the triage model something to route on. A shared generic sentence removes that."
+    },
+    {
+      "id": "ho20",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "On 20 test chats, triage routes 17 correctly. How many more must it get right to reach the 90% target?",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "90% of 20 is 18, so it needs one more correct route."
+    }
+  ]
+}

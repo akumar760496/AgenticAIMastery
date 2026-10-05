@@ -1,0 +1,317 @@
+{
+  "slug": "security",
+  "number": 12,
+  "techniqueOrder": [
+    "threatmodel",
+    "indirect",
+    "exfil",
+    "toolpoison",
+    "sandbox",
+    "redteam",
+    "agentid",
+    "mempoison",
+    "secrets"
+  ],
+  "glossary": [
+    {
+      "term": "prompt injection",
+      "definition": "Input crafted to make a model follow the attacker’s instructions instead of the developer’s or user’s."
+    },
+    {
+      "term": "indirect prompt injection",
+      "definition": "Prompt injection delivered through content the agent reads, such as a web page, email, document or tool result."
+    },
+    {
+      "term": "lethal trifecta",
+      "definition": "An agent with private data, untrusted content and external communication: the combination that allows data theft."
+    },
+    {
+      "term": "OWASP Top 10 for LLM Applications",
+      "definition": "OWASP’s list of the ten main security risks for LLM applications; the current edition is 2025."
+    },
+    {
+      "term": "OWASP Top 10 for Agentic Applications",
+      "definition": "OWASP’s list of the ten main risks for autonomous agents, ASI01 to ASI10, published in December 2025."
+    },
+    {
+      "term": "exfiltration",
+      "definition": "Moving data out of a system to a place the attacker controls."
+    },
+    {
+      "term": "egress allowlist",
+      "definition": "A rule that lets outbound traffic reach only named, approved destinations."
+    },
+    {
+      "term": "DLP",
+      "definition": "Data loss prevention: scanning outbound content for sensitive data such as account or ID numbers."
+    },
+    {
+      "term": "tool poisoning",
+      "definition": "Hiding malicious instructions in a tool’s description or schema, which the model reads."
+    },
+    {
+      "term": "rug pull",
+      "definition": "A trusted tool or server changing its behaviour or descriptions after it has been approved."
+    },
+    {
+      "term": "sandbox",
+      "definition": "An isolated environment where untrusted code runs without access to the host, secrets or open network."
+    },
+    {
+      "term": "microVM",
+      "definition": "A lightweight virtual machine with its own kernel, such as Firecracker, used for strong isolation."
+    },
+    {
+      "term": "red teaming",
+      "definition": "Attacking your own system on purpose to find weaknesses before real attackers do."
+    },
+    {
+      "term": "attack success rate",
+      "definition": "The share of attack attempts that achieve the attacker’s goal, usually measured per category."
+    },
+    {
+      "term": "workload identity",
+      "definition": "An identity issued to software rather than a person, such as a SPIFFE ID or a cloud workload identity, proved with short-lived credentials instead of stored keys."
+    },
+    {
+      "term": "non-human identity",
+      "definition": "Any identity used by software: service accounts, API keys, workload identities and agents. Agents should each have their own."
+    },
+    {
+      "term": "actor claim",
+      "definition": "The act claim in a token produced by OAuth 2.0 Token Exchange (RFC 8693); it names the party acting on behalf of the subject, such as an agent acting for a customer."
+    },
+    {
+      "term": "just-in-time access",
+      "definition": "Privileged rights granted for a short time, for a stated reason and approval, then removed automatically, instead of held permanently."
+    },
+    {
+      "term": "memory poisoning",
+      "definition": "Planting a false fact or instruction in an agent’s long-term memory so it acts in later sessions."
+    },
+    {
+      "term": "provenance",
+      "definition": "Where a piece of stored content came from: source, author, trust level and time."
+    },
+    {
+      "term": "quarantine",
+      "definition": "Holding untrusted content as inactive until a trusted party confirms it."
+    },
+    {
+      "term": "broker pattern",
+      "definition": "A trusted service that holds credentials and makes calls for the agent, returning only results."
+    },
+    {
+      "term": "dynamic credential",
+      "definition": "A credential created on demand with a short lease, such as a one-hour database user."
+    },
+    {
+      "term": "secret scanning",
+      "definition": "Searching text such as code, logs and model output for credential patterns."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "OWASP Top 10 for LLM Applications (2025)",
+      "url": "https://genai.owasp.org/llm-top-10/"
+    },
+    {
+      "id": "S2",
+      "title": "OWASP Top 10 for Agentic Applications for 2026",
+      "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/"
+    },
+    {
+      "id": "S3",
+      "title": "Simon Willison: The lethal trifecta for AI agents (June 2025)",
+      "url": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+    },
+    {
+      "id": "S4",
+      "title": "Greshake et al.: Not what you’ve signed up for, indirect prompt injection (2023)",
+      "url": "https://arxiv.org/abs/2302.12173"
+    },
+    {
+      "id": "S5",
+      "title": "AgentDojo: a dynamic environment for prompt injection attacks and defences (2024)",
+      "url": "https://arxiv.org/abs/2406.13352"
+    },
+    {
+      "id": "S6",
+      "title": "Debenedetti et al.: Defeating prompt injections by design, CaMeL (2025)",
+      "url": "https://arxiv.org/abs/2503.18813"
+    },
+    {
+      "id": "S7",
+      "title": "Beurer-Kellner et al.: Design patterns for securing LLM agents against prompt injections (2025)",
+      "url": "https://arxiv.org/abs/2506.08837"
+    },
+    {
+      "id": "S8",
+      "title": "Hines et al.: Defending against indirect prompt injection with spotlighting (2024)",
+      "url": "https://arxiv.org/abs/2403.14720"
+    },
+    {
+      "id": "S9",
+      "title": "Simon Willison: The dual LLM pattern (2023)",
+      "url": "https://simonwillison.net/2023/Apr/25/dual-llm-pattern/"
+    },
+    {
+      "id": "S10",
+      "title": "Invariant Labs: MCP security notification, tool poisoning attacks (2025)",
+      "url": "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks"
+    },
+    {
+      "id": "S11",
+      "title": "Model Context Protocol documentation and security guidance",
+      "url": "https://modelcontextprotocol.io"
+    },
+    {
+      "id": "S12",
+      "title": "MITRE ATLAS",
+      "url": "https://atlas.mitre.org"
+    },
+    {
+      "id": "S13",
+      "title": "gVisor documentation",
+      "url": "https://gvisor.dev/docs/"
+    },
+    {
+      "id": "S14",
+      "title": "Firecracker microVMs",
+      "url": "https://firecracker-microvm.github.io"
+    },
+    {
+      "id": "S15",
+      "title": "promptfoo: LLM red teaming guide",
+      "url": "https://www.promptfoo.dev/docs/red-team/"
+    },
+    {
+      "id": "S16",
+      "title": "garak, the LLM vulnerability scanner (NVIDIA)",
+      "url": "https://github.com/NVIDIA/garak"
+    },
+    {
+      "id": "S17",
+      "title": "PyRIT, Python Risk Identification Tool (Microsoft)",
+      "url": "https://github.com/Azure/PyRIT"
+    },
+    {
+      "id": "S18",
+      "title": "Microsoft Presidio",
+      "url": "https://microsoft.github.io/presidio/"
+    },
+    {
+      "id": "S19",
+      "title": "MDN: Content Security Policy",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+    },
+    {
+      "id": "S20",
+      "title": "RFC 8693: OAuth 2.0 Token Exchange (IETF, 2020)",
+      "url": "https://datatracker.ietf.org/doc/html/rfc8693"
+    },
+    {
+      "id": "S21",
+      "title": "SPIFFE and SPIRE documentation",
+      "url": "https://spiffe.io/docs/latest/spire-about/"
+    },
+    {
+      "id": "S22",
+      "title": "NIST SP 800-207: Zero Trust Architecture",
+      "url": "https://csrc.nist.gov/pubs/sp/800/207/final"
+    },
+    {
+      "id": "S23",
+      "title": "Microsoft identity platform: the OAuth 2.0 on-behalf-of flow",
+      "url": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow"
+    },
+    {
+      "id": "S24",
+      "title": "Google Cloud: Workload Identity Federation",
+      "url": "https://cloud.google.com/iam/docs/workload-identity-federation"
+    },
+    {
+      "id": "S25",
+      "title": "AWS IAM: security best practices (temporary credentials, least privilege)",
+      "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html"
+    },
+    {
+      "id": "S26",
+      "title": "PoisonedRAG: knowledge corruption attacks on retrieval-augmented generation (Zou et al., 2024)",
+      "url": "https://arxiv.org/abs/2402.07867"
+    },
+    {
+      "id": "S27",
+      "title": "AgentPoison: red-teaming LLM agents via poisoning memory or knowledge bases (Chen et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.12784"
+    },
+    {
+      "id": "S28",
+      "title": "OWASP Top 10 for LLM Applications",
+      "url": "https://genai.owasp.org/llm-top-10/"
+    },
+    {
+      "id": "S29",
+      "title": "OWASP Secrets Management Cheat Sheet",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    },
+    {
+      "id": "S30",
+      "title": "HashiCorp Vault: Database secrets engine",
+      "url": "https://developer.hashicorp.com/vault/docs/secrets/databases"
+    },
+    {
+      "id": "S31",
+      "title": "Gitleaks on GitHub",
+      "url": "https://github.com/gitleaks/gitleaks"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "We are about to give the agent real data and real tools",
+      "techniqueId": "threatmodel",
+      "advice": "Inventory what it reads, does and sends; map to the OWASP lists; break every lethal trifecta."
+    },
+    {
+      "symptom": "The agent reads emails, PDFs or web pages and can take actions",
+      "techniqueId": "indirect",
+      "advice": "Separate reading untrusted content from choosing tools, and confirm consequential actions."
+    },
+    {
+      "symptom": "The agent sees personal data and our chat renders markdown",
+      "techniqueId": "exfil",
+      "advice": "Block untrusted images and links, allowlist egress, add DLP and approval, and scope data access."
+    },
+    {
+      "symptom": "We load MCP servers or plugins from a public registry",
+      "techniqueId": "toolpoison",
+      "advice": "Allowlist publishers, pin and hash descriptions, scan them, and give each server its own scoped token."
+    },
+    {
+      "symptom": "The agent writes and runs code",
+      "techniqueId": "sandbox",
+      "advice": "Run it in an isolated sandbox with no host secrets, resource limits and an allowlisting egress proxy."
+    },
+    {
+      "symptom": "We have only tried a few jailbreaks by hand",
+      "techniqueId": "redteam",
+      "advice": "Run automated campaigns across categories and strategies, and keep every hit in a CI regression suite."
+    },
+    {
+      "symptom": "All our agents share one admin service account",
+      "techniqueId": "agentid",
+      "advice": "Give each agent its own short-lived workload identity, exchange tokens on behalf of the user, grant least privilege with just-in-time elevation, and keep an inventory with a kill switch per agent."
+    },
+    {
+      "symptom": "The agent remembers things across sessions, and some of what it reads comes from outsiders",
+      "techniqueId": "mempoison",
+      "advice": "Tag memory writes with provenance, quarantine untrusted content, show memories as data, and audit and expire them."
+    },
+    {
+      "symptom": "The agent’s prompt, tools or logs contain API keys or passwords",
+      "techniqueId": "secrets",
+      "advice": "Keep secrets in a vault behind a broker, use short-lived scoped credentials, and scan outputs and logs."
+    }
+  ]
+}

@@ -1,0 +1,842 @@
+{
+  "id": "process",
+  "moduleSlug": "evaluation",
+  "name": "Process-Level Eval",
+  "shortName": "Process-level",
+  "question": "Where exactly did it go wrong?",
+  "summary": "Open the black box and score the trajectory: the plan, each tool call and its arguments, the order of steps, and how the agent recovered from errors. It turns a failed run into a specific fix.",
+  "useCases": [
+    "Debugging failures that system-level eval surfaced",
+    "Tuning tool descriptions, prompts and planning logic",
+    "Catching agents that succeed wastefully through loops or redundant calls"
+  ],
+  "keyFacts": {
+    "label": "Key metrics",
+    "items": [
+      {
+        "term": "Tool selection accuracy",
+        "detail": "right tool chosen at each step"
+      },
+      {
+        "term": "Argument correctness",
+        "detail": "parameters valid and match intent"
+      },
+      {
+        "term": "Trajectory match",
+        "detail": "exact, in-order or any-order vs a reference path"
+      },
+      {
+        "term": "Step efficiency",
+        "detail": "optimal steps ÷ actual steps"
+      },
+      {
+        "term": "Error recovery rate",
+        "detail": "failed calls the agent retried or routed around"
+      },
+      {
+        "term": "Plan adherence",
+        "detail": "executed steps that follow the stated plan"
+      }
+    ]
+  },
+  "steps": [
+    "Instrument the agent so every step is a trace span (OpenTelemetry works well)",
+    "Define reference trajectories for key tasks, or a per-step rubric",
+    "Score each step with code checks first, then an LLM judge for judgment calls",
+    "Aggregate by step type to find the weakest link"
+  ],
+  "pitfalls": [
+    "Many paths can be valid, and exact-match scoring punishes good alternatives",
+    "Reference trajectories are costly to write and go stale when tools change",
+    "Step scores can look fine while the final outcome still fails"
+  ],
+  "tools": [
+    "LangSmith",
+    "Langfuse",
+    "Arize Phoenix",
+    "Vertex AI Gen AI Evaluation",
+    "Google ADK eval"
+  ],
+  "remember": "Grade the path, not just the destination.",
+  "caption": "Each step gets its own verdict, so the failure has an exact location.",
+  "comparison": {
+    "scope": "Each step of the trajectory",
+    "cost": 3,
+    "needs": "Traces + reference path or step rubric",
+    "best": "Debugging, prompt and tool tuning"
+  },
+  "diagram": {
+    "file": "diagrams/process.svg"
+  },
+  "lesson": {
+    "file": "score_trajectory.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "trace = load_trace(\"run_8812.json\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "steps = [(s.tool, s.args) for s in trace.spans if s.kind == \"tool\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "reference = [\"find_order\", \"get_account\", \"issue_refund\"]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "tools = [name for name, _ in steps]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "exact = tools == reference",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "it = iter(tools)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "in_order = all(step in it for step in reference)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "efficiency = len(reference) / len(tools)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "redundant = [t for i, t in enumerate(tools) if t in tools[:i]]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "arg_errors = [a for name, a in steps",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "              if name == \"issue_refund\" and a[\"cur\"] != \"INR\"]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "report = {\"exact\": exact, \"in_order\": in_order, \"efficiency\": efficiency,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "          \"redundant\": redundant, \"arg_errors\": arg_errors}",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Capture the trace",
+        "text": "Instrument the agent so every tool call becomes a span with its name, arguments, result and error."
+      },
+      {
+        "title": "Write the reference path",
+        "text": "For key tasks, record the steps a correct run needs: find the order, fetch the account, issue the refund."
+      },
+      {
+        "title": "Match the trajectory",
+        "text": "Exact match fails because of an extra call. In-order match passes: the reference steps appear in order."
+      },
+      {
+        "title": "Measure efficiency",
+        "text": "3 needed steps ÷ 4 actual = 0.75. The repeated get_account is waste, often caused by a vague tool description."
+      },
+      {
+        "title": "Check the arguments",
+        "text": "issue_refund was called with USD instead of INR. The outcome might still look fine, but this step is wrong."
+      },
+      {
+        "title": "Report per step",
+        "text": "Aggregate findings by tool across many traces. Fix the weakest tool first."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"22\" style=\"--d:0s\">Trace (what the agent did)</text><g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"30\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"50\" y=\"47\" text-anchor=\"middle\">find_order</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx \" x=\"96\" y=\"30\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"138\" y=\"47\" text-anchor=\"middle\">get_account</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx \" x=\"184\" y=\"30\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"226\" y=\"47\" text-anchor=\"middle\">get_account</text></g><g class=\"a\" style=\"--d:0.36s\"><rect class=\"bx \" x=\"272\" y=\"30\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"314\" y=\"47\" text-anchor=\"middle\">issue_refund</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"96\" style=\"--d:0s\">Reference path</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"8\" y=\"104\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"50\" y=\"121\" text-anchor=\"middle\">find_order</text></g><g class=\"a\" style=\"--d:0.22s\"><rect class=\"bx acc\" x=\"96\" y=\"104\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"138\" y=\"121\" text-anchor=\"middle\">get_account</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx acc\" x=\"272\" y=\"104\" width=\"84\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"314\" y=\"121\" text-anchor=\"middle\">issue_refund</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<path class=\"ln draw pass\" pathLength=\"1\" d=\"M50 104 V58\" style=\"--d:0s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M138 104 V58\" style=\"--d:0.1s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M314 104 V58\" style=\"--d:0.2s\"/><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx fail\" x=\"8\" y=\"146\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"162\" text-anchor=\"middle\">exact match ✗</text></g><g class=\"a\" style=\"--d:0.55s\"><rect class=\"bx pass\" x=\"182\" y=\"146\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"162\" text-anchor=\"middle\">in-order match ✓</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tag-t warn\" x=\"226\" y=\"72\">redundant</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"8\" y=\"178\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"194\" text-anchor=\"middle\">efficiency 3 ÷ 4 = 0.75</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"350\" cy=\"30\" r=\"9\" class=\"bd-fail\"/><path d=\"M346.5 26.5l7 7M353.5 26.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><text class=\"tag-t fail\" x=\"314\" y=\"72\">cur = USD</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx fail\" x=\"182\" y=\"178\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"194\" text-anchor=\"middle\">argument errors: 1</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"212\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"229\" text-anchor=\"middle\">report → fix the issue_refund tool description</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Pinpoints the exact step that went wrong",
+      "Catches wasteful or risky intermediate actions even when the outcome passes",
+      "Turns failures into specific prompt and tool fixes",
+      "Scores failed runs usefully, not just as zeros"
+    ],
+    "cons": [
+      "Requires tracing every step",
+      "Reference paths are costly to write and go stale",
+      "Strict matching penalizes valid alternative paths",
+      "Good step scores don’t guarantee a good outcome"
+    ],
+    "avoidWhen": [
+      "Tools and flows are still changing daily (references go stale)",
+      "Many equally valid paths exist and you have no step rubric"
+    ],
+    "tools": [
+      {
+        "name": "Langfuse",
+        "type": "Open source, self-hostable",
+        "what": "Tracing, span-level scores and datasets",
+        "url": "https://github.com/langfuse/langfuse"
+      },
+      {
+        "name": "Arize Phoenix",
+        "type": "Open source",
+        "what": "OpenTelemetry-based tracing with trace evaluations",
+        "url": "https://github.com/Arize-ai/phoenix"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial (LangChain)",
+        "what": "Trace viewer plus trajectory evaluators",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Vertex AI Gen AI Evaluation",
+        "type": "Google Cloud",
+        "what": "Built-in trajectory metrics: exact, in-order, any-order match",
+        "url": "https://cloud.google.com/vertex-ai/generative-ai/docs/models/evaluation-overview"
+      },
+      {
+        "name": "OpenTelemetry",
+        "type": "Open standard",
+        "what": "Vendor-neutral spans so traces work with any backend",
+        "url": "https://opentelemetry.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A refund agent should do three things in order: find the order, fetch the customer's account, then issue the refund in INR. You're looking at the trace of what it actually did, one tool call per chip, and scoring each step against that reference.",
+    "controls": [
+      "Click a + button to add that tool call to the end of the trajectory.",
+      "Undo removes the last call; Reset restores the starting trace.",
+      "Choose the currency the agent passed to issue_refund."
+    ],
+    "outputs": [
+      {
+        "name": "Exact match",
+        "meaning": "Identical to the reference: same steps, same order, nothing extra."
+      },
+      {
+        "name": "In-order match",
+        "meaning": "The reference steps appear in the right order; extra steps are allowed."
+      },
+      {
+        "name": "Any-order match",
+        "meaning": "Every reference step appears somewhere, in any order."
+      },
+      {
+        "name": "Step efficiency",
+        "meaning": "Needed steps ÷ steps taken. 100% means no wasted calls."
+      },
+      {
+        "name": "Arguments correct",
+        "meaning": "issue_refund used INR, the currency this business settles in."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Starting trace",
+        "expect": "One repeated call and the wrong currency: exact match fails, in-order passes, efficiency 75%."
+      },
+      {
+        "k": "perfect",
+        "name": "Perfect run",
+        "expect": "Exactly the reference with INR. Every check passes and efficiency is 100%."
+      },
+      {
+        "k": "wasteful",
+        "name": "Wasteful but correct",
+        "expect": "Right order and currency, plus two extra calls. In-order passes, exact fails, efficiency 60%."
+      },
+      {
+        "k": "order",
+        "name": "Wrong order",
+        "expect": "Fetches the account before finding the order. In-order fails, but any-order still passes."
+      }
+    ],
+    "missions": [
+      {
+        "k": "exact",
+        "text": "Get an exact match with correct arguments.",
+        "hint": "Reset, remove the extra call, and pick INR."
+      },
+      {
+        "k": "half",
+        "text": "Make step efficiency exactly 50%.",
+        "hint": "3 needed steps ÷ 6 taken = 50%."
+      },
+      {
+        "k": "anyonly",
+        "text": "Break the in-order match while keeping the any-order match.",
+        "hint": "Put get_account before find_order."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Langfuse",
+        "type": "Open source (MIT) · self-host or cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Tracing every LLM and tool call, then attaching scores to whole traces or individual steps.",
+        "ex": "Score each span, then filter to every trace where issue_refund received the wrong currency.",
+        "pros": [
+          "Self-hostable for data residency",
+          "Framework-agnostic, with OpenTelemetry support"
+        ],
+        "cons": [
+          "You run the infrastructure if you self-host",
+          "Trajectory metrics are yours to write"
+        ],
+        "url": "https://github.com/langfuse/langfuse"
+      },
+      {
+        "n": "Arize Phoenix",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Local-first tracing and evaluation built on OpenTelemetry, ideal in a notebook.",
+        "ex": "Start Phoenix locally, trace ten agent runs, and run an LLM eval over each tool-call span.",
+        "pros": [
+          "Running in minutes on a laptop",
+          "Built on open standards"
+        ],
+        "cons": [
+          "Large-scale monitoring points to Arize’s commercial platform",
+          "Fewer team workflow features"
+        ],
+        "url": "https://github.com/Arize-ai/phoenix"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial · by LangChain · free tier",
+        "start": 2,
+        "prod": 3,
+        "best": "A strong trace viewer plus ready-made trajectory evaluators.",
+        "ex": "Compare each run’s tool-call sequence against a reference trajectory across a 200-case dataset.",
+        "pros": [
+          "Trajectory evaluators ready to use",
+          "Excellent trace UI"
+        ],
+        "cons": [
+          "Commercial at scale",
+          "Tightest fit with the LangChain ecosystem"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Vertex AI Gen AI Evaluation",
+        "type": "Managed service · Google Cloud",
+        "start": 1,
+        "prod": 3,
+        "best": "Managed evaluation with built-in trajectory metrics: exact, in-order and any-order match, precision and recall.",
+        "ex": "Evaluate an agent built with Google’s Agent Development Kit inside a Vertex AI pipeline.",
+        "pros": [
+          "Trajectory metrics built in",
+          "Fits existing Google Cloud pipelines"
+        ],
+        "cons": [
+          "Tied to Google Cloud",
+          "Heavier for quick local experiments"
+        ],
+        "url": "https://cloud.google.com/vertex-ai/generative-ai/docs/models/evaluation-overview"
+      },
+      {
+        "n": "OpenTelemetry",
+        "type": "Open standard · CNCF",
+        "start": 2,
+        "prod": 3,
+        "best": "A vendor-neutral way to emit spans so any backend can store and score them.",
+        "ex": "Instrument the agent once, send traces to Langfuse today, and switch backends later without code changes.",
+        "pros": [
+          "No vendor lock-in",
+          "Industry standard with wide support"
+        ],
+        "cons": [
+          "Not an evaluation tool by itself",
+          "Generative-AI conventions are still evolving"
+        ],
+        "url": "https://opentelemetry.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype on your laptop",
+        "tool": "Arize Phoenix"
+      },
+      {
+        "need": "Self-hosted production tracing",
+        "tool": "Langfuse"
+      },
+      {
+        "need": "All-in on Google Cloud",
+        "tool": "Vertex AI Gen AI Evaluation"
+      }
+    ],
+    "goals": [
+      "Distinguish exact, in-order and any-order trajectory matching",
+      "Calculate step efficiency and spot redundant calls",
+      "Explain how step-level scores turn a failure into a specific fix"
+    ]
+  },
+  "practice": {
+    "scenario": "A payout-reconciliation agent keeps calling get_account twice and sometimes sends the wrong currency to issue_refund. Scoring 80 traced runs step by step shows the argument errors cluster in one tool whose description was ambiguous. Rewriting that description fixes most failures before anyone touches the model.",
+    "industries": [
+      {
+        "industry": "Banking operations",
+        "use": "Audit reconciliation agents for the right tool and arguments at each step"
+      },
+      {
+        "industry": "Healthcare admin",
+        "use": "Check prior-authorization agents follow the required step order"
+      },
+      {
+        "industry": "DevOps",
+        "use": "Score incident agents on checking logs before restarting services"
+      }
+    ],
+    "analogy": "A maths exam that gives marks for working. Even when the final answer is wrong, you can see exactly which line went wrong.",
+    "library": {
+      "name": "Langfuse",
+      "what": "Open-source tracing. Every LLM and tool call becomes a span you can inspect and score, then export for checks like the one here.",
+      "install": "pip install langfuse"
+    },
+    "samples": [
+      {
+        "file": "trajectory.py",
+        "language": "python",
+        "code": "reference = [\"find_order\", \"get_account\", \"issue_refund\"]\nactual = [\n    (\"find_order\", {\"id\": \"8812\"}),\n    (\"get_account\",   {\"id\": \"A7\"}),\n    (\"get_account\",   {\"id\": \"A7\"}),                  # redundant repeat\n    (\"issue_refund\",  {\"amount\": 499, \"cur\": \"USD\"}), # wrong currency\n]\ntools = [name for name, _ in actual]\n\ndef in_order_match(ref, got):\n    it = iter(got)\n    return all(step in it for step in ref)   # ref appears in order, extras allowed\n\nexact      = tools == reference\nin_order   = in_order_match(reference, tools)\nefficiency = len(reference) / len(tools)\nbad_args   = [a for n, a in actual if n == \"issue_refund\" and a[\"cur\"] != \"INR\"]\n\nprint(exact, in_order, round(efficiency, 2), bad_args)\n# False True 0.75 [{'amount': 499, 'cur': 'USD'}]"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Reference path: [search, get_account, refund]. Actual: [search, get_account, get_account, lookup_fx, refund]. What is the step efficiency? Does the in-order match pass?",
+    "answer": "Efficiency = 3 ÷ 5 = 0.6. The in-order match passes because search, get_account and refund appear in that order with extra steps allowed. An exact match fails.",
+    "expected": {
+      "value": 0.6,
+      "tolerance": 0.01,
+      "label": "efficiency ="
+    },
+    "interview": [
+      {
+        "question": "What's the difference between exact, in-order and any-order trajectory matching?",
+        "answer": "Exact requires the same tool sequence. In-order requires the reference steps to appear in order but allows extra steps. Any-order only requires every reference step to appear somewhere. Stricter matching penalizes valid alternatives, so choose per task."
+      },
+      {
+        "question": "How would you debug an agent that succeeds but costs 3× more than expected?",
+        "answer": "Trace every step, then look at step efficiency and redundant calls per tool. The cause is usually a vague tool description, missing information in a tool result, or no clear stop condition, and each shows up in process-level scores."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Requiring an exact match to one reference path",
+        "fix": "Use in-order or any-order matching, or a per-step rubric"
+      },
+      {
+        "mistake": "Logging tool names without arguments and results",
+        "fix": "Trace arguments and results for every span"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pr01",
+      "kind": "single",
+      "industry": "Banking operations",
+      "question": "A reconciliation agent issued the correct refund but called get_account three times. Which technique flags this?",
+      "options": [
+        "System-level eval",
+        "Process-level step efficiency",
+        "A public benchmark",
+        "RAG faithfulness"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The outcome is fine, but the path is wasteful. Step efficiency catches it."
+    },
+    {
+      "id": "pr02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Reference path: [find_order, get_account, issue_refund]. Actual: [find_order, lookup_fx, get_account, issue_refund]. Which matches pass?",
+      "options": [
+        "Exact only",
+        "In-order and any-order",
+        "None",
+        "Exact and in-order"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The extra lookup_fx breaks exact match, but the reference steps still appear in order."
+    },
+    {
+      "id": "pr03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Reference: [check_stock, reserve_item, send_confirmation]. Actual: [reserve_item, check_stock, send_confirmation]. Which match passes?",
+      "options": [
+        "In-order",
+        "Any-order only",
+        "Exact",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "All steps are present, but not in order, so only any-order passes. Reserving before checking stock is a real bug."
+    },
+    {
+      "id": "pr04",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "What should each trace span record so steps can be scored? Select all that apply.",
+      "options": [
+        "The tool name",
+        "The arguments",
+        "The result or error",
+        "The customer’s card number"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Name, arguments and result are what you score. Never log secrets or card numbers."
+    },
+    {
+      "id": "pr05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A plan-change task needs 4 steps. The agent took 10. What is the step efficiency?",
+      "options": [
+        "0.4",
+        "2.5",
+        "0.6",
+        "4"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Needed ÷ taken = 4 ÷ 10 = 0.4."
+    },
+    {
+      "id": "pr06",
+      "kind": "multi",
+      "industry": "Banking operations",
+      "question": "The agent keeps calling the same lookup tool again and again. Which are likely causes? Select all that apply.",
+      "options": [
+        "A vague tool description",
+        "The tool result is missing information the agent needs",
+        "No clear stop condition",
+        "Running at temperature 0"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All three leave the agent re-checking. Temperature is rarely the root cause; fix the tool description, the result and the stop condition first."
+    },
+    {
+      "id": "pr07",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A legal-research agent can reach a good memo by many different search paths. What is the best way to score its steps?",
+      "options": [
+        "Exact match to one reference path",
+        "A per-step rubric scored by an LLM judge",
+        "Counting tool calls only",
+        "Skip process-level eval"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A rubric judges whether each step was sensible without demanding one fixed path."
+    },
+    {
+      "id": "pr08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A transfer agent must complete a KYC check before moving money. Which check enforces this?",
+      "options": [
+        "A precedence check: check_kyc must come before any transfer call",
+        "Any-order match",
+        "Step efficiency",
+        "Final success rate"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Order matters here. A plain in-order match would still pass [transfer, check_kyc, transfer], so check that no transfer happens before KYC."
+    },
+    {
+      "id": "pr09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Step scores look perfect, but claims tasks still fail. What is the likely explanation?",
+      "options": [
+        "Process eval replaces system-level eval",
+        "The step checks miss what the outcome needs, so run system-level eval too",
+        "The traces are fake",
+        "The model is too large"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Good steps do not guarantee a good outcome. Use both levels."
+    },
+    {
+      "id": "pr10",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Your team needs to capture agent traces for step scoring. Which tools fit? Select all that apply.",
+      "options": [
+        "Langfuse",
+        "Arize Phoenix",
+        "OpenTelemetry",
+        "BM25"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "BM25 is a keyword-ranking function, not a tracing tool."
+    },
+    {
+      "id": "pr11",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "In 6% of runs, issue_refund is called with cur=\"USD\" for an INR account. The outcome check still reads “refund issued”. What catches this?",
+      "options": [
+        "A higher pass^k",
+        "An argument check on that step: currency must match the account",
+        "Faithfulness",
+        "A bigger golden set"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Argument-level checks catch wrong inputs that a status-only outcome check misses."
+    },
+    {
+      "id": "pr12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "In 80 failed traces, 70% of the argument errors come from one tool whose description is ambiguous. What is the best first fix?",
+      "options": [
+        "Switch to a larger model",
+        "Rewrite that tool’s description and parameter schema, then re-run",
+        "Add more golden tasks",
+        "Raise the temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Clustered errors point to the tool interface. Fix it before touching the model."
+    },
+    {
+      "id": "pr13",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A claims agent must never call submit_claim before get_eligibility. How should a violation count?",
+      "options": [
+        "As a small deduction",
+        "As a hard fail, even if the final outcome looks right",
+        "Ignore it if the claim went through",
+        "Only when step efficiency is low"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Safety or compliance ordering rules are pass/fail. A good outcome does not excuse them."
+    },
+    {
+      "id": "pr14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A shopping agent calls search_products 25 times until it hits the step limit. Which check flags it?",
+      "options": [
+        "Faithfulness",
+        "Step count and repeated-call detection",
+        "pass@k",
+        "Cohen’s κ"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Loop detection and step efficiency flag this. The fix is usually a clear stop condition."
+    },
+    {
+      "id": "pr15",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are useful argument-level checks for file_claim? Select all that apply.",
+      "options": [
+        "claim_id matches the one in the customer’s message",
+        "amount is within the policy limit",
+        "The argument JSON is neatly indented",
+        "currency matches the policy currency"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Check that arguments are correct for this customer and policy. Formatting does not matter."
+    },
+    {
+      "id": "pr16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "You collect 20,000 agent traces a day. How do you apply process-level eval affordably?",
+      "options": [
+        "Have an LLM judge score every trace",
+        "Run cheap code checks on all traces and send a sample to an LLM rubric",
+        "Review traces only when customers complain",
+        "Skip it at this volume"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Code checks scale to every trace. Spend judge calls on a sample and on flagged traces."
+    },
+    {
+      "id": "pr17",
+      "kind": "single",
+      "industry": "DevOps",
+      "question": "An incident agent must read logs before restarting a service. It restarted first, then read the logs, and the incident was resolved. How should this be scored?",
+      "options": [
+        "Pass: it was resolved",
+        "Flag it: the required order was broken, even though the outcome was fine",
+        "Pass, with a note for the user",
+        "It cannot be scored"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Next time, restarting blind could destroy evidence or worsen an outage. Process rules exist for exactly this."
+    },
+    {
+      "id": "pr18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Exact-path match fails on 60% of runs while 90% of outcomes pass. What is the most likely reason?",
+      "options": [
+        "The agent is broken",
+        "Exact match is too strict because several paths are valid; use in-order match or a rubric",
+        "The traces are incomplete",
+        "Outcomes are being over-counted"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Exact match only suits tasks with one right path."
+    },
+    {
+      "id": "pr19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Success rate dropped from 91% to 84% after a tool update. What is the fastest way to find out why?",
+      "options": [
+        "Re-run the full benchmark",
+        "Group the failed traces by their first failing step",
+        "Read 10 random transcripts",
+        "Swap the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Grouping by first failing step points straight at what broke."
+    },
+    {
+      "id": "pr20",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A fare-search tool returns “rate_limited”, and the agent retries immediately eight times before it succeeds. What should process eval report?",
+      "options": [
+        "Nothing: it eventually succeeded",
+        "Retries without backoff, counted as redundant steps and poor error handling",
+        "Low faithfulness",
+        "Low context precision"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Error handling is part of the path. Immediate retries waste cost and can worsen rate limits."
+    }
+  ]
+}

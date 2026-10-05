@@ -1,0 +1,800 @@
+{
+  "id": "agentjudge",
+  "moduleSlug": "evaluation",
+  "name": "Agent-as-a-Judge",
+  "shortName": "Agent-as-a-Judge",
+  "question": "Does the work really meet the spec?",
+  "summary": "The judge is itself an agent. It opens files, runs code, searches the workspace and reads the trajectory, then checks each requirement with evidence. The approach comes from the Agent-as-a-Judge paper (Zhuge et al., 2024) and its DevAI benchmark of 55 AI development tasks with 365 hierarchical requirements. There it agreed with human experts far more often than LLM-as-a-Judge, at a fraction of the cost of human review.",
+  "useCases": [
+    "Long-horizon tasks that produce artifacts: codebases, reports, data pipelines",
+    "Requirements that can only be verified by running or inspecting something",
+    "Replacing costly expert review of complex deliverables"
+  ],
+  "keyFacts": {
+    "label": "Key metrics",
+    "items": [
+      {
+        "term": "Requirement satisfaction",
+        "detail": "requirements met ÷ total requirements"
+      },
+      {
+        "term": "Dependency-aware pass",
+        "detail": "a requirement counts only if its prerequisites pass"
+      },
+      {
+        "term": "Judge–human alignment",
+        "detail": "agreement with expert reviewers"
+      },
+      {
+        "term": "Evidence coverage",
+        "detail": "verdicts backed by a file, output or log"
+      }
+    ]
+  },
+  "steps": [
+    "Break the task into explicit, checkable requirements",
+    "Give the judge read-only tools in a sandbox: file reader, code runner, search",
+    "Require an evidence citation for every verdict",
+    "Spot-check verdicts against human review on a sample"
+  ],
+  "pitfalls": [
+    "Slower and more expensive than a single LLM call",
+    "The judge agent makes its own mistakes, so audit it",
+    "It needs isolation so it can’t change what it evaluates"
+  ],
+  "tools": [
+    "Agent-as-a-Judge (open source, DevAI)",
+    "Inspect AI",
+    "Custom sandboxed judge agents"
+  ],
+  "remember": "Don’t just read the work. Inspect it and run it.",
+  "caption": "The judge gathers evidence with tools before ruling on each requirement.",
+  "comparison": {
+    "scope": "Output + workspace + trajectory",
+    "cost": 4,
+    "needs": "Sandbox + requirement list",
+    "best": "Code, multi-file and long-horizon work"
+  },
+  "diagram": {
+    "file": "diagrams/agentjudge.svg"
+  },
+  "lesson": {
+    "file": "judge_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "REQS = {",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"R1\": (\"python pipeline.py exits with code 0\", []),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"R2\": (\"output/sales.parquet exists\", [\"R1\"]),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"R3\": (\"rows with missing dates are dropped\", [\"R2\"]),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "sandbox = Sandbox(image=\"python:3.12\", repo=\"/work\", read_only=True, network=False)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "TOOLS = [sandbox.read_file, sandbox.run]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "verdict = {}",
+        "steps": []
+      },
+      {
+        "text": "def check(req_id):",
+        "steps": []
+      },
+      {
+        "text": "    text, deps = REQS[req_id]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if any(verdict[d][\"verdict\"] != \"pass\" for d in deps):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return {\"verdict\": \"blocked\", \"evidence\": f\"needs {deps}\"}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return judge_agent(task=text, tools=TOOLS, max_steps=8,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                       must_cite_evidence=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for rid in REQS:                     # dict order = dependency order",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    verdict[rid] = check(rid)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "score = sum(v[\"verdict\"] == \"pass\" for v in verdict.values()) / len(REQS)",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "List checkable requirements",
+        "text": "Break the task into requirements and note dependencies. R2 needs R1; R3 needs R2."
+      },
+      {
+        "title": "Prepare a sandbox",
+        "text": "Mount the agent's work read-only with no network, so the judge can inspect and run it without changing it."
+      },
+      {
+        "title": "Let the judge gather evidence",
+        "text": "The judge agent reads files and runs commands, then rules on R1 with a citation: exit code 0."
+      },
+      {
+        "title": "Respect dependencies",
+        "text": "R2 fails because the output is CSV, not Parquet. R3 can't pass without R2, so it's marked blocked."
+      },
+      {
+        "title": "Score with evidence",
+        "text": "1 of 3 requirements met. Every verdict carries evidence a reviewer can check in seconds."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Requirements</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"8\" y=\"20\" width=\"130\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"73\" y=\"37\" text-anchor=\"middle\">R1 · runs</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"8\" y=\"70\" width=\"130\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"73\" y=\"87\" text-anchor=\"middle\">R2 · writes Parquet</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx \" x=\"8\" y=\"120\" width=\"130\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"73\" y=\"137\" text-anchor=\"middle\">R3 · drops bad dates</text></g><g class=\"a\" style=\"--d:0.35s\"><path class=\"ln \" d=\"M73 46L73 68\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.45s\"><path class=\"ln \" d=\"M73 96L73 118\" marker-end=\"url(#arr)\"/></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect x=\"160\" y=\"14\" width=\"192\" height=\"116\" rx=\"8\" style=\"fill:none;stroke:var(--accent);stroke-dasharray:4 3\"/><text class=\"lb\" x=\"256\" y=\"34\">Sandbox</text><text class=\"sb\" x=\"256\" y=\"48\">read-only · no network</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"176\" y=\"66\" width=\"76\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"214\" y=\"82\" text-anchor=\"middle\">repo/</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"262\" y=\"66\" width=\"76\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"82\" text-anchor=\"middle\">output/</text></g><text class=\"sb a\" x=\"256\" y=\"116\" style=\"--d:0.4s\">agent’s work</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"200\" y=\"154\" width=\"112\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"256\" y=\"177.5\">Judge agent</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln acc\" d=\"M256 154L256 132\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx soft\" x=\"160\" y=\"204\" width=\"192\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"256\" y=\"221\" text-anchor=\"middle\">evidence: exit code 0</text></g><g class=\"a\" style=\"--d:0.5s\"><circle cx=\"138\" cy=\"20\" r=\"9\" class=\"bd-pass\"/><path d=\"M134 20l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"138\" cy=\"70\" r=\"9\" class=\"bd-fail\"/><path d=\"M134.5 66.5l7 7M141.5 66.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t warn\" x=\"73\" y=\"162\">blocked by R2</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"204\" width=\"140\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"78\" y=\"221\" text-anchor=\"middle\">score 1 / 3 = 0.33</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Verifies by acting: runs code, opens files, checks outputs",
+      "Every verdict can cite evidence",
+      "Handles long, multi-file deliverables",
+      "Closer to expert review at a fraction of the cost"
+    ],
+    "cons": [
+      "Slower and costlier than a single LLM call",
+      "Needs sandbox infrastructure",
+      "The judge agent can make its own mistakes",
+      "Newer approach with fewer mature tools"
+    ],
+    "avoidWhen": [
+      "Outputs are short text answers (LLM-as-a-Judge is enough)",
+      "You can’t isolate the work in a safe sandbox"
+    ],
+    "tools": [
+      {
+        "name": "Agent-as-a-Judge",
+        "type": "Open source (research)",
+        "what": "Reference implementation and the DevAI benchmark",
+        "url": "https://github.com/metauto-ai/agent-as-a-judge"
+      },
+      {
+        "name": "Inspect AI",
+        "type": "Open source (UK AISI)",
+        "what": "Agents with bash and python tools in Docker sandboxes",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "E2B",
+        "type": "Commercial, open-source SDK",
+        "what": "Cloud sandboxes for running agent code",
+        "url": "https://e2b.dev"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Build the judge agent’s tool loop",
+        "url": "https://github.com/langchain-ai/langgraph"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A coding agent finished a data-pipeline task and reported “All four requirements done.” You decide what the evidence in the sandbox actually shows, and compare three ways of grading the same work.",
+    "controls": [
+      "Tick a requirement if running and inspecting the work shows it is met.",
+      "Dependencies: R2 needs R1, and R3 needs R2. A requirement can’t count if something it depends on failed."
+    ],
+    "outputs": [
+      {
+        "name": "LLM judge reading the summary",
+        "meaning": "Believes the agent’s own report, so it always says 100%."
+      },
+      {
+        "name": "Agent judge, no dependencies",
+        "meaning": "Counts every ticked requirement."
+      },
+      {
+        "name": "Agent judge, dependency-aware",
+        "meaning": "Counts a requirement only if its prerequisites passed too. The most honest score."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Hidden failure",
+        "expect": "R2 is broken. The summary says 100%, a simple check says 75%, and the dependency-aware check says 50%."
+      },
+      {
+        "k": "done",
+        "name": "Genuinely done",
+        "expect": "Every requirement verified. All three scores agree at 100%."
+      },
+      {
+        "k": "foundation",
+        "name": "Broken foundation",
+        "expect": "R1 fails, so R2 and R3 are blocked even if they look fine. Dependency-aware drops to 25%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "agree",
+        "text": "Make all three scores agree.",
+        "hint": "Every requirement must be verified."
+      },
+      {
+        "k": "gap",
+        "text": "Make the no-dependency score 75% but the dependency-aware score 25%.",
+        "hint": "Fail only the requirement everything else builds on."
+      },
+      {
+        "k": "zero",
+        "text": "Create the biggest possible gap between the summary and the truth.",
+        "hint": "Get the dependency-aware score to 0%."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Agent-as-a-Judge",
+        "type": "Open-source research code",
+        "start": 2,
+        "prod": 1,
+        "best": "Reproducing the Agent-as-a-Judge method and its DevAI benchmark.",
+        "ex": "Run the judge on DevAI tasks and read requirement-level verdicts with evidence.",
+        "pros": [
+          "Reference implementation of the method",
+          "Ships with a 55-task benchmark"
+        ],
+        "cons": [
+          "Research code, not a supported product",
+          "Adapting it to your tasks takes work"
+        ],
+        "url": "https://github.com/metauto-ai/agent-as-a-judge"
+      },
+      {
+        "n": "Inspect AI",
+        "type": "Open source · UK AI Security Institute",
+        "start": 2,
+        "prod": 3,
+        "best": "Building a sandboxed judge agent with bash and python tools in Docker.",
+        "ex": "A scorer that starts a container, runs the pipeline, and checks each requirement with evidence.",
+        "pros": [
+          "Sandboxing built in",
+          "Same framework for agents and evaluations"
+        ],
+        "cons": [
+          "Docker setup required",
+          "A learning curve"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "n": "E2B",
+        "type": "Commercial sandboxes · open-source SDK",
+        "start": 3,
+        "prod": 3,
+        "best": "Secure cloud sandboxes where a judge can run code without touching your infrastructure.",
+        "ex": "Start one sandbox per requirement, run the tests, and keep the logs as evidence.",
+        "pros": [
+          "Isolated sandboxes that start quickly",
+          "Simple SDK"
+        ],
+        "cons": [
+          "Paid at volume",
+          "Code and data run outside your machines"
+        ],
+        "url": "https://e2b.dev"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Writing the judge’s tool loop with explicit steps, limits and checkpoints.",
+        "ex": "A graph of read → run → decide nodes with a maximum-steps guard.",
+        "pros": [
+          "Explicit control over the loop",
+          "Checkpointing and retries"
+        ],
+        "cons": [
+          "You write the judging logic yourself",
+          "Another framework to learn"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Understand the method",
+        "tool": "Agent-as-a-Judge repository"
+      },
+      {
+        "need": "Prototype quickly",
+        "tool": "E2B plus a simple tool loop"
+      },
+      {
+        "need": "Production grading pipeline",
+        "tool": "Inspect AI or LangGraph with a sandbox"
+      }
+    ],
+    "goals": [
+      "Explain when a judge needs tools rather than just reading",
+      "Score requirements that depend on each other",
+      "Describe how to sandbox a judge safely"
+    ]
+  },
+  "practice": {
+    "scenario": "A data team asks a coding agent to build a sales pipeline. A judge agent then opens the repo, runs the pipeline on sample data and checks 12 requirements, such as “writes output to Parquet” and “drops rows with missing dates”. Each verdict cites the file or log line it relied on, so a reviewer can confirm it in seconds.",
+    "industries": [
+      {
+        "industry": "Software",
+        "use": "Verify agent-built features by running them, not just reading the diff"
+      },
+      {
+        "industry": "Data engineering",
+        "use": "Check generated pipelines produce the expected tables and columns"
+      },
+      {
+        "industry": "Research & consulting",
+        "use": "Audit long reports against a requirement checklist, with sources"
+      }
+    ],
+    "analogy": "A building inspector who walks through the house, turns on the taps and tests the wiring, instead of reading the builder's report.",
+    "library": {
+      "name": "Inspect AI",
+      "what": "Runs agents with bash and python tools inside Docker sandboxes, which is exactly what a judge agent needs.",
+      "install": "pip install inspect-ai"
+    },
+    "note": "Framework-agnostic sketch: agent_loop stands for your tool-calling loop (Inspect AI, LangGraph, or a model SDK).",
+    "samples": [
+      {
+        "file": "judge_agent.py",
+        "language": "python",
+        "code": "import subprocess\n\nREQUIREMENTS = [\n    \"R1: `python pipeline.py` exits with code 0\",\n    \"R2: output/sales.parquet exists and has a `region` column\",\n    \"R3: rows with missing dates are dropped, not zero-filled\",\n]\n\nTOOLS = {  # read-only, run inside a sandbox\n    \"read_file\": lambda path: open(path).read()[:4000],\n    \"run\": lambda cmd: subprocess.run(cmd, shell=True, capture_output=True,\n                                      text=True, timeout=120).stdout[-4000:],\n}\n\ndef judge(requirement: str) -> dict:\n    return agent_loop(\n        system=(\"You are a strict reviewer. Use the tools to gather evidence, \"\n                'then reply JSON: {\"verdict\": \"pass\" | \"fail\", \"evidence\": \"...\"}'),\n        task=requirement, tools=TOOLS, max_steps=8)\n\nreport = [judge(r) for r in REQUIREMENTS]\nscore = sum(r[\"verdict\"] == \"pass\" for r in report) / len(report)\nprint(f\"{score:.0%} of requirements met\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Requirements: R1 builds (pass), R2 tests run (pass), R3 depends on R2 and writes CSV (pass), R4 depends on R3 and plots (fail), R5 writes docs (fail). What is the requirement satisfaction rate, in %?",
+    "answer": "3 of 5 = 60%. With dependency-aware scoring, R3 counts because its prerequisite R2 passed; R4 fails on its own evidence.",
+    "expected": {
+      "value": 60,
+      "tolerance": 0.5,
+      "label": "satisfaction % ="
+    },
+    "interview": [
+      {
+        "question": "When would you choose Agent-as-a-Judge over LLM-as-a-Judge?",
+        "answer": "When correctness can only be confirmed by acting: running code, opening files, querying outputs. LLM-as-a-Judge reads text; an agent judge gathers evidence. It's worth the extra cost for long, artifact-producing tasks."
+      },
+      {
+        "question": "How do you stop a judge agent from damaging what it evaluates?",
+        "answer": "Run it in a sandbox with read-only mounts and tools, no network or write credentials, and time limits, and require an evidence citation for every verdict."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Giving the judge the same write tools as the agent",
+        "fix": "Read-only tools in an isolated sandbox"
+      },
+      {
+        "mistake": "Accepting verdicts without evidence",
+        "fix": "Require a file, output or log citation for each verdict"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "aj01",
+      "kind": "single",
+      "industry": "Software",
+      "question": "When is Agent-as-a-Judge the right choice?",
+      "options": [
+        "Grading the tone of a chat reply",
+        "Verifying a generated codebase meets its spec",
+        "Measuring latency",
+        "Checking a regex"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It suits work that has to be run or inspected to be verified."
+    },
+    {
+      "id": "aj02",
+      "kind": "multi",
+      "industry": "Data engineering",
+      "question": "What should a judge agent’s sandbox have? Select all that apply.",
+      "options": [
+        "Read-only access to the work",
+        "No network access",
+        "Time limits",
+        "Admin credentials to production"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Isolate the judge. Never give it production credentials."
+    },
+    {
+      "id": "aj03",
+      "kind": "single",
+      "industry": "Software",
+      "question": "The coding agent’s summary says every requirement is met. Why not trust it?",
+      "options": [
+        "Summaries are always wrong",
+        "The agent may overstate, so verify with evidence",
+        "It is too long",
+        "LLMs cannot summarize"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A self-report is not evidence. Checking the work is."
+    },
+    {
+      "id": "aj04",
+      "kind": "single",
+      "industry": "Data engineering",
+      "question": "R1 fails. R2 depends on R1 and looks fine. What is the dependency-aware verdict for R2?",
+      "options": [
+        "Pass",
+        "Blocked",
+        "Fail and restart",
+        "Ignored"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "R2 cannot count while its prerequisite fails."
+    },
+    {
+      "id": "aj05",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "What counts as good evidence for a verdict? Select all that apply.",
+      "options": [
+        "A test output log",
+        "The file path and lines checked",
+        "“Looks right to me”",
+        "A command’s exit code"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Evidence is something a person can check for themselves."
+    },
+    {
+      "id": "aj06",
+      "kind": "single",
+      "industry": "Consulting",
+      "question": "What is the main downside of Agent-as-a-Judge compared with LLM-as-a-Judge?",
+      "options": [
+        "It is less accurate",
+        "It is slower and costs more per evaluation",
+        "It cannot use tools",
+        "It needs no setup"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Running and inspecting work takes more time and tokens."
+    },
+    {
+      "id": "aj07",
+      "kind": "single",
+      "industry": "Data engineering",
+      "question": "There are 4 independent requirements: 3 verified, 1 failed. What is the score?",
+      "options": [
+        "0.25",
+        "0.5",
+        "0.75",
+        "1.0"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "3 ÷ 4 = 0.75."
+    },
+    {
+      "id": "aj08",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "You want a public set of AI-development tasks with requirement lists to test your judge agent. Which fits?",
+      "options": [
+        "DevAI",
+        "SWE-bench",
+        "GAIA",
+        "BFCL"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DevAI came with the Agent-as-a-Judge paper: 55 tasks with 365 requirements."
+    },
+    {
+      "id": "aj09",
+      "kind": "multi",
+      "industry": "Consulting",
+      "question": "Where is Agent-as-a-Judge useful? Select all that apply.",
+      "options": [
+        "Data pipelines built by agents",
+        "Multi-file code generation",
+        "Research reports checked against a requirement list",
+        "Single-word sentiment labels"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Single-word labels do not need a judge that acts."
+    },
+    {
+      "id": "aj10",
+      "kind": "single",
+      "industry": "Software",
+      "question": "How do you make sure the judge agent itself is right?",
+      "options": [
+        "Trust it",
+        "Spot-check a sample of its verdicts against human review",
+        "Run it once",
+        "Use a smaller model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Audit a sample of verdicts regularly."
+    },
+    {
+      "id": "aj11",
+      "kind": "single",
+      "industry": "Data engineering",
+      "question": "A requirement says “drops rows with missing dates”. What should the judge agent do?",
+      "options": [
+        "Read the code comments",
+        "Run the pipeline on sample data with missing dates and inspect the output",
+        "Ask the coding agent",
+        "Count lines of code"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Test the behaviour with an input that exercises the requirement."
+    },
+    {
+      "id": "aj12",
+      "kind": "single",
+      "industry": "Consulting",
+      "question": "The judge marks “every figure cites a source” as passed, with evidence “the report looks well sourced”. What do you do?",
+      "options": [
+        "Accept it",
+        "Reject the verdict: evidence must name specific figures and their citations",
+        "Lower the threshold",
+        "Re-run the coding agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Evidence has to be specific enough that a reviewer can confirm it quickly."
+    },
+    {
+      "id": "aj13",
+      "kind": "single",
+      "industry": "Software",
+      "question": "The judge agent had write access and “fixed” a failing test before judging. What is the problem?",
+      "options": [
+        "None: the code is better now",
+        "The verdict is invalid; judges must be read-only so they measure rather than change the work",
+        "It should have fixed more tests",
+        "It should have asked first"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A judge that edits the work is no longer judging it."
+    },
+    {
+      "id": "aj14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A judge agent takes 6 minutes and $0.40 per project, and you get 500 pull requests a day. What is a sensible strategy?",
+      "options": [
+        "Judge every PR with the agent",
+        "Run cheap code checks on every PR and the judge agent on risky changes or a nightly sample",
+        "Drop evaluation",
+        "Judge only on Fridays"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Layer your checks: cheap and broad first, expensive and deep where it matters."
+    },
+    {
+      "id": "aj15",
+      "kind": "single",
+      "industry": "Software",
+      "question": "The judge agent ran out of steps before finishing requirement R3. What verdict keeps the judge’s own timeout from being charged to the coding agent?",
+      "options": [
+        "Pass",
+        "Fail",
+        "Inconclusive, routed to human review",
+        "Ignore R3"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "No evidence means no verdict. Do not count a timeout as a pass or a fail."
+    },
+    {
+      "id": "aj16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Requirement: “the checkout button is disabled when the cart is empty”. What is the best evidence?",
+      "options": [
+        "The coding agent says so",
+        "Open the page in a headless browser with an empty cart and check the button’s state",
+        "Search the code for “disabled”",
+        "The number of CSS rules"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Observe the real behaviour in a running app."
+    },
+    {
+      "id": "aj17",
+      "kind": "single",
+      "industry": "Data engineering",
+      "question": "Judge verdicts disagree with people on 20% of “performance” requirements such as “should be fast”. What is the fix?",
+      "options": [
+        "Use a bigger judge",
+        "Make the requirement measurable, e.g. “runs in under 60 s on 1M rows”",
+        "Drop performance requirements",
+        "Average the two verdicts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Vague requirements give inconsistent verdicts. Make them testable."
+    },
+    {
+      "id": "aj18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A contract generator must include 9 mandatory clauses in a 40-page document. Which approach fits best?",
+      "options": [
+        "A single yes/no from an LLM judge",
+        "A judge agent that searches the document and gives a verdict per clause with its location",
+        "Word count",
+        "Counting headings"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A verdict per requirement, with a location as evidence, is quick for a person to verify."
+    },
+    {
+      "id": "aj19",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why should the judge agent’s sandbox have no network access?",
+      "options": [
+        "To make it faster",
+        "To stop data leaking and outside content influencing verdicts, and to keep runs reproducible",
+        "Networks are expensive",
+        "It does not matter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Isolation protects sensitive data and keeps results repeatable."
+    },
+    {
+      "id": "aj20",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "What makes requirements easy for a judge to check? Select all that apply.",
+      "options": [
+        "Testable wording",
+        "One condition per requirement",
+        "Declared dependencies between requirements",
+        "“Should be high quality”"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Vague requirements cannot be verified by anyone, human or agent."
+    }
+  ]
+}

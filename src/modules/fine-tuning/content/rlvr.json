@@ -1,0 +1,810 @@
+{
+  "id": "rlvr",
+  "moduleSlug": "fine-tuning",
+  "name": "Reinforcement Learning from Verifiable Rewards",
+  "shortName": "RLVR",
+  "question": "Can I train on answers a program can check?",
+  "summary": "When correctness can be checked by a program, such as unit tests, an exact numeric answer or a schema, the model can learn by trial: sample several answers per prompt, score each with the checker, and update towards the better ones. GRPO does this by comparing each answer with its group’s average, without a value model. It powered reasoning models such as DeepSeek-R1. The checker must be hard to game, or the model learns to exploit it.",
+  "useCases": [
+    "Maths, code, SQL and structured extraction with a checkable answer",
+    "Improving reasoning on tasks with a clear right answer",
+    "When SFT data is scarce but a verifier is cheap"
+  ],
+  "keyFacts": {
+    "label": "Mechanics",
+    "items": [
+      {
+        "term": "Verifier",
+        "detail": "a program returns a score: tests pass, answer matches, schema valid"
+      },
+      {
+        "term": "Group size G",
+        "detail": "answers sampled per prompt; GRPO compares within the group"
+      },
+      {
+        "term": "GRPO",
+        "detail": "group-relative advantages, no value model (DeepSeekMath, 2024)"
+      },
+      {
+        "term": "RLVR",
+        "detail": "the term used by Tülu 3 (2024) for training on verifiable rewards"
+      },
+      {
+        "term": "Reward hacking",
+        "detail": "the model finds ways to score without solving the task"
+      },
+      {
+        "term": "Hosted options",
+        "detail": "some APIs offer reinforcement fine-tuning with custom graders"
+      }
+    ]
+  },
+  "steps": [
+    "Write a verifier that is correct and hard to game; test it on known answers",
+    "Start from an SFT or instruction-tuned model",
+    "Sample a group of answers per prompt and train with GRPO",
+    "Track true accuracy on a held-out set, not only the training reward"
+  ],
+  "pitfalls": [
+    "Rewarding format alone, so the model learns the format and not the task",
+    "Weak tests that wrong answers can pass",
+    "Watching the reward climb without checking held-out accuracy"
+  ],
+  "tools": [
+    "Hugging Face TRL GRPOTrainer",
+    "verl",
+    "OpenRLHF",
+    "OpenAI reinforcement fine-tuning",
+    "Unsloth"
+  ],
+  "remember": "Reward what a program can check, and check the checker.",
+  "caption": "Illustrative: four sampled answers scored by unit tests; passing ones are pushed up relative to the group.",
+  "comparison": {
+    "scope": "Checkable skills and reasoning",
+    "cost": 4,
+    "needs": "A robust verifier, GPU time",
+    "best": "Reward hacking"
+  },
+  "diagram": {
+    "file": "diagrams/rlvr.svg"
+  },
+  "lesson": {
+    "file": "train_grpo.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "data = load_dataset(\"json\", data_files=\"maths.jsonl\")[\"train\"]   # prompt, answer",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def correct(completions, answer, **kwargs):",
+        "steps": []
+      },
+      {
+        "text": "    rewards = []",
+        "steps": []
+      },
+      {
+        "text": "    for text, key in zip(completions, answer):",
+        "steps": []
+      },
+      {
+        "text": "        m = re.search(r\"\\\\boxed\\{(-?[\\d.]+)\\}\", text)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        ok = m and abs(float(m.group(1)) - float(key)) < 1e-6",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        rewards.append(1.0 if ok else 0.0)       # no credit for format",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return rewards",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "trainer = GRPOTrainer(",
+        "steps": []
+      },
+      {
+        "text": "    model=\"sft-maths-1b\",",
+        "steps": []
+      },
+      {
+        "text": "    reward_funcs=correct,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    args=GRPOConfig(output_dir=\"grpo-maths\",",
+        "steps": []
+      },
+      {
+        "text": "                    num_generations=8,          # the group size",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                    learning_rate=1e-6, max_steps=600),",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    train_dataset=data)",
+        "steps": []
+      },
+      {
+        "text": "trainer.train()",
+        "steps": []
+      },
+      {
+        "text": "print(held_out_accuracy(\"grpo-maths\"))          # not the training reward",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Problems with checkable answers",
+        "text": "Each school maths problem has a numeric key. No human needs to judge a solution; a program can."
+      },
+      {
+        "title": "A verifier as the reward",
+        "text": "The reward function parses one boxed number and compares it with the key: 1 if right, 0 if not. It must be hard to fool."
+      },
+      {
+        "title": "Sample a group per prompt",
+        "text": "GRPO samples eight answers per problem and compares them with each other: answers above the group average are reinforced, those below are discouraged."
+      },
+      {
+        "title": "Train for enough steps",
+        "text": "Accuracy climbs over hundreds of steps. Each step costs eight generations per prompt, so the group size and the number of steps set the bill."
+      },
+      {
+        "title": "Never pay for format alone",
+        "text": "An earlier reward gave credit for a neatly boxed answer. Reward rose to 95% while accuracy stayed at 42%: the model learned the format, not the maths."
+      },
+      {
+        "title": "Judge by held-out accuracy",
+        "text": "Training reward can be gamed. Accuracy on held-out problems, checked independently, rose from 58% after SFT to 66%."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">problem → numeric key</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"34\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"49\" text-anchor=\"middle\">verifier: parse one number, compare with key</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"27\" y=\"79\" text-anchor=\"middle\">1</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"52\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"71\" y=\"79\" text-anchor=\"middle\">0</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"96\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"115\" y=\"79\" text-anchor=\"middle\">0</text></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><rect class=\"bx pass\" x=\"140\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"159\" y=\"79\" text-anchor=\"middle\">1</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"184\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"203\" y=\"79\" text-anchor=\"middle\">0</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"228\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"247\" y=\"79\" text-anchor=\"middle\">0</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx soft\" x=\"272\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"291\" y=\"79\" text-anchor=\"middle\">0</text></g><g class=\"a\" style=\"--d:0.35000000000000003s\"><rect class=\"bx soft\" x=\"316\" y=\"64\" width=\"38\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"335\" y=\"79\" text-anchor=\"middle\">0</text></g><text class=\"sb a\" x=\"8\" y=\"106\" style=\"text-anchor:start;--d:0.45s\">mean 0.25 → right +0.75, wrong −0.25</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"sb a\" x=\"8\" y=\"126\" style=\"text-anchor:start;--d:0s\">steps × 8 samples × prompts = GPU hours</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"147\" style=\"text-anchor:end;--d:0s\">format reward</text><rect x=\"118\" y=\"137\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"137\" width=\"180.5\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"147\" style=\"text-anchor:start;--d:0.2s\">95%</text><text class=\"tl a\" x=\"112\" y=\"169\" style=\"text-anchor:end;--d:0.1s\">real accuracy</text><rect x=\"118\" y=\"159\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"159\" width=\"79.8\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"169\" style=\"text-anchor:start;--d:0.30000000000000004s\">42%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"197\" style=\"text-anchor:end;--d:0s\">after SFT</text><rect x=\"118\" y=\"187\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"187\" width=\"110.19999999999999\" height=\"13\" rx=\"3\" style=\"fill:var(--ink-2);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"197\" style=\"text-anchor:start;--d:0.2s\">58%</text><text class=\"tl a\" x=\"112\" y=\"219\" style=\"text-anchor:end;--d:0.1s\">after GRPO</text><rect x=\"118\" y=\"209\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"209\" width=\"125.4\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"219\" style=\"text-anchor:start;--d:0.30000000000000004s\">66%</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "No human labels once a verifier exists",
+      "Improves reasoning on checkable tasks",
+      "Hard to fake with a strong verifier",
+      "GRPO needs no value model"
+    ],
+    "cons": [
+      "Only for tasks a program can check",
+      "Weak verifiers are exploited",
+      "Many samples per prompt: compute heavy",
+      "Training reward can be gamed"
+    ],
+    "avoidWhen": [
+      "Tasks without a reliable automatic check",
+      "Rewards for format or length"
+    ],
+    "tools": [
+      {
+        "name": "Hugging Face TRL",
+        "type": "Open source",
+        "what": "GRPOTrainer with custom reward functions",
+        "url": "https://huggingface.co/docs/trl/grpo_trainer"
+      },
+      {
+        "name": "veRL",
+        "type": "Open source",
+        "what": "Scalable RL training for LLMs",
+        "url": "https://github.com/volcengine/verl"
+      },
+      {
+        "name": "OpenRLHF",
+        "type": "Open source",
+        "what": "Distributed RLHF and GRPO",
+        "url": "https://github.com/OpenRLHF/OpenRLHF"
+      },
+      {
+        "name": "OpenAI reinforcement fine-tuning",
+        "type": "Managed service",
+        "what": "Graders as rewards on hosted models",
+        "url": "https://platform.openai.com/docs/guides/reinforcement-fine-tuning"
+      },
+      {
+        "name": "Unsloth",
+        "type": "Open source",
+        "what": "Memory-efficient GRPO on one GPU",
+        "url": "https://docs.unsloth.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An ed-tech company trains a small maths model with GRPO. Choose what the reward pays for, how strict the verifier is, how many answers are sampled per problem and how many steps to train. Compare the training reward with true accuracy on held-out problems, and watch the GPU bill.",
+    "controls": [
+      "Choose the reward: a boxed answer, a matching final answer, or a matching answer with checked working.",
+      "Choose a loose or strict verifier and the group size G.",
+      "Set the number of training steps, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Training reward",
+        "meaning": "The average reward the trainer sees."
+      },
+      {
+        "name": "True held-out accuracy",
+        "meaning": "Accuracy on held-out problems, checked independently."
+      },
+      {
+        "name": "Gap",
+        "meaning": "Training reward minus true accuracy; a large gap means the reward is being gamed."
+      },
+      {
+        "name": "GPU cost",
+        "meaning": "Steps × group size × 0.02 GPU-hours × ₹250."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Answer check, G = 2",
+        "expect": "Accuracy 46% after 200 steps: small groups teach little."
+      },
+      {
+        "k": "format",
+        "name": "Reward for format",
+        "expect": "Reward 92%, accuracy stuck at 42%: a 50-point gap."
+      },
+      {
+        "k": "hack",
+        "name": "Checked working, loose verifier",
+        "expect": "Reward 70% against accuracy 61%: the gap widens with steps."
+      },
+      {
+        "k": "near",
+        "name": "Checked working, strict, 600 steps",
+        "expect": "Accuracy 64.9% with a 1-point gap for ₹24,000: just short."
+      }
+    ],
+    "missions": [
+      {
+        "k": "acc",
+        "text": "Reach 65% true accuracy.",
+        "hint": "A strict reward that checks the working, and enough steps."
+      },
+      {
+        "k": "cheap",
+        "text": "Reach 65% with a gap of 3 points or less, for ₹30,000 or less.",
+        "hint": "G = 8 is enough; find the right number of steps."
+      },
+      {
+        "k": "hack",
+        "text": "Show a checker being gamed: with a reward that checks answers, get training reward 10+ points above accuracy.",
+        "hint": "A loose verifier, trained for long enough."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Hugging Face TRL",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "GRPOTrainer with Python reward functions.",
+        "ex": "Reward matching boxed answers with eight samples per problem.",
+        "pros": [
+          "Simple reward functions",
+          "Works with PEFT and vLLM"
+        ],
+        "cons": [
+          "Compute heavy",
+          "Tuning takes experiments"
+        ],
+        "url": "https://huggingface.co/docs/trl/grpo_trainer"
+      },
+      {
+        "n": "veRL",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Scalable reinforcement learning for LLMs across many GPUs.",
+        "ex": "Run GRPO on a larger model across a cluster.",
+        "pros": [
+          "Built for scale",
+          "Fast rollouts"
+        ],
+        "cons": [
+          "More complex setup",
+          "Needs a cluster to shine"
+        ],
+        "url": "https://github.com/volcengine/verl"
+      },
+      {
+        "n": "OpenAI reinforcement fine-tuning",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 2,
+        "best": "Tune hosted reasoning models with graders as rewards.",
+        "ex": "Grade answers with a string-check grader on your own problems.",
+        "pros": [
+          "No GPUs to manage",
+          "Grader types built in"
+        ],
+        "cons": [
+          "Limited models",
+          "Costs can be high"
+        ],
+        "url": "https://platform.openai.com/docs/guides/reinforcement-fine-tuning"
+      },
+      {
+        "n": "Unsloth",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Memory-efficient GRPO on a single GPU.",
+        "ex": "Try GRPO on a 1B model on one card before scaling up.",
+        "pros": [
+          "Low memory",
+          "Good notebooks"
+        ],
+        "cons": [
+          "Mainly single-GPU",
+          "Selected architectures"
+        ],
+        "url": "https://docs.unsloth.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "My task has checkable answers",
+        "tool": "GRPO in TRL with a strict verifier"
+      },
+      {
+        "need": "Reward rises but accuracy does not",
+        "tool": "Strengthen the verifier and inspect samples"
+      },
+      {
+        "need": "I need to scale RL training",
+        "tool": "veRL or OpenRLHF on a cluster"
+      }
+    ],
+    "goals": [
+      "See why only verified correctness should be rewarded",
+      "Spot reward hacking from the gap",
+      "See how group size and steps set the bill"
+    ]
+  },
+  "practice": {
+    "scenario": "An ed-tech company wanted a small model that solves school maths reliably. SFT on worked solutions reached 58% on a held-out set. Training with GRPO, rewarding only answers that matched the key, raised it to 66%. The first reward also paid for well-formatted answers, and reward climbed to 95% while accuracy did not move: the model had learned the format, not the maths.",
+    "industries": [
+      {
+        "industry": "Education",
+        "use": "Maths and physics problems with known final answers"
+      },
+      {
+        "industry": "Software",
+        "use": "Code that must pass unit tests"
+      },
+      {
+        "industry": "Finance ops",
+        "use": "Reconciliations and SQL queries whose results can be checked"
+      }
+    ],
+    "analogy": "Marking a practice exam with an answer key. The student gets credit only for right answers, so they learn to solve. If you give credit for neat handwriting, you get neat wrong answers.",
+    "library": {
+      "name": "Hugging Face TRL (GRPO)",
+      "what": "GRPOTrainer samples several completions per prompt, scores them with your reward functions and pushes the model towards the better ones in each group.",
+      "install": "pip install trl"
+    },
+    "note": "Reward only what a program can check. Track accuracy on a held-out set alongside the training reward; if reward rises and accuracy does not, the model has found a loophole.",
+    "samples": [
+      {
+        "file": "train_grpo.py",
+        "language": "python",
+        "code": "import re\nfrom datasets import load_dataset\nfrom trl import GRPOConfig, GRPOTrainer\n\ndata = load_dataset(\"json\", data_files=\"maths.jsonl\")[\"train\"]  # prompt, answer\n\ndef correct(completions, answer, **kwargs):\n    \"\"\"1.0 if the final boxed number matches the key, else 0.0.\"\"\"\n    rewards = []\n    for text, key in zip(completions, answer):\n        m = re.search(r\"\\\\boxed\\{(-?[\\d.]+)\\}\", text)\n        rewards.append(1.0 if m and abs(float(m.group(1)) - float(key)) < 1e-6 else 0.0)\n    return rewards\n\ntrainer = GRPOTrainer(\n    model=\"sft-maths-1b\",\n    reward_funcs=correct,\n    args=GRPOConfig(output_dir=\"grpo-maths\", num_generations=8,\n                    learning_rate=1e-6, max_steps=600),\n    train_dataset=data)\ntrainer.train()"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "In GRPO, eight answers are sampled for one prompt and two are correct (reward 1, others 0). Using the group mean as the baseline, what is the advantage of a correct answer?",
+    "answer": "Mean reward = 2/8 = 0.25, so a correct answer’s advantage is 1 − 0.25 = 0.75 and a wrong one’s is −0.25 (before dividing by the group standard deviation, 0.43, which gives about 1.73 and −0.58). If all eight were right or all wrong, every advantage would be zero and the prompt would teach nothing.",
+    "expected": {
+      "value": 0.75,
+      "tolerance": 0.01,
+      "label": "advantage ="
+    },
+    "interview": [
+      {
+        "question": "What makes a reward verifiable, and why does it matter?",
+        "answer": "A program can decide it: an answer matches the key, code passes tests, a query returns the right rows. No learned reward model is needed, so there is less to game. But a weak verifier can still be exploited, for example by rewarding format or by tests that miss cases, so the checker itself needs review."
+      },
+      {
+        "question": "What is reward hacking and how do you spot it?",
+        "answer": "The model finds a way to raise the reward without doing the task: matching a format, gaming weak tests, or exploiting a bug in the checker. You spot it when training reward keeps rising but accuracy on a held-out set, checked independently, does not. Inspect samples and strengthen the verifier."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Rewarding format or length",
+        "fix": "Reward only verified correctness, with format as a small bonus at most"
+      },
+      {
+        "mistake": "Trusting training reward as the score",
+        "fix": "Track held-out accuracy with an independent check"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rl01",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is a verifiable reward?",
+      "options": [
+        "A reward a program can compute, such as a matching answer or passing tests",
+        "A rating from a human",
+        "A score from a learned reward model",
+        "The length of the answer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A checker decides it."
+    },
+    {
+      "id": "rl02",
+      "kind": "single",
+      "industry": "General",
+      "question": "How does GRPO compute an answer’s advantage?",
+      "options": [
+        "Its reward relative to the mean of a group sampled for the same prompt",
+        "With a separate value network",
+        "From human rankings",
+        "From its length"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Group-relative, no critic."
+    },
+    {
+      "id": "rl03",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Eight samples, two correct. With the group mean as the baseline, what is a correct sample’s advantage?",
+      "options": [
+        "0.25",
+        "0.5",
+        "0.75",
+        "1"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1 − 0.25 = 0.75."
+    },
+    {
+      "id": "rl04",
+      "kind": "single",
+      "industry": "General",
+      "question": "All eight samples for a prompt are correct. What does that prompt teach?",
+      "options": [
+        "Nothing: every advantage is zero",
+        "A lot",
+        "Only format",
+        "It doubles the reward"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No variation, no signal."
+    },
+    {
+      "id": "rl05",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which make good verifiable rewards? Select all that apply.",
+      "options": [
+        "Code passing hidden unit tests",
+        "A maths answer matching the key exactly",
+        "The answer being long",
+        "The answer containing the word “therefore”"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Only checks of correctness should be rewarded."
+    },
+    {
+      "id": "rl06",
+      "kind": "single",
+      "industry": "General",
+      "question": "Training reward rises to 95% while held-out accuracy stays at 42%. What is this?",
+      "options": [
+        "Reward hacking",
+        "Overfitting to the test set",
+        "Good progress",
+        "A tokenizer bug"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The model scores without solving."
+    },
+    {
+      "id": "rl07",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which paper introduced GRPO?",
+      "options": [
+        "DeepSeekMath (Shao et al., 2024)",
+        "LoRA (Hu et al., 2021)",
+        "DPO (Rafailov et al., 2023)",
+        "InstructGPT (2022)"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "GRPO came from DeepSeekMath."
+    },
+    {
+      "id": "rl08",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which work named the approach RLVR?",
+      "options": [
+        "Tülu 3 (2024)",
+        "BERT (2018)",
+        "QLoRA (2023)",
+        "Word2Vec (2013)"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tülu 3 used reinforcement learning with verifiable rewards."
+    },
+    {
+      "id": "rl09",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A reward checks whether the key appears anywhere in the text. How can it be gamed?",
+      "options": [
+        "By listing many candidate numbers",
+        "It cannot be gamed",
+        "By answering in French",
+        "By being short"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Loose matching rewards hedging."
+    },
+    {
+      "id": "rl10",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does doubling the group size G do to cost per step?",
+      "options": [
+        "Roughly doubles it",
+        "Halves it",
+        "Leaves it unchanged",
+        "Squares it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Each sample is another generation."
+    },
+    {
+      "id": "rl11",
+      "kind": "multi",
+      "industry": "General",
+      "question": "Which help detect reward hacking? Select all that apply.",
+      "options": [
+        "Tracking held-out accuracy with an independent check",
+        "Inspecting high-reward samples",
+        "Only watching the training reward",
+        "Increasing the learning rate"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Independent checks and reading samples reveal loopholes."
+    },
+    {
+      "id": "rl12",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which famous model used large-scale RL with rule-based rewards to develop reasoning?",
+      "options": [
+        "DeepSeek-R1",
+        "Word2Vec",
+        "ResNet",
+        "BERT"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DeepSeek-R1 used rule-based accuracy and format rewards."
+    },
+    {
+      "id": "rl13",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Why is RLVR a poor fit for open-ended support replies?",
+      "options": [
+        "There is no reliable program to check them",
+        "They are too short",
+        "Support has no data",
+        "GRPO cannot handle text"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No verifier, no verifiable reward."
+    },
+    {
+      "id": "rl14",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is usually done before RLVR on a small model?",
+      "options": [
+        "SFT so it can produce the answer format at all",
+        "Pretraining from scratch",
+        "Nothing",
+        "Distillation of a reward model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A model that never gets anything right gets no signal."
+    },
+    {
+      "id": "rl15",
+      "kind": "single",
+      "industry": "Finance ops",
+      "question": "A reward checks that a SQL query runs, not that it returns the right rows. What will the model learn?",
+      "options": [
+        "Queries that run but may be wrong",
+        "Correct queries",
+        "Faster databases",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Check the result, not just execution."
+    },
+    {
+      "id": "rl16",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which TRL class runs GRPO?",
+      "options": [
+        "GRPOTrainer",
+        "SFTTrainer",
+        "DPOTrainer",
+        "Trainer only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "GRPOTrainer with reward_funcs."
+    },
+    {
+      "id": "rl17",
+      "kind": "single",
+      "industry": "General",
+      "question": "What signature does a TRL GRPO reward function have?",
+      "options": [
+        "It takes completions (and dataset columns) and returns a list of floats",
+        "It returns a single string",
+        "It takes no arguments",
+        "It returns a model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One reward per completion."
+    },
+    {
+      "id": "rl18",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "G = 2 and the base model solves 10% of problems. What is the problem?",
+      "options": [
+        "Most groups are all wrong, so there is little signal",
+        "Training is too accurate",
+        "Costs explode",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Small groups on hard problems rarely contain a correct answer."
+    },
+    {
+      "id": "rl19",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why add only a small bonus, if any, for format?",
+      "options": [
+        "So the model cannot earn most of the reward without being right",
+        "Format is illegal",
+        "Format slows training",
+        "To lengthen answers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Correctness must dominate the reward."
+    },
+    {
+      "id": "rl20",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which number should decide whether an RL run helped?",
+      "options": [
+        "Held-out accuracy checked independently",
+        "Final training reward",
+        "GPU utilisation",
+        "Number of steps"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Training reward can be gamed."
+    }
+  ]
+}

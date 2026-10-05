@@ -1,0 +1,896 @@
+{
+  "id": "system",
+  "moduleSlug": "evaluation",
+  "name": "System-Level Eval",
+  "shortName": "System-level",
+  "question": "Did the agent get the job done?",
+  "summary": "Treat the agent as a black box. Give it a real task, let it run to completion, and check only the final result against the goal. This is the number stakeholders care about, and the one to gate releases on.",
+  "useCases": [
+    "Release gates and regression checks before shipping a new prompt, model or tool",
+    "Comparing two agent versions on the same task set",
+    "Tasks with a checkable end state: tests pass, a record is updated, a file exists"
+  ],
+  "keyFacts": {
+    "label": "Key metrics",
+    "items": [
+      {
+        "term": "Task success rate",
+        "detail": "successful runs ÷ total runs"
+      },
+      {
+        "term": "pass^k",
+        "detail": "share of tasks solved in all k repeated trials"
+      },
+      {
+        "term": "Cost per success",
+        "detail": "total spend ÷ successful tasks"
+      },
+      {
+        "term": "Latency",
+        "detail": "p50 / p95 wall-clock time per task"
+      },
+      {
+        "term": "Steps & tool calls",
+        "detail": "turns taken; flags loops and waste"
+      },
+      {
+        "term": "Escalation rate",
+        "detail": "runs handed to a human"
+      }
+    ]
+  },
+  "steps": [
+    "Build a golden set of 50–200 realistic tasks, each with a verifiable end state",
+    "Write programmatic checkers for each end state wherever possible",
+    "Run every task several times, because agents are non-deterministic",
+    "Report success, pass^k, cost and latency together, never success alone"
+  ],
+  "pitfalls": [
+    "A pass says nothing about why. Pair it with process-level eval to debug",
+    "One lucky run hides flakiness, so use repeated trials",
+    "String-match checkers reject correct answers that are phrased differently"
+  ],
+  "tools": [
+    "LangSmith",
+    "Braintrust",
+    "Langfuse",
+    "Arize Phoenix",
+    "DeepEval",
+    "Inspect AI"
+  ],
+  "remember": "Score the outcome, count the cost, repeat the run.",
+  "caption": "Only the final state is checked. What happened inside the agent is out of scope.",
+  "comparison": {
+    "scope": "Final outcome",
+    "cost": 2,
+    "needs": "Verifiable end state",
+    "best": "Release gates, A/B of versions"
+  },
+  "diagram": {
+    "file": "diagrams/system.svg"
+  },
+  "lesson": {
+    "file": "eval_harness.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import statistics, time",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "TASKS = load_golden_set(\"golden_tasks.jsonl\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "K = 3",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "results = []",
+        "steps": []
+      },
+      {
+        "text": "for task in TASKS:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    for trial in range(K):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        start = time.time()",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        run = agent.run(task.input)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        results.append({",
+        "steps": []
+      },
+      {
+        "text": "            \"task\": task.id,",
+        "steps": []
+      },
+      {
+        "text": "            \"ok\": task.check(run.final_state),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            \"cost\": run.cost_usd,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"secs\": time.time() - start,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        })",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ok = [r[\"ok\"] for r in results]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "success = sum(ok) / len(ok)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "by_task = {t.id: [r[\"ok\"] for r in results if r[\"task\"] == t.id] for t in TASKS}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "pass_k = sum(all(v) for v in by_task.values()) / len(TASKS)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "cost_per_success = sum(r[\"cost\"] for r in results) / max(sum(ok), 1)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "p95 = statistics.quantiles([r[\"secs\"] for r in results], n=20)[18]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "assert success >= 0.90 and p95 < 8, \"release blocked\"",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Build a golden set",
+        "text": "Collect 50–200 real tasks. Each needs an end state that code can check: a database row, a file, a passing test."
+      },
+      {
+        "title": "Run every task several times",
+        "text": "Agents are non-deterministic, so run each task K times (3–5 is typical). Record cost and wall-clock time for every run."
+      },
+      {
+        "title": "Check the end state, not the wording",
+        "text": "A checker function inspects the final state. Two runs pass; one leaves the order in the wrong status and fails."
+      },
+      {
+        "title": "Aggregate the metrics",
+        "text": "Success rate averages all runs. pass^k counts tasks that passed every run. Add cost per success and p95 latency."
+      },
+      {
+        "title": "Gate the release",
+        "text": "Ship only if every threshold holds. Here success is 0.87, below 0.90, so this version is blocked."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"18\" y=\"74\" width=\"90\" height=\"60\" rx=\"7\"/><rect class=\"bx soft\" x=\"13\" y=\"79\" width=\"90\" height=\"60\" rx=\"7\"/></g><g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"84\" width=\"90\" height=\"60\" rx=\"7\"/><text class=\"lb\" x=\"53\" y=\"111\">Golden set</text><text class=\"sb\" x=\"53\" y=\"126\">150 tasks</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M100 114L120 114\" marker-end=\"url(#arr)\"/></g><g class=\"a dark-t\" style=\"--d:0.1s\"><rect class=\"bx dark\" x=\"122\" y=\"62\" width=\"106\" height=\"104\" rx=\"7\"/><text class=\"lb\" x=\"175\" y=\"111\">Agent</text><text class=\"sb\" x=\"175\" y=\"126\">each task × 3</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"130\" y=\"138\" width=\"28\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"144\" y=\"151\" text-anchor=\"middle\">r1</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"163\" y=\"138\" width=\"28\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"177\" y=\"151\" text-anchor=\"middle\">r2</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"196\" y=\"138\" width=\"28\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"210\" y=\"151\" text-anchor=\"middle\">r3</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M230 114L250 114\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"252\" y=\"84\" width=\"100\" height=\"60\" rx=\"7\"/><text class=\"lb\" x=\"302\" y=\"111\">Check state</text><text class=\"sb\" x=\"302\" y=\"126\">DB · files · tests</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"270\" cy=\"84\" r=\"9\" class=\"bd-pass\"/><path d=\"M266 84l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.55s\"><circle cx=\"300\" cy=\"84\" r=\"9\" class=\"bd-pass\"/><path d=\"M296 84l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.7s\"><circle cx=\"330\" cy=\"84\" r=\"9\" class=\"bd-fail\"/><path d=\"M326.5 80.5l7 7M333.5 80.5l-7 7\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"180\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"196\" text-anchor=\"middle\">success = 0.87</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"182\" y=\"180\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"196\" text-anchor=\"middle\">pass^3 = 0.78</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"8\" y=\"208\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"224\" text-anchor=\"middle\">cost / success = $0.09</text></g><g class=\"a\" style=\"--d:0.44999999999999996s\"><rect class=\"bx soft\" x=\"182\" y=\"208\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"224\" text-anchor=\"middle\">p95 latency = 6.1 s</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"10\" width=\"344\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"32.5\">Gate: success 0.87 < 0.90 → release blocked</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Measures what users and stakeholders actually care about",
+      "Simple to explain and to automate as a release gate",
+      "Works with any agent framework: only the end state matters",
+      "Catches regressions in cost and latency as well as quality"
+    ],
+    "cons": [
+      "Says nothing about why a run failed",
+      "Needs tasks with an end state code can check",
+      "Flaky unless each task runs several times",
+      "A lucky path can hide unsafe or wasteful intermediate steps"
+    ],
+    "avoidWhen": [
+      "You need to debug one specific failure (use process-level eval)",
+      "Outputs are open-ended with no checkable end state (use LLM-as-a-Judge)"
+    ],
+    "tools": [
+      {
+        "name": "Inspect AI",
+        "type": "Open source (UK AISI)",
+        "what": "Task, solver and scorer evals with repeated epochs and sandboxes",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "YAML test suites and CI gates for prompts and agents",
+        "url": "https://github.com/promptfoo/promptfoo"
+      },
+      {
+        "name": "DeepEval",
+        "type": "Open source",
+        "what": "Pytest-style LLM tests that run in CI",
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial (LangChain)",
+        "what": "Datasets, experiments and regression comparison in a hosted UI",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Braintrust",
+        "type": "Commercial",
+        "what": "Experiments, datasets and scoring with a hosted dashboard",
+        "url": "https://www.braintrust.dev"
+      },
+      {
+        "name": "OpenAI Evals",
+        "type": "Open source",
+        "what": "Eval templates and a registry of example evals",
+        "url": "https://github.com/openai/evals"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "You own the release of a customer-support agent. Before shipping, you replayed 5 real support tasks, 3 times each: 15 runs in total. Each cell below is one run. ✓ means the agent reached the correct end state (for example, the order status was right); ✗ means it didn't.",
+    "controls": [
+      "Click any cell to flip that run between pass (✓) and fail (✗).",
+      "Drag the slider to set what one run costs in model tokens.",
+      "Or pick a ready-made scenario to see a typical pattern."
+    ],
+    "outputs": [
+      {
+        "name": "Success rate",
+        "meaning": "Passing runs ÷ all 15 runs. Your average quality."
+      },
+      {
+        "name": "pass@3",
+        "meaning": "Tasks that passed at least once ÷ 5. Can the agent do it at all?"
+      },
+      {
+        "name": "pass^3",
+        "meaning": "Tasks that passed all three runs ÷ 5. Can you rely on it every time?"
+      },
+      {
+        "name": "Cost per success",
+        "meaning": "Total spend ÷ passing runs. What each good outcome really costs."
+      },
+      {
+        "name": "Release gate",
+        "meaning": "Ships only if the success rate is at least 90%."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Starting data",
+        "expect": "A realistic mix: 73% success, the gate blocks the release."
+      },
+      {
+        "k": "reliable",
+        "name": "Reliable agent",
+        "expect": "14 of 15 runs pass. Expect 93% success, pass^3 of 80%, and the gate passes."
+      },
+      {
+        "k": "flaky",
+        "name": "Flaky agent",
+        "expect": "Every task fails exactly once. Expect pass@3 of 100% but pass^3 of 0%: it can do everything, but never reliably."
+      },
+      {
+        "k": "broken",
+        "name": "One broken task",
+        "expect": "Task 4 always fails, the rest always pass. Expect 80% on every metric: consistent, with one capability gap to fix."
+      }
+    ],
+    "missions": [
+      {
+        "k": "gate",
+        "text": "Make the release gate pass by flipping as few cells as possible.",
+        "hint": "The gate needs 90% of 15 runs, so at least 14 must pass."
+      },
+      {
+        "k": "flaky",
+        "text": "Get pass@3 to 100% while pass^3 stays at 0%.",
+        "hint": "Every task must pass at least once and fail at least once."
+      },
+      {
+        "k": "cost",
+        "text": "With the cost slider at $0.05, push cost per success above $0.10.",
+        "hint": "The spend stays at $0.75, so you need fewer than 8 passing runs."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Inspect AI",
+        "type": "Open source · UK AI Security Institute",
+        "start": 2,
+        "prod": 3,
+        "best": "Rigorous, reproducible evaluations of agents that use tools, written in Python and run from the command line.",
+        "ex": "Run 150 support tasks for 5 epochs against two model versions and compare accuracy and token use in the log viewer.",
+        "pros": [
+          "Repeated epochs, sandboxes and tool-using agents built in",
+          "Detailed log viewer for every sample"
+        ],
+        "cons": [
+          "More concepts to learn than a YAML test runner",
+          "No hosted team dashboard out of the box"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source · optional paid cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "Declarative test suites in YAML that run in CI and fail the build when quality drops.",
+        "ex": "A GitHub Action that blocks a pull request if a prompt change drops the pass rate on 100 test cases below 90%.",
+        "pros": [
+          "Fast to start; simple suites need no code",
+          "Side-by-side comparison of prompts and models"
+        ],
+        "cons": [
+          "Complex agent flows need custom providers",
+          "Very large suites get unwieldy in YAML"
+        ],
+        "url": "https://github.com/promptfoo/promptfoo"
+      },
+      {
+        "n": "DeepEval",
+        "type": "Open source · optional paid platform",
+        "start": 3,
+        "prod": 2,
+        "best": "Pytest-style unit tests for LLM apps, with many ready-made metrics including task completion.",
+        "ex": "A test file that runs on every commit and fails if task-completion scores on your golden set fall below 0.8.",
+        "pros": [
+          "Familiar pytest workflow",
+          "Large metric library, including agent metrics"
+        ],
+        "cons": [
+          "Scores depend on the judge model you configure",
+          "Team dashboards need the paid platform"
+        ],
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial · by LangChain · free tier",
+        "start": 2,
+        "prod": 3,
+        "best": "Hosted datasets, experiments and regression comparison, connected to full traces.",
+        "ex": "Compare version 12 and version 13 of an agent on the same dataset, then open each failing run’s trace.",
+        "pros": [
+          "Traces and evaluations in one place",
+          "Annotation queues for human review"
+        ],
+        "cons": [
+          "Paid at higher volumes",
+          "Smoothest with LangChain and LangGraph, though it works with any stack"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Braintrust",
+        "type": "Commercial · free tier",
+        "start": 2,
+        "prod": 3,
+        "best": "Experiment tracking with strong diffing, so a team can see exactly which cases improved or regressed.",
+        "ex": "Every prompt change runs as an experiment; the diff view lists the 7 tickets that newly fail.",
+        "pros": [
+          "Clear experiment-to-experiment diffs",
+          "Works with any framework"
+        ],
+        "cons": [
+          "Mainly a hosted service",
+          "Costs grow with volume"
+        ],
+        "url": "https://www.braintrust.dev"
+      },
+      {
+        "n": "OpenAI Evals",
+        "type": "Open source",
+        "start": 2,
+        "prod": 1,
+        "best": "Learning from a registry of example evals and simple templates.",
+        "ex": "Read how exact-match and model-graded evals are structured before designing your own suite.",
+        "pros": [
+          "Many examples to study",
+          "Simple, readable templates"
+        ],
+        "cons": [
+          "Less actively developed than newer frameworks",
+          "Oriented toward OpenAI models"
+        ],
+        "url": "https://github.com/openai/evals"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype this week",
+        "tool": "promptfoo or DeepEval"
+      },
+      {
+        "need": "Rigorous agent evals in production",
+        "tool": "Inspect AI"
+      },
+      {
+        "need": "Team dashboards and experiment history",
+        "tool": "LangSmith or Braintrust"
+      }
+    ],
+    "goals": [
+      "Explain the difference between success rate, pass@k and pass^k",
+      "Calculate pass^k and cost per success from raw run results",
+      "Design a release gate with thresholds for quality, cost and latency"
+    ]
+  },
+  "practice": {
+    "scenario": "A stockbroker's support agent answers “Why was my order rejected?”. Before every release, 150 recorded cases are replayed five times each. A run counts as a success only if the agent names the correct rejection reason from the order log. The release ships only if success stays at or above 90% and p95 latency stays under 8 seconds.",
+    "industries": [
+      {
+        "industry": "Fintech & stockbroking",
+        "use": "Gate releases of order-status and KYC assistants on replayed real tickets"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Track refund-agent resolution rate and cost per resolved ticket"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Measure plan-change agents on completion rate across repeated runs"
+      }
+    ],
+    "analogy": "A driving test. The examiner checks whether you parked safely in the bay and on time, not how you held the steering wheel.",
+    "library": {
+      "name": "Inspect AI",
+      "what": "Open-source eval framework from the UK AI Security Institute. Datasets, solvers and scorers in plain Python, with repeated trials (epochs) built in.",
+      "install": "pip install inspect-ai"
+    },
+    "samples": [
+      {
+        "file": "task.py",
+        "language": "python",
+        "code": "from inspect_ai import Task, task\nfrom inspect_ai.dataset import Sample\nfrom inspect_ai.scorer import includes\nfrom inspect_ai.solver import generate\n\n@task\ndef order_rejections():\n    return Task(\n        dataset=[\n            Sample(input=\"Why was order 8812 rejected?\",\n                   target=\"INSUFFICIENT_MARGIN\"),\n            Sample(input=\"Why was order 9034 rejected?\",\n                   target=\"PRICE_BAND_BREACH\"),\n        ],\n        solver=[generate()],   # swap in your agent (tools + loop)\n        scorer=includes(),     # success = target reason appears in the answer\n        epochs=5,              # repeat each case: agents are non-deterministic\n    )"
+      },
+      {
+        "file": "run",
+        "language": "bash",
+        "code": "inspect eval task.py --model openai/gpt-4o-mini\ninspect view      # browse accuracy, per-sample runs, tokens and time"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "You ran 4 tasks × 3 trials. T1 ✓✓✓, T2 ✓✗✓, T3 ✓✓✓, T4 ✗✗✓. What is pass^3?",
+    "answer": "Success rate over all runs = 9 of 12 = 75%. pass^3 counts tasks that passed all 3 trials: T1 and T3, so 2 ÷ 4 = 0.5. The gap between 75% and 0.5 is flakiness.",
+    "expected": {
+      "value": 0.5,
+      "tolerance": 0.01,
+      "label": "pass^3 ="
+    },
+    "interview": [
+      {
+        "question": "Why isn't a single success-rate number enough for an agent release gate?",
+        "answer": "Agents are non-deterministic and cost money per run. Report success over repeated trials (pass^k for consistency), cost per success and p95 latency. A new version can keep the same success rate while doubling cost or becoming flaky."
+      },
+      {
+        "question": "How do you build a golden task set for system-level eval?",
+        "answer": "Sample real, anonymized requests across intents and difficulty, add known edge cases and past failures, and give each task a programmatically checkable end state such as a database row, a file or a passing test. Keep 50–200 tasks, version the set, and add every new production failure to it."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Grading only the final message with string matching",
+        "fix": "Check the end state in code: the order status, the file, the test result"
+      },
+      {
+        "mistake": "Running each task once",
+        "fix": "Run 3–5 trials and report pass^k alongside the average"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sy01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Your order-status agent resolves 47 of 50 replayed tickets on a single run. The support head wants to ship on Friday. What do you do first?",
+      "options": [
+        "Ship it: 94% beats the 90% target",
+        "Replay each ticket 3–5 times and gate on pass^k",
+        "Add 50 more tickets and run them once",
+        "Switch to a larger model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One run can pass by luck. Repeating each ticket shows which ones work every time, which is what customers experience."
+    },
+    {
+      "id": "sy02",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A refund agent says “Your refund is done.” Which checks prove the refund really happened? Select all that apply.",
+      "options": [
+        "The order status in the database is “refunded”",
+        "The refunded amount in the payments table matches the policy",
+        "The reply contains the word “refunded”",
+        "An audit-log entry exists for the refund"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "End-state checks inspect real systems. The reply can say “refunded” when nothing happened."
+    },
+    {
+      "id": "sy03",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking agent is replayed 3 times on 3 disruption cases. Case A passes 3/3, B passes 2/3, C passes 0/3. What is pass^3?",
+      "options": [
+        "0.33",
+        "0.56",
+        "0.67",
+        "1.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "pass^3 counts a case only if all three runs passed. Only A did: 1 ÷ 3 ≈ 0.33."
+    },
+    {
+      "id": "sy04",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Same results (A 3/3, B 2/3, C 0/3). The product manager puts pass@3 in the release note. What number is that, and what is the problem?",
+      "options": [
+        "0.67, but it counts cases that passed at least once, while each customer gets one run",
+        "0.33, and it is the right number to publish",
+        "1.0, because every case was attempted",
+        "0.56, the average across runs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "pass@3 = 2 ÷ 3 ≈ 0.67. It is optimistic: a customer gets one attempt, not the best of three."
+    },
+    {
+      "id": "sy05",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "You are writing the release gate for a plan-change agent. What belongs in it? Select all that apply.",
+      "options": [
+        "Success rate over repeated trials",
+        "Cost per successful task",
+        "p95 latency",
+        "Number of lines in the system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Gate on what customers and the business feel: quality, cost and speed."
+    },
+    {
+      "id": "sy06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Version 2 of a claims agent keeps 92% success, but cost per successful claim rises from $0.04 to $0.11. What does this show?",
+      "options": [
+        "Ship it: quality held",
+        "A cost regression the gate should catch",
+        "Nothing: cost is not part of evaluation",
+        "Only process-level eval matters here"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Nearly 3× the cost for the same quality is a regression. Put cost in the gate."
+    },
+    {
+      "id": "sy07",
+      "kind": "single",
+      "industry": "Healthcare admin",
+      "question": "You are building the golden set for an appointment-booking agent. Where should the tasks come from?",
+      "options": [
+        "Tasks the team imagines",
+        "Real, anonymized patient requests plus past failures",
+        "Only the easiest cases",
+        "A public benchmark"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Real traffic and known failures make the set representative of what the agent will face."
+    },
+    {
+      "id": "sy08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A dispute agent passes 95% of golden tasks, yet operations found it opened duplicate dispute tickets in 4% of runs that still ended “resolved”. Why did the gate miss it?",
+      "options": [
+        "It checked only the final status, not side effects along the way",
+        "pass^k was set too low",
+        "The judge was biased",
+        "The benchmark was contaminated"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Outcome checks miss harmful steps. Add a “no duplicate tickets” end-state check and score the trace with process-level eval."
+    },
+    {
+      "id": "sy09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Why run golden tasks against a sandboxed copy of production data?",
+      "options": [
+        "So checkers can inspect realistic end states without touching real customers",
+        "To make the agent faster",
+        "Because string matching requires it",
+        "It is not necessary"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "You need realistic state to check, without real money moving or real customers affected."
+    },
+    {
+      "id": "sy10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The same checkout-help task passes on some runs and fails on others, and the failing runs are the ones where the sandbox payment API happened to be slow. What kind of problem is this?",
+      "options": [
+        "A capability gap",
+        "Flakiness caused by the environment",
+        "Judge bias",
+        "Benchmark contamination"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It works sometimes and fails sometimes depending on conditions. That is flakiness, and repeated trials expose it."
+    },
+    {
+      "id": "sy11",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Your KYC agent’s test suite was written six months ago. Live complaints are about cases the suite never covered. What is the fix?",
+      "options": [
+        "Keep the suite frozen so scores stay comparable",
+        "Add recent complaint cases to the golden set and keep growing it as a regression set",
+        "Raise the pass threshold",
+        "Test only with a public benchmark"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A golden set is a living asset. Every production failure should become a new test case."
+    },
+    {
+      "id": "sy12",
+      "kind": "single",
+      "industry": "SaaS support",
+      "question": "The checker for a password-reset task passes if the reply contains “reset link sent”. What is wrong with it?",
+      "options": [
+        "Nothing: it is a clear check",
+        "It passes even if no email was sent; check the email outbox or audit record instead",
+        "It should check for “password” too",
+        "It should use an LLM judge"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Check the state change (an email queued for that user), not what the agent says it did."
+    },
+    {
+      "id": "sy13",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A delivery-query agent averages 4 s per answer, but p95 is 19 s. The goal is that 95% of customers get an answer within 10 s. Does it pass?",
+      "options": [
+        "Yes: the average is well under 10 s",
+        "No: p95 is 19 s, so more than 5% of customers wait over 10 s",
+        "Yes, if the success rate is high",
+        "You cannot tell without pass@k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Averages hide the slow tail. Gate on the percentile the goal is written in."
+    },
+    {
+      "id": "sy14",
+      "kind": "single",
+      "industry": "Healthcare admin",
+      "question": "A prior-authorization agent has pass^1 = 0.90 and pass^5 = 0.62. What does that tell you?",
+      "options": [
+        "It is reliable",
+        "Many tasks succeed only some of the time, so it has a consistency problem",
+        "pass^5 is always lower, so ignore it",
+        "The golden set is too small"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "If every task passed 90% of runs, pass^5 would be about 0.9⁵ ≈ 0.59. So failures are spread across many tasks: reliability, not capability, is the problem."
+    },
+    {
+      "id": "sy15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Two prompt versions score 88% and 90% on a 50-task set, one run each. Can you say version 2 is better?",
+      "options": [
+        "Yes: 2 points is a clear win",
+        "No: 2 points is one task, which is within run-to-run noise; add trials or tasks",
+        "Yes, if the model is the same",
+        "No: prompts cannot be compared"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "On 50 tasks, one task is 2 points. Repeat the runs or enlarge the set before declaring a winner."
+    },
+    {
+      "id": "sy16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent made 200 runs with 150 successes, and total spend was $30. What is the cost per successful task?",
+      "options": [
+        "$0.15",
+        "$0.20",
+        "$0.10",
+        "$0.25"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Divide spend by successes, not runs: $30 ÷ 150 = $0.20."
+    },
+    {
+      "id": "sy17",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "In a sandbox run, the agent books the right hotel but charges the customer’s card twice. How should the checker score the run?",
+      "options": [
+        "Pass: the hotel is booked",
+        "Fail: the correct end state includes exactly one charge",
+        "Partial credit",
+        "Ignore it: sandbox charges are not real"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The end state is everything that changed. A double charge is a failed task."
+    },
+    {
+      "id": "sy18",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "When should the full golden-set eval run for a tutoring agent? Select all that apply.",
+      "options": [
+        "On every prompt, model or tool change before release",
+        "On a schedule, to catch drift",
+        "Only once, at launch",
+        "When the provider updates the model version"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything that changes behaviour, including silent provider updates, should trigger the eval."
+    },
+    {
+      "id": "sy19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "After launch, which production signal best stands in for system-level success on a support agent?",
+      "options": [
+        "The ticket is not reopened within 7 days",
+        "Number of messages in the chat",
+        "Average reply length",
+        "Total thumbs-up count"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reopen rate tracks whether the problem was actually solved. Thumbs-up ratings are sparse and biased."
+    },
+    {
+      "id": "sy20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A new model scores 3 points higher on your golden set, but p95 latency goes from 6 s to 14 s. The gate is 8 s. What is the decision?",
+      "options": [
+        "Ship it: quality went up",
+        "Block the release: every gate condition must pass",
+        "Average quality and latency",
+        "Remove latency from the gate"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A gate is several conditions, and all must pass. Tune the setup or route traffic before shipping."
+    }
+  ]
+}

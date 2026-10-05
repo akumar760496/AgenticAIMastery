@@ -1,0 +1,828 @@
+{
+  "id": "graphmem",
+  "moduleSlug": "memory",
+  "name": "Graph and Temporal Memory",
+  "shortName": "Graph memory",
+  "question": "Can the agent remember who is linked to what, and since when?",
+  "summary": "Stores memory as entities and relationships with time on every edge: who holds which account, who is nominee, which address was valid from when to when. New facts that contradict old ones close the old edge with an end date instead of deleting it, so the agent answers from what is true now and can still explain what was true then. Multi-hop questions follow edges, which plain vector memory struggles to do.",
+  "useCases": [
+    "Customer relationships that change: nominees, addresses, authorised signatories",
+    "Questions that chain facts: “the nominee on the account opened after the move”",
+    "Audit needs: what did we know, and when"
+  ],
+  "keyFacts": {
+    "label": "Building blocks",
+    "items": [
+      {
+        "term": "Entities",
+        "detail": "people, accounts, products, places"
+      },
+      {
+        "term": "Relationships",
+        "detail": "typed edges such as holder_of, nominee_of, lives_at"
+      },
+      {
+        "term": "Valid time",
+        "detail": "when the fact was true in the world"
+      },
+      {
+        "term": "Recorded time",
+        "detail": "when the system learned it"
+      },
+      {
+        "term": "Invalidation",
+        "detail": "contradicted edges get an end date"
+      },
+      {
+        "term": "Hybrid search",
+        "detail": "graph traversal plus text and vector search"
+      }
+    ]
+  },
+  "steps": [
+    "Extract entities and relationships from each conversation or note",
+    "Attach valid-from and valid-to times, and when the fact was recorded",
+    "Close contradicted edges instead of deleting them",
+    "Answer by traversing the graph for the current time, with vector search for fuzzy matches"
+  ],
+  "pitfalls": [
+    "Deleting old facts and losing the audit trail",
+    "Keeping contradictory facts with no dates, so answers flip",
+    "Extraction errors creating wrong edges that nobody reviews"
+  ],
+  "tools": [
+    "Graphiti (Zep)",
+    "Mem0 graph memory",
+    "Neo4j",
+    "LangGraph memory store"
+  ],
+  "remember": "Link the facts, date the links, close old ones.",
+  "caption": "Illustrative: Kaveri Bank, a fictional bank, gives relationship managers memory across three years of customer notes.",
+  "comparison": {
+    "scope": "Long-term memory store",
+    "cost": 3,
+    "needs": "Changing relationships over time",
+    "best": "Extraction errors and cost"
+  },
+  "diagram": {
+    "file": "diagrams/graphmem.svg"
+  },
+  "lesson": {
+    "file": "temporal_memory.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from datetime import datetime, timezone",
+        "steps": []
+      },
+      {
+        "text": "from graphiti_core import Graphiti",
+        "steps": []
+      },
+      {
+        "text": "from graphiti_core.nodes import EpisodeType",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "graph = Graphiti(\"bolt://localhost:7687\", \"neo4j\", NEO4J_PASSWORD)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "await graph.build_indices_and_constraints()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "await graph.add_episode(",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    name=\"rm-note-2025-06-10\",",
+        "steps": []
+      },
+      {
+        "text": "    episode_body=\"Priya asked to change the nominee on account 4471 \"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                 \"from Rahul to her mother, Sunita. Effective today.\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    source=EpisodeType.text,",
+        "steps": []
+      },
+      {
+        "text": "    source_description=\"relationship manager note\",",
+        "steps": []
+      },
+      {
+        "text": "    reference_time=datetime(2025, 6, 10, tzinfo=timezone.utc),",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": ")",
+        "steps": []
+      },
+      {
+        "text": "# Graphiti extracts entities and edges, and invalidates the old",
+        "steps": []
+      },
+      {
+        "text": "# \"Rahul nominee_of 4471\" edge with an end date instead of deleting it",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "results = await graph.search(\"Who is the nominee on Priya's account 4471?\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "for edge in results:",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    print(edge.fact, edge.valid_at, edge.invalid_at)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# current answer: Sunita (valid from 2025-06-10, no end date)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "evaluate(graph, questions=multi_hop_questions)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Store episodes, extract a graph",
+        "text": "Each note or conversation is added as an episode. The library extracts entities (Priya, account 4471, Rahul, Sunita) and the relationships between them."
+      },
+      {
+        "title": "Record when each fact became true",
+        "text": "The reference time says when the note applies. Every edge gets a valid-from time, and the system also records when it learned the fact."
+      },
+      {
+        "title": "Close contradicted facts",
+        "text": "The new nominee contradicts “Rahul is nominee”, so that edge gets an end date. Nothing is deleted, so you can still say who was nominee in 2024."
+      },
+      {
+        "title": "Search the graph for the current state",
+        "text": "A question is answered by searching edges and text together, preferring facts that are valid now."
+      },
+      {
+        "title": "Show when the answer was true",
+        "text": "The answer carries its validity: Sunita, nominee since 10 June 2025. A relationship manager can see the history."
+      },
+      {
+        "title": "Test multi-hop questions",
+        "text": "Measure on questions that chain facts, such as “the nominee on the account opened after the address change”. Here accuracy rises from 45% to 85%."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"24\" text-anchor=\"middle\">note: nominee Rahul → Sunita on 4471</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"8\" y=\"38\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"48\" y=\"53\" text-anchor=\"middle\">Priya</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"94\" y=\"38\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"134\" y=\"53\" text-anchor=\"middle\">4471</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"180\" y=\"38\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"220\" y=\"53\" text-anchor=\"middle\">Rahul</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"266\" y=\"38\" width=\"86\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"309\" y=\"53\" text-anchor=\"middle\">Sunita</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"70\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"85\" text-anchor=\"middle\">valid from 2025-06-10 · recorded 2025-06-10</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"100\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"116\" text-anchor=\"middle\">Rahul nominee: ended 06-10</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"100\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"116\" text-anchor=\"middle\">Sunita nominee: current</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"132\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"148\" text-anchor=\"middle\">search: nominee on Priya’s 4471?</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"164\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"180\" text-anchor=\"middle\">Sunita · since 10 June 2025 (was Rahul)</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"196\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"212\" text-anchor=\"middle\">multi-hop 45% → 85% · stale 16 → 1 per 100</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Answers what is true now while keeping history",
+      "Follows chains of facts that vector search misses",
+      "Explains answers with dated relationships",
+      "Supports audit: what was known, and when"
+    ],
+    "cons": [
+      "Extraction costs several LLM calls per note",
+      "Wrong extractions create wrong edges",
+      "A graph database to run and back up",
+      "More complex than a vector store"
+    ],
+    "avoidWhen": [
+      "Memory is a few stable preferences (a simple key-value or vector store is enough)",
+      "Facts rarely change or relate to each other"
+    ],
+    "tools": [
+      {
+        "name": "Graphiti",
+        "type": "Open source (Zep)",
+        "what": "Temporal knowledge graph with invalidation and hybrid search",
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "name": "Zep",
+        "type": "Commercial, built on Graphiti",
+        "what": "Managed temporal memory for agents",
+        "url": "https://www.getzep.com"
+      },
+      {
+        "name": "Mem0",
+        "type": "Open source · hosted option",
+        "what": "Memory layer with optional graph memory",
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "name": "Neo4j",
+        "type": "Graph database",
+        "what": "Stores and traverses the entity graph",
+        "url": "https://neo4j.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kaveri Bank, a fictional bank, gives relationship managers memory over three years of notes: 5,000 facts about customers, accounts, nominees and addresses, 18% of which have since changed.",
+    "controls": [
+      "Choose the store: vector store, knowledge graph without time, or temporal knowledge graph.",
+      "Switch on closing superseded facts with an end date.",
+      "Drag the share of questions that chain facts."
+    ],
+    "outputs": [
+      {
+        "name": "Correct answers",
+        "meaning": "Overall, and for simple and multi-hop questions."
+      },
+      {
+        "name": "Stale facts returned",
+        "meaning": "Out-of-date facts in answers per 100 questions."
+      },
+      {
+        "name": "Extraction cost",
+        "meaning": "LLM cost to turn 1,000 facts into memory."
+      },
+      {
+        "name": "Query latency",
+        "meaning": "Time to answer from memory."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Vector store, nothing closed",
+        "expect": "68% correct (multi-hop 45%), 16 stale facts per 100, ₹75 per 1,000 facts."
+      },
+      {
+        "k": "inval",
+        "name": "Vector store, old facts closed",
+        "expect": "76.5% correct, 4 stale per 100; multi-hop still 45%."
+      },
+      {
+        "k": "graph",
+        "name": "Graph without time",
+        "expect": "86.4% correct (multi-hop 78%), 4 stale, ₹300."
+      },
+      {
+        "k": "temporal",
+        "name": "Temporal graph",
+        "expect": "92% correct (multi-hop 85%), 1 stale per 100, ₹375, 220 ms."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 90% correct with at most 2 stale facts per 100 questions.",
+        "hint": "Temporal graph with superseded facts closed."
+      },
+      {
+        "k": "multi",
+        "text": "Show what a vector store does when half the questions chain facts.",
+        "hint": "Vector store, 50% chained questions."
+      },
+      {
+        "k": "cheap",
+        "text": "Reach 85% correct for ₹300 or less per 1,000 facts.",
+        "hint": "A graph without time, with old facts closed."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Graphiti",
+        "type": "Open source · Zep",
+        "start": 2,
+        "prod": 3,
+        "best": "Temporal knowledge graphs for agent memory, with edge invalidation.",
+        "ex": "RM notes become episodes; nominee changes close old edges.",
+        "pros": [
+          "Valid and recorded times",
+          "Hybrid search"
+        ],
+        "cons": [
+          "Needs Neo4j or similar",
+          "LLM extraction cost"
+        ],
+        "url": "https://github.com/getzep/graphiti"
+      },
+      {
+        "n": "Zep",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Managed memory built on Graphiti.",
+        "ex": "A hosted memory for a customer-service agent.",
+        "pros": [
+          "No database to run",
+          "Built-in APIs"
+        ],
+        "cons": [
+          "Hosted data"
+        ],
+        "url": "https://www.getzep.com"
+      },
+      {
+        "n": "Mem0",
+        "type": "Open source · hosted",
+        "start": 3,
+        "prod": 2,
+        "best": "Simple memory API with optional graph memory.",
+        "ex": "Store preferences and relations for a support agent.",
+        "pros": [
+          "Quick to add",
+          "Graph option"
+        ],
+        "cons": [
+          "Less control over time handling"
+        ],
+        "url": "https://github.com/mem0ai/mem0"
+      },
+      {
+        "n": "Neo4j",
+        "type": "Graph database",
+        "start": 2,
+        "prod": 3,
+        "best": "Storing and traversing the entity graph.",
+        "ex": "Cypher queries for “accounts where Priya is nominee”.",
+        "pros": [
+          "Mature and fast",
+          "Rich queries"
+        ],
+        "cons": [
+          "A database to operate"
+        ],
+        "url": "https://neo4j.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Temporal memory, self-hosted",
+        "tool": "Graphiti on Neo4j"
+      },
+      {
+        "need": "Managed memory",
+        "tool": "Zep"
+      },
+      {
+        "need": "Simple preferences only",
+        "tool": "A vector or key-value store"
+      }
+    ],
+    "goals": [
+      "Explain entities, relationships and valid times",
+      "Close superseded facts instead of deleting them",
+      "Answer multi-hop questions from a graph"
+    ]
+  },
+  "practice": {
+    "scenario": "Kaveri Bank, a fictional bank, gives relationship managers an assistant that remembers three years of customer notes. Each note becomes an episode in a temporal knowledge graph: customers, accounts, nominees and addresses are linked, every link has a valid-from date, and a change such as a new nominee closes the old link with an end date. The assistant answers from what is true now and can show the history.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Nominees, joint holders and signatories that change over time"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Policyholders, dependants and addresses across renewals"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Care relationships and consents with start and end dates"
+      }
+    ],
+    "analogy": "A family tree with dates on every line, drawn in pencil: when something changes you add the end date, you do not rub the line out.",
+    "library": {
+      "name": "Graphiti",
+      "what": "Open-source temporal knowledge graph from Zep: episodes in, entities and dated edges out, with hybrid search.",
+      "install": "pip install graphiti-core"
+    },
+    "note": "Needs a running Neo4j and an LLM API key for extraction. Method names may change between versions.",
+    "samples": [
+      {
+        "file": "memory.py",
+        "language": "python",
+        "code": "import asyncio\nfrom datetime import datetime, timezone\nfrom graphiti_core import Graphiti\nfrom graphiti_core.nodes import EpisodeType\n\nasync def main():\n    graph = Graphiti(\"bolt://localhost:7687\", \"neo4j\", \"password\")\n    await graph.build_indices_and_constraints()\n    for when, text in [\n        (datetime(2024, 3, 1, tzinfo=timezone.utc), \"Priya made Rahul nominee on account 4471.\"),\n        (datetime(2025, 6, 10, tzinfo=timezone.utc), \"Priya changed the nominee on account 4471 to Sunita.\"),\n    ]:\n        await graph.add_episode(name=f\"note-{when.date()}\", episode_body=text,\n                                source=EpisodeType.text, source_description=\"RM note\",\n                                reference_time=when)\n    for edge in await graph.search(\"Who is the nominee on account 4471?\"):\n        print(edge.fact, edge.valid_at, edge.invalid_at)\n    await graph.close()\n\nasyncio.run(main())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "70% of questions are simple (95% correct) and 30% multi-hop (85% correct). What is overall accuracy, in percent?",
+    "answer": "0.7 × 95 + 0.3 × 85 = 66.5 + 25.5 = 92%.",
+    "expected": {
+      "value": 92,
+      "tolerance": 0.1,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "When would you use a temporal knowledge graph for agent memory?",
+        "answer": "When facts relate to each other and change over time, such as nominees, addresses and account holders, and when questions chain facts or ask what was true at a date. Close old edges with end dates rather than deleting."
+      },
+      {
+        "question": "What is the difference between valid time and recorded time?",
+        "answer": "Valid time is when a fact was true in the world; recorded time is when the system learned it. Keeping both lets you answer what was true then and what we knew then."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Deleting superseded facts",
+        "fix": "Close them with an end date"
+      },
+      {
+        "mistake": "Using vector memory for chained questions",
+        "fix": "Store relationships and traverse them"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "gm01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a temporal knowledge graph add to plain facts?",
+      "options": [
+        "Colours",
+        "Relationships between entities with the time each was true",
+        "Faster embeddings",
+        "Bigger context"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Links plus validity times."
+    },
+    {
+      "id": "gm02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A policyholder changes address. What should memory do?",
+      "options": [
+        "Delete the old address",
+        "Close the old address with an end date and add the new one",
+        "Keep both undated",
+        "Ignore the change"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Closing keeps history and a correct present."
+    },
+    {
+      "id": "gm03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which question needs multi-hop reasoning?",
+      "options": [
+        "What is Priya’s phone number?",
+        "Who is nominee on the account Priya opened after her address change?",
+        "What is 2 + 2?",
+        "What is today’s date?"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It chains an address change, an account and a nominee."
+    },
+    {
+      "id": "gm04",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which belong on a temporal edge? Select all that apply.",
+      "options": [
+        "Valid-from time",
+        "Valid-to time, if ended",
+        "When it was recorded",
+        "The model temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Time fields, not model settings."
+    },
+    {
+      "id": "gm05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Valid time versus recorded time: which is when the fact was true in the world?",
+      "options": [
+        "Recorded time",
+        "Valid time",
+        "Neither",
+        "Both"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Recorded time is when the system learned it."
+    },
+    {
+      "id": "gm06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why can vector memory return stale facts?",
+      "options": [
+        "It encrypts them",
+        "Old and new sentences are both similar to the question and carry no validity",
+        "It is too fast",
+        "It uses graphs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Similarity ignores time."
+    },
+    {
+      "id": "gm07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "70% simple at 95% and 30% multi-hop at 85%. Overall?",
+      "options": [
+        "90%",
+        "92%",
+        "88%",
+        "95%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "66.5 + 25.5 = 92%."
+    },
+    {
+      "id": "gm08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is a main cost of graph memory?",
+      "options": [
+        "No storage",
+        "LLM calls to extract entities and relationships",
+        "It cannot be queried",
+        "It needs no database"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Extraction takes model calls."
+    },
+    {
+      "id": "gm09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An auditor asks who was nominee on 1 January 2025. What makes this answerable?",
+      "options": [
+        "Deleting old edges",
+        "Keeping closed edges with their dates",
+        "A larger context window",
+        "Vector search"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "History must be kept."
+    },
+    {
+      "id": "gm10",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which are risks of automatic extraction? Select all that apply.",
+      "options": [
+        "Wrong entities merged together",
+        "Relationships invented from vague notes",
+        "Missed changes",
+        "Too few tokens"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Review samples of extracted edges."
+    },
+    {
+      "id": "gm11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Stale facts fall from 16 to 1 per 100 queries. Out of 5,000 queries, how many fewer stale facts?",
+      "options": [
+        "750",
+        "15",
+        "160",
+        "50"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "15 per 100 × 50 = 750."
+    },
+    {
+      "id": "gm12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which library builds temporal knowledge graphs for agent memory?",
+      "options": [
+        "Graphiti",
+        "Pandas",
+        "Pydantic",
+        "FAISS"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Graphiti, from Zep."
+    },
+    {
+      "id": "gm13",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A consent was withdrawn. What should the graph do?",
+      "options": [
+        "Delete the patient",
+        "End the consent edge at the withdrawal date",
+        "Keep it active",
+        "Create a second consent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The consent ended; record when."
+    },
+    {
+      "id": "gm14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When is a graph overkill?",
+      "options": [
+        "When memory is a few stable preferences",
+        "When nominees change",
+        "When questions chain facts",
+        "When audits happen"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Simple stores suffice for simple memory."
+    },
+    {
+      "id": "gm15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "How should a question “who is the account holder now?” be answered?",
+      "options": [
+        "From edges valid now",
+        "From all edges ever",
+        "From the oldest edge",
+        "Randomly"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Filter by validity."
+    },
+    {
+      "id": "gm16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which help answer questions from graph memory? Select all that apply.",
+      "options": [
+        "Traversing relationships",
+        "Text or vector search for fuzzy names",
+        "Filtering to currently valid edges",
+        "Deleting history"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Hybrid search plus validity filtering."
+    },
+    {
+      "id": "gm17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A customer asks to be forgotten under the DPDP Act. What happens in graph memory?",
+      "options": [
+        "End-date the edges only",
+        "Delete the person’s entities, edges and source episodes",
+        "Nothing",
+        "Rename the person"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Erasure differs from closing a changed fact."
+    },
+    {
+      "id": "gm18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Extraction costs 1,500 tokens per fact at ₹0.25 per 1,000. What do 1,000 facts cost?",
+      "options": [
+        "₹375",
+        "₹37.5",
+        "₹3,750",
+        "₹1,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "15 lakh tokens × ₹0.25 ÷ 1,000 = ₹375."
+    },
+    {
+      "id": "gm19",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Two notes disagree about a nominee on the same date. What should the system do?",
+      "options": [
+        "Pick one silently",
+        "Flag the conflict for review",
+        "Delete both",
+        "Keep both as current"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Conflicts need a person."
+    },
+    {
+      "id": "gm20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which store handles “what did we know on 1 March?” best?",
+      "options": [
+        "Vector store",
+        "Temporal graph with recorded times",
+        "Key-value cache",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Recorded time answers what was known when."
+    }
+  ]
+}

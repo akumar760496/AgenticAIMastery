@@ -1,0 +1,837 @@
+{
+  "id": "choosevs",
+  "moduleSlug": "vector-databases",
+  "name": "Choosing a Vector Store",
+  "shortName": "Choosing a store",
+  "question": "Which vector database should we actually run?",
+  "summary": "Choosing a vector store is a product decision, not an algorithm choice: the index types covered elsewhere in this module (IVF, HNSW, DiskANN) are available in most stores. The options fall into four families: a vector extension in a database you already run (Postgres with pgvector), a dedicated open-source engine (Qdrant, Milvus, Weaviate), a managed serverless service (Pinecone and others) and an existing search engine (OpenSearch, Elasticsearch). The deciding constraints are usually scale, filtering and hybrid needs, where the data must live, how much operations time the team has, and cost at your size. Shortlist on those, then benchmark two finalists on your own data and queries.",
+  "useCases": [
+    "Starting a first RAG or search product",
+    "Outgrowing an early prototype store",
+    "A data residency or audit requirement that rules options in or out"
+  ],
+  "keyFacts": {
+    "label": "What to compare",
+    "items": [
+      {
+        "term": "Scale",
+        "detail": "vectors now and in 2 years; pgvector is comfortable to about 1 crore on one node, engines scale out"
+      },
+      {
+        "term": "Filtering and hybrid",
+        "detail": "metadata filters that keep recall, and BM25 plus vectors in one query"
+      },
+      {
+        "term": "Residency and control",
+        "detail": "data in your own cloud account or an Indian region; audit and deletion"
+      },
+      {
+        "term": "Operations",
+        "detail": "who patches, backs up, reindexes and gets paged"
+      },
+      {
+        "term": "Cost at your size",
+        "detail": "RAM, disk, requests and staff time per month"
+      },
+      {
+        "term": "Benchmark",
+        "detail": "recall at 10 and p95 latency on your own queries with your filters"
+      }
+    ]
+  },
+  "steps": [
+    "Write down scale, filters, residency, latency target and ops budget",
+    "Shortlist two families that meet every hard constraint",
+    "Benchmark both on a sample of real documents and queries, with filters",
+    "Choose, and keep an export path: vectors and metadata in an open format"
+  ],
+  "pitfalls": [
+    "Choosing from a public benchmark that used different data, filters and hardware",
+    "Adding a new database when Postgres with pgvector would have served for years",
+    "Ignoring where the data must live until a compliance review blocks launch"
+  ],
+  "tools": [
+    "pgvector",
+    "Qdrant",
+    "Milvus / Zilliz",
+    "Pinecone",
+    "Weaviate",
+    "OpenSearch"
+  ],
+  "remember": "Constraints first, two finalists, benchmark on your own queries.",
+  "caption": "Illustrative: Suvidha Finance, a fictional NBFC, needs search over 1 crore chunks that must stay in its own cloud account.",
+  "comparison": {
+    "scope": "Platform decision",
+    "cost": 2,
+    "needs": "Picking or replacing a store",
+    "best": "Deciding from public benchmarks"
+  },
+  "diagram": {
+    "file": "diagrams/choosevs.svg"
+  },
+  "lesson": {
+    "file": "shortlist_and_bench.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "NEEDS = dict(vectors=1_00_00_000, growth_2y=3, p95_ms=50,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "             filters=[\"branch\", \"product\", \"tenant\"], hybrid=True,",
+        "steps": []
+      },
+      {
+        "text": "             own_cloud_account=True, ops_hours_per_month=20)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CANDIDATES = [\"pgvector\", \"qdrant\", \"managed_serverless\", \"opensearch\"]",
+        "steps": []
+      },
+      {
+        "text": "shortlist = [c for c in CANDIDATES if meets_hard_constraints(c, NEEDS)]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "# managed_serverless drops out: vectors must stay in our own account",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "queries = load_real_queries(\"logs/search_sample.jsonl\", n=1000)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "for store in shortlist[:2]:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    db = connect(store)                  # thin adapter you write per store",
+        "steps": []
+      },
+      {
+        "text": "    db.load(\"sample_20lakh.parquet\")     # real chunks, real metadata",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    r = bench(db, queries, k=10, with_filters=True)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    print(store, r.recall_at_10, r.p95_ms, r.monthly_cost_inr, r.ops_hours)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# pgvector p95 60 ms at 1 crore; qdrant 20 ms, ₹40,000 a month, 16 ops hours",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "decision = \"qdrant\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "export_plan = \"parquet: id, vector, metadata, acl; nightly\"",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Write the constraints down",
+        "text": "Suvidha Finance, a fictional NBFC, has 1 crore chunks, expects 3× growth in two years, wants p95 under 50 ms, needs filters and hybrid search, and must keep vectors in its own cloud account. The team can spare about 20 operations hours a month."
+      },
+      {
+        "title": "Shortlist on hard constraints",
+        "text": "A managed serverless store in the vendor’s account fails the residency rule, so it is out before any benchmark. pgvector, a self-hosted engine and the existing OpenSearch cluster remain."
+      },
+      {
+        "title": "Benchmark on your own data",
+        "text": "Load a real sample with its metadata and replay 1,000 logged queries with their filters. Public benchmarks use other data and hardware."
+      },
+      {
+        "title": "Measure what you will pay for",
+        "text": "Record recall at 10, p95 latency, monthly cost and operations hours for each finalist."
+      },
+      {
+        "title": "Decide",
+        "text": "At 1 crore, pgvector’s p95 is 60 ms; a self-hosted Qdrant cluster gives 20 ms for ₹40,000 a month and about 16 operations hours. It meets every constraint."
+      },
+      {
+        "title": "Keep an exit",
+        "text": "Export ids, vectors, metadata and ACLs nightly in an open format, so a later move is a reload, not a rewrite."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"24\" text-anchor=\"middle\">1 crore · 3×</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"24\" text-anchor=\"middle\">p95 ≤ 50 ms</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"24\" text-anchor=\"middle\">own account</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">managed: out</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">3 families left</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"72\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"88\" text-anchor=\"middle\">1,000 real queries · with filters</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"104\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"119\" text-anchor=\"middle\">recall · p95 · ₹/month · ops hours</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"134\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"150\" text-anchor=\"middle\">pgvector 60 ms</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"134\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"150\" text-anchor=\"middle\">Qdrant 20 ms</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"166\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"182\" text-anchor=\"middle\">nightly export in an open format</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Hard constraints remove most options before any benchmark",
+      "Your own queries reveal filter and hybrid behaviour public tests miss",
+      "Staying in Postgres avoids a new system when it is enough",
+      "An export path keeps the choice reversible"
+    ],
+    "cons": [
+      "A fair benchmark takes days of setup",
+      "Costs change with vendor pricing and your growth",
+      "Self-hosting shifts on-call and upgrades to your team",
+      "Managed services may not meet residency rules"
+    ],
+    "avoidWhen": [
+      "Picking from marketing benchmarks alone",
+      "Running two new databases because each team chose its own"
+    ],
+    "tools": [
+      {
+        "name": "pgvector",
+        "type": "Open source",
+        "what": "Vector search inside Postgres, with HNSW and IVFFlat",
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "name": "Qdrant",
+        "type": "Open source · cloud",
+        "what": "Dedicated engine with filters, quantisation and multi-tenancy",
+        "url": "https://qdrant.tech"
+      },
+      {
+        "name": "Milvus",
+        "type": "Open source · Zilliz cloud",
+        "what": "Distributed engine for very large collections",
+        "url": "https://milvus.io"
+      },
+      {
+        "name": "Pinecone",
+        "type": "Managed",
+        "what": "Serverless vector database, no servers to run",
+        "url": "https://www.pinecone.io"
+      },
+      {
+        "name": "OpenSearch",
+        "type": "Open source · managed",
+        "what": "k-NN plus BM25 in an existing search cluster",
+        "url": "https://opensearch.org"
+      },
+      {
+        "name": "VectorDBBench",
+        "type": "Open source",
+        "what": "Benchmark harness for vector databases",
+        "url": "https://github.com/zilliztech/VectorDBBench"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Suvidha Finance, a fictional NBFC, must choose a vector store for loan documents, policies and support notes, searched with branch and product filters. Costs and latencies are illustrative for one workload.",
+    "controls": [
+      "Choose the store family: pgvector, a self-hosted engine, a managed serverless store or the existing OpenSearch cluster.",
+      "Set the number of vectors: 10 lakh, 1 crore or 20 crore.",
+      "Require that vectors stay in the company’s own cloud account."
+    ],
+    "outputs": [
+      {
+        "name": "p95 latency",
+        "meaning": "Slowest 5% of searches, with filters."
+      },
+      {
+        "name": "Monthly cost",
+        "meaning": "Infrastructure or service fees at that scale."
+      },
+      {
+        "name": "Operations",
+        "meaning": "Team hours a month for upgrades, backups and incidents."
+      },
+      {
+        "name": "Residency rule",
+        "meaning": "Whether the data stays in the company’s own account."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "pgvector at 1 crore",
+        "expect": "p95 60 ms, ₹45,000 a month, 10 hours."
+      },
+      {
+        "k": "small",
+        "name": "pgvector at 10 lakh",
+        "expect": "p95 15 ms, ₹8,000, 4 hours."
+      },
+      {
+        "k": "engine",
+        "name": "Self-hosted engine at 1 crore",
+        "expect": "p95 20 ms, ₹40,000, 16 hours."
+      },
+      {
+        "k": "big",
+        "name": "Managed at 20 crore, no residency rule",
+        "expect": "p95 60 ms, ₹3,50,000, 3 hours."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "At 1 crore vectors with the residency rule on, meet p95 50 ms or less, ₹50,000 or less and 20 hours or less.",
+        "hint": "A dedicated engine you host yourself."
+      },
+      {
+        "k": "small",
+        "text": "At 10 lakh vectors with the residency rule on, spend ₹10,000 or less and 5 hours or less.",
+        "hint": "Use the database you already run."
+      },
+      {
+        "k": "big",
+        "text": "At 20 crore vectors, keep p95 at 60 ms or less with 5 operations hours or less.",
+        "hint": "Only possible if residency allows a managed store."
+      }
+    ],
+    "tools": [
+      {
+        "n": "pgvector",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Vectors next to your relational data.",
+        "ex": "HNSW index on 10 lakh chunks with SQL filters.",
+        "pros": [
+          "No new system",
+          "Transactions and joins"
+        ],
+        "cons": [
+          "Single node limits at large scale"
+        ],
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "n": "Qdrant",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Filtered vector search that scales out.",
+        "ex": "Self-hosted cluster in your own VPC.",
+        "pros": [
+          "Strong filtering",
+          "Quantisation built in"
+        ],
+        "cons": [
+          "Another system to run"
+        ],
+        "url": "https://qdrant.tech"
+      },
+      {
+        "n": "Milvus",
+        "type": "Open source · Zilliz cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Very large distributed collections.",
+        "ex": "Crores of image embeddings across nodes.",
+        "pros": [
+          "Scales far",
+          "Many index types"
+        ],
+        "cons": [
+          "More moving parts"
+        ],
+        "url": "https://milvus.io"
+      },
+      {
+        "n": "Pinecone",
+        "type": "Managed",
+        "start": 3,
+        "prod": 3,
+        "best": "No servers to run.",
+        "ex": "Serverless index for a fast-growing product.",
+        "pros": [
+          "Minimal operations",
+          "Scales automatically"
+        ],
+        "cons": [
+          "Runs in the vendor’s account"
+        ],
+        "url": "https://www.pinecone.io"
+      },
+      {
+        "n": "OpenSearch",
+        "type": "Open source · managed",
+        "start": 2,
+        "prod": 3,
+        "best": "Adding vectors to an existing search cluster.",
+        "ex": "k-NN plus BM25 in one query.",
+        "pros": [
+          "Hybrid in one place",
+          "Team already knows it"
+        ],
+        "cons": [
+          "JVM tuning and heap sizing"
+        ],
+        "url": "https://opensearch.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Under about 1 crore, Postgres already running",
+        "tool": "pgvector"
+      },
+      {
+        "need": "Filters, scale and own cloud",
+        "tool": "Qdrant or Milvus self-hosted"
+      },
+      {
+        "need": "No ops team, residency allows",
+        "tool": "A managed serverless store"
+      }
+    ],
+    "goals": [
+      "List the hard constraints that decide a vector store",
+      "Benchmark two finalists on your own queries",
+      "Keep the choice reversible with an export path"
+    ]
+  },
+  "practice": {
+    "scenario": "Suvidha Finance, a fictional NBFC, needs search over 1 crore chunks of loan documents and support notes, with branch and product filters, and its vectors must stay in its own cloud account. The residency rule removes a managed store in the vendor’s account. It benchmarks pgvector and a self-hosted Qdrant cluster on 1,000 logged queries: pgvector’s p95 is 60 ms, Qdrant’s 20 ms at ₹40,000 a month, so it picks Qdrant and exports vectors and metadata nightly.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Loan files and policies that must stay in the lender’s own cloud"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Catalogue search that grows from lakhs to crores of vectors"
+      },
+      {
+        "industry": "SaaS",
+        "use": "A small first product where Postgres with pgvector is enough"
+      }
+    ],
+    "analogy": "Choosing a warehouse: first rule out the ones in the wrong city or too small, then walk through the two that remain with your own stock.",
+    "library": {
+      "name": "pgvector",
+      "what": "Vector columns and HNSW indexes inside Postgres, often the right first store.",
+      "install": "pip install psycopg[binary] pgvector"
+    },
+    "note": "This script benchmarks one finalist (pgvector). Write the same small adapter for the second finalist and run the same queries. Table and column names are examples.",
+    "samples": [
+      {
+        "file": "bench_pgvector.py",
+        "language": "python",
+        "code": "import json, time, statistics, numpy as np, psycopg\nfrom pgvector.psycopg import register_vector\n\nconn = psycopg.connect(\"dbname=search\", autocommit=True)\nregister_vector(conn)\nqueries = [json.loads(l) for l in open(\"queries_with_truth.jsonl\")]   # vec, branch, truth_ids\n\nlat, hits = [], 0\nfor q in queries:\n    t = time.perf_counter()\n    rows = conn.execute(\n        \"SELECT id FROM chunks WHERE branch = %s ORDER BY embedding <=> %s LIMIT 10\",\n        (q[\"branch\"], np.array(q[\"vec\"]))).fetchall()\n    lat.append((time.perf_counter() - t) * 1000)\n    hits += len({r[0] for r in rows} & set(q[\"truth_ids\"]))\n\nprint(\"recall@10\", round(hits / (10 * len(queries)), 3))\nprint(\"p95 ms\", round(statistics.quantiles(lat, n=20)[18], 1))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A self-hosted engine costs ₹40,000 a month plus 16 operations hours at ₹1,500 an hour. A managed store costs ₹55,000 plus 2 hours. How many ₹ a month cheaper is the cheaper option?",
+    "answer": "Self-hosted: 40,000 + 16 × 1,500 = ₹64,000. Managed: 55,000 + 2 × 1,500 = ₹58,000. Managed is ₹6,000 a month cheaper.",
+    "expected": {
+      "value": 6000,
+      "tolerance": 100,
+      "label": "₹ ="
+    },
+    "interview": [
+      {
+        "question": "How would you choose a vector database?",
+        "answer": "Write down hard constraints (scale, filters and hybrid, data residency, operations budget, cost), shortlist two options that meet them, benchmark both on your own data and logged queries with filters, and keep an export path."
+      },
+      {
+        "question": "When is pgvector enough?",
+        "answer": "When you already run Postgres and the corpus is up to roughly a crore of vectors with moderate query load; you keep joins, transactions and one system to operate."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Trusting a public benchmark",
+        "fix": "Benchmark on your own data, filters and hardware"
+      },
+      {
+        "mistake": "Counting only the infrastructure bill",
+        "fix": "Add operations hours at a real hourly cost"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cs01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What should come first when choosing a vector store?",
+      "options": [
+        "A public benchmark table",
+        "Hard constraints such as scale, residency and ops time",
+        "The newest product",
+        "The cheapest free tier"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Constraints remove options before any test."
+    },
+    {
+      "id": "cs02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You already run Postgres and have 5 lakh vectors. A sensible first store?",
+      "options": [
+        "pgvector",
+        "A new distributed cluster",
+        "A custom index in C",
+        "No store"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No new system to run."
+    },
+    {
+      "id": "cs03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Vectors must stay in the bank’s own cloud account. Which option is ruled out?",
+      "options": [
+        "Self-hosted engine in its VPC",
+        "pgvector in its Postgres",
+        "A managed service running in the vendor’s account",
+        "Its OpenSearch cluster"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The data would leave its account."
+    },
+    {
+      "id": "cs04",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What should a fair benchmark include? Select all that apply.",
+      "options": [
+        "Your own documents",
+        "Logged real queries",
+        "The filters used in production",
+        "Only the vendor’s demo data"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Demo data hides your workload."
+    },
+    {
+      "id": "cs05",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Self-hosted ₹40,000 + 16 h, staff ₹1,500 an hour. Total monthly cost?",
+      "options": [
+        "₹40,000",
+        "₹56,000",
+        "₹64,000",
+        "₹24,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "40,000 + 24,000."
+    },
+    {
+      "id": "cs06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Managed ₹55,000 + 2 h at ₹1,500 an hour. Total?",
+      "options": [
+        "₹55,000",
+        "₹58,000",
+        "₹57,000",
+        "₹85,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "55,000 + 3,000."
+    },
+    {
+      "id": "cs07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why keep a nightly export of vectors and metadata?",
+      "options": [
+        "To make a later migration a reload",
+        "To improve recall",
+        "To reduce latency",
+        "It is required by HNSW"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It keeps the decision reversible."
+    },
+    {
+      "id": "cs08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why can a public benchmark give the wrong answer for you?",
+      "options": [
+        "Different data, filters and hardware",
+        "Benchmarks are always false",
+        "It uses too many queries",
+        "It measures recall"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Your workload differs."
+    },
+    {
+      "id": "cs09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which family adds vectors to an existing keyword search cluster?",
+      "options": [
+        "pgvector",
+        "OpenSearch or Elasticsearch",
+        "A managed serverless store",
+        "A graph database"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "k-NN alongside BM25."
+    },
+    {
+      "id": "cs10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A team has no operations staff and no residency rule. Which family fits best?",
+      "options": [
+        "Self-hosted distributed engine",
+        "Managed serverless store",
+        "Custom C++ index",
+        "Spreadsheet"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Minimal operations."
+    },
+    {
+      "id": "cs11",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are operations costs of self-hosting? Select all that apply.",
+      "options": [
+        "Upgrades and patching",
+        "Backups and restores",
+        "On-call for incidents",
+        "The embedding model’s accuracy"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Model accuracy is separate."
+    },
+    {
+      "id": "cs12",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "p95 is 60 ms and the target is 50 ms. By how many ms does it miss?",
+      "options": [
+        "5",
+        "10",
+        "50",
+        "110"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "60 − 50."
+    },
+    {
+      "id": "cs13",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Growth of 3× from 1 crore vectors means planning for?",
+      "options": [
+        "1 crore",
+        "3 crore",
+        "30 lakh",
+        "13 crore"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1 crore × 3."
+    },
+    {
+      "id": "cs14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which is NOT part of this technique?",
+      "options": [
+        "Picking a store family",
+        "Choosing HNSW parameters",
+        "Benchmarking finalists",
+        "Residency checks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Index tuning is covered by the HNSW technique."
+    },
+    {
+      "id": "cs15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How many finalists should you usually benchmark?",
+      "options": [
+        "One",
+        "Two",
+        "Ten",
+        "All available"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Two keeps the work bounded."
+    },
+    {
+      "id": "cs16",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which measurements belong in the benchmark report? Select all that apply.",
+      "options": [
+        "Recall at 10",
+        "p95 latency",
+        "Monthly cost",
+        "Logo colours"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus operations hours."
+    },
+    {
+      "id": "cs17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Two teams each pick a different new vector database. Main risk?",
+      "options": [
+        "Two systems to run and secure",
+        "Better recall",
+        "Lower cost",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Duplicated operations work."
+    },
+    {
+      "id": "cs18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Filtered search behaves very differently across stores. So the benchmark must?",
+      "options": [
+        "Include production filters",
+        "Skip filters to be fair",
+        "Use random vectors",
+        "Use one query"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Filters change recall and latency."
+    },
+    {
+      "id": "cs19",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A store costs ₹45,000 a month at 1 crore. Roughly per lakh vectors?",
+      "options": [
+        "₹450",
+        "₹4,500",
+        "₹45",
+        "₹45,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1 crore = 100 lakh; 45,000 ÷ 100."
+    },
+    {
+      "id": "cs20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Where is the residency rule checked?",
+      "options": [
+        "Before the benchmark, as a hard constraint",
+        "After launch",
+        "Only by the vendor",
+        "Never"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It can rule options out at once."
+    }
+  ]
+}

@@ -1,0 +1,898 @@
+{
+  "id": "incident",
+  "moduleSlug": "operations",
+  "name": "Incident Response and Trace Replay",
+  "shortName": "Incident response",
+  "question": "The agent is misbehaving in production. What now?",
+  "summary": "When a live agent starts doing harm, you run a practised sequence: detect it from alerts rather than complaints, declare a severity and an owner, contain it with a kill switch or a rollback to the last good release, replay the exact failing trace offline to find the root cause, then turn the failure into an eval case and write a blameless post-mortem. Tracing, versioning, canaries and online evals supply the signals and the levers; this is the playbook that uses them under pressure.",
+  "useCases": [
+    "An agent that moves money, changes records or messages customers",
+    "Any prompt or model change that reaches production, even after a canary",
+    "Regulated businesses that must explain, and sometimes report, what went wrong"
+  ],
+  "keyFacts": {
+    "label": "Playbook",
+    "items": [
+      {
+        "term": "Detect",
+        "detail": "alerts on eval scores, tool error spikes and business metrics such as refund rate; user reports are the backstop"
+      },
+      {
+        "term": "Severity",
+        "detail": "SEV1: money or data at risk now; SEV2: degraded; SEV3: minor. Severity sets who is paged and how fast"
+      },
+      {
+        "term": "Contain",
+        "detail": "a kill switch on one tool or the whole agent, then a rollback of prompt and model together to the last good release"
+      },
+      {
+        "term": "Replay",
+        "detail": "the same input, prompt version, model snapshot, parameters and recorded tool responses, run offline with no live calls"
+      },
+      {
+        "term": "Learn",
+        "detail": "the failing trace becomes an eval case that gates every future release; a blameless post-mortem assigns actions, not blame"
+      },
+      {
+        "term": "Communicate",
+        "detail": "updates on a fixed rhythm; in India, check early whether a regulator must be told, such as CERT-In’s 6-hour rule for specified cyber incidents"
+      }
+    ]
+  },
+  "steps": [
+    "Alert on business and quality signals, with a severity scale and an on-call owner",
+    "Contain before you diagnose: flag off the tool, roll back to the last good release",
+    "Replay the failing trace with its recorded tool responses to find the root cause",
+    "Add the case to the eval set, fix through the normal gate, and write a blameless post-mortem"
+  ],
+  "pitfalls": [
+    "Hot-fixing the prompt live, without evals, while money is still leaving",
+    "Traces without tool responses: a live re-run sees different data and the bug will not reproduce",
+    "A post-mortem that blames a person and adds no test, so the same failure ships again"
+  ],
+  "tools": [
+    "PagerDuty",
+    "incident.io",
+    "LaunchDarkly or OpenFeature flags",
+    "Langfuse or LangSmith traces",
+    "Grafana alerting"
+  ],
+  "remember": "Alert on money, contain before you debug, replay the exact trace, keep the failure as a test.",
+  "caption": "Illustrative: Chukta Pay, a fictional Indian payments company, loses about ₹1,000 a minute to duplicate refunds after prompt v8 ships.",
+  "comparison": {
+    "scope": "Harm that continues while you work out why",
+    "cost": 2,
+    "needs": "Alerts, flags, full traces and a runbook",
+    "best": "Live hotfixes, and blame instead of tests"
+  },
+  "diagram": {
+    "file": "diagrams/incident.svg"
+  },
+  "lesson": {
+    "file": "refund_incident.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from ops import open_incident, oncall, set_flag     # your paging and flag services (stubs)",
+        "steps": []
+      },
+      {
+        "text": "from tracing import load_trace, load_release           # your trace store (stubs)",
+        "steps": []
+      },
+      {
+        "text": "from refund_agent import run_agent, RecordedTools",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "BASELINE = 0.021        # refunds per order, 28-day median",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def check_window(orders: int, refunds: int):",
+        "steps": []
+      },
+      {
+        "text": "    rate = refunds / max(orders, 1)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if orders >= 500 and rate > 1.5 * BASELINE:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        open_incident(sev=\"SEV1\", title=f\"refund rate {rate:.1%}\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                      owner=oncall(\"payments-agents\"))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def contain():",
+        "steps": []
+      },
+      {
+        "text": "    set_flag(\"refund_agent.issue_refund\", False)   # kill switch: refunds queue for people",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    set_flag(\"refund_agent.release\", \"rel-v7\")     # prompt v7 and the snapshot it shipped with",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def replay(trace_id: str):",
+        "steps": []
+      },
+      {
+        "text": "    tr = load_trace(trace_id)",
+        "steps": []
+      },
+      {
+        "text": "    release = load_release(tr.release_id)          # prompt v8, snapshot, temperature 0",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    tools = RecordedTools(tr.tool_calls)           # recorded responses, no live calls",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    out = run_agent(tr.input, release=release, tools=tools)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return [c for c in out.tool_calls if c.name == \"issue_refund\"]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "refunds = [len(replay(\"tr-4f91\")) for _ in range(10)]",
+        "steps": []
+      },
+      {
+        "text": "assert refunds == [2] * 10     # reproduced: PENDING read as \"not refunded\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "EVAL_SET.append({\"trace\": \"tr-4f91\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                 \"expect\": {\"issue_refund_calls\": 1}})    # v8 fails, v7 passes",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "gate_release(\"rel-v9\", eval_set=EVAL_SET)                  # the fix ships through the gate",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Alert on a business metric",
+        "text": "The refund rate per 10-minute window is watched against its 28-day median of 2.1%. The alert fires above 1.5 × 2.1% = 3.15%, and only when at least 500 orders are in the window. At 10:10 the window holds 40 refunds on 900 orders, 4.4%, so the page goes out at 10:12, 12 minutes after prompt v8 went live. Waiting for complaints would have taken about four hours."
+      },
+      {
+        "title": "Declare a severity and an owner",
+        "text": "Money is leaving at about ₹1,000 a minute, so this is SEV1: page now, one incident commander, one channel, one timeline. The commander decides; others investigate. A severity scale agreed in advance removes the argument about how serious it is."
+      },
+      {
+        "title": "Contain before you diagnose",
+        "text": "At 10:17 a flag turns off the issue_refund tool, so new refunds queue for people instead of being paid. Then the release flag moves back to rel-v7: prompt v7 with the model snapshot it was tested with. Nobody edits the prompt live; a guess made under pressure, without evals, can make things worse."
+      },
+      {
+        "title": "Replay the exact trace",
+        "text": "Trace tr-4f91 holds the customer’s input, the release id and every tool call with its response. The replay loads prompt v8, the same pinned snapshot and parameters, and serves the recorded responses instead of calling live APIs, so no real refund can go out. A live re-run now would see refund_status return SUCCESS and never show the bug."
+      },
+      {
+        "title": "Find the root cause",
+        "text": "The replay calls issue_refund twice in all 10 runs. Prompt v8 added “if the refund is not confirmed, issue it again”; the gateway reports PENDING for up to 90 seconds, which the agent read as not refunded. A contributing cause: issue_refund had no idempotency key per order, so the second call was paid too."
+      },
+      {
+        "title": "Keep the failure as a test",
+        "text": "The trace becomes an eval case that expects exactly one issue_refund call. v8 fails it and v7 passes it, and the fix, rel-v9, ships only through the gate. The blameless post-mortem records the timeline, ₹17,000 lost, the causes and owned actions, such as adding the idempotency key."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Refund rate, 10-minute window</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"8\" y=\"20\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"88\" y=\"35\" text-anchor=\"middle\">10:10 · 40 / 900 = 4.4%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"174\" y=\"20\" width=\"178\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"263\" y=\"35\" text-anchor=\"middle\">alert above 3.15%</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"52\" width=\"100\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"58\" y=\"68\" text-anchor=\"middle\">SEV1 · paged</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"114\" y=\"52\" width=\"238\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"233\" y=\"68\" text-anchor=\"middle\">about ₹1,000 a minute leaving</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"86\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"102\" text-anchor=\"middle\">issue_refund: OFF</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M180 98L190 98\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"192\" y=\"86\" width=\"160\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"272\" y=\"102\" text-anchor=\"middle\">release → rel-v7</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"120\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"136\" text-anchor=\"middle\">replay tr-4f91 · prompt v8 · recorded tools</text></g><text class=\"sb a\" x=\"8\" y=\"160\" style=\"text-anchor:start;--d:0.2s\">no live API is called, so no real refund</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"170\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"186\" text-anchor=\"middle\">refund_status → PENDING → issue_refund ×2</text></g><text class=\"sb a\" x=\"8\" y=\"210\" style=\"text-anchor:start;--d:0.2s\">10 of 10 replays reproduce it</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"220\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"236\" text-anchor=\"middle\">eval: expect 1 issue_refund · v8 fails, v7 passes</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Harm stops in minutes, before anyone knows the cause",
+      "A deterministic replay turns a one-off failure into a bug you can study safely",
+      "Every incident leaves a test behind, so the same failure cannot ship twice",
+      "A blameless write-up gets honest timelines and real fixes"
+    ],
+    "cons": [
+      "Kill switches and release flags must be built and tested before the day you need them",
+      "Full traces with tool responses cost storage and hold personal data that needs redaction",
+      "Replays are only as deterministic as the model: sampling can still vary between runs",
+      "On-call rotas, runbooks and drills take people’s time"
+    ],
+    "avoidWhen": [
+      "A prototype with no real users or money at stake, where a log and a restart are enough",
+      "Treating every wobble in a score as an incident: noisy alerts train people to ignore pages"
+    ],
+    "tools": [
+      {
+        "name": "PagerDuty",
+        "type": "Commercial",
+        "what": "Alert routing, on-call rotas and escalation policies",
+        "url": "https://www.pagerduty.com/"
+      },
+      {
+        "name": "incident.io",
+        "type": "Commercial",
+        "what": "Incident channels, roles, timelines and post-mortems from Slack or Teams",
+        "url": "https://incident.io/"
+      },
+      {
+        "name": "LaunchDarkly",
+        "type": "Commercial",
+        "what": "Feature flags used as kill switches and release switches, changed in seconds",
+        "url": "https://launchdarkly.com/docs/"
+      },
+      {
+        "name": "OpenFeature",
+        "type": "Open standard (CNCF)",
+        "what": "Vendor-neutral flag API in your code, with a provider behind it",
+        "url": "https://openfeature.dev/docs"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source, cloud",
+        "what": "Traces with inputs, tool calls and outputs, and datasets built from failing traces",
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "name": "Google SRE book",
+        "type": "Free guide",
+        "what": "Incident management roles and blameless post-mortem culture",
+        "url": "https://sre.google/sre-book/managing-incidents/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Chukta Pay, a fictional Indian payments company, ships refund-agent prompt v8 at 10:00. From then on the agent pays about 40 duplicate refunds an hour, averaging ₹1,500 each: ₹1,000 a minute. You choose how the problem is detected, how you respond, what your traces captured and whether the failure becomes an eval case. The day is counted as 24 hours from the deploy.",
+    "controls": [
+      "Choose detection: wait for merchant complaints (about 4 hours) or alert on a refund-rate anomaly (12 minutes).",
+      "Choose the response: hot-fix the prompt live (40 minutes, stops 75% of duplicates) or flip the kill switch and roll back to v7 (5 minutes).",
+      "Choose trace capture, logs only or full traces with tool responses, and tick whether the failing case joins the eval set. Or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Time to detect",
+        "meaning": "Minutes from the v8 deploy until the on-call engineer knows."
+      },
+      {
+        "name": "Time to contain",
+        "meaning": "Minutes from detection until duplicate refunds fully stop, or not within the day."
+      },
+      {
+        "name": "Rupees lost",
+        "meaning": "Duplicate refunds paid: ₹1,000 a minute until containment, ₹250 a minute while a partial hotfix is live."
+      },
+      {
+        "name": "Root cause found",
+        "meaning": "Whether a deterministic replay with recorded tool responses reproduces the double refund."
+      },
+      {
+        "name": "Recurrence risk",
+        "meaning": "Illustrative chance the same failure ships again within 6 months: 5% with the cause found and an eval case, 35% with the cause but no case, 50% with a case but no cause, 60% with neither."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Complaints, live hotfix, logs only",
+        "expect": "Detected after 4 h, never fully contained that day: ₹5,70,000 lost, root cause not found, recurrence risk 60%."
+      },
+      {
+        "k": "alert",
+        "name": "Alert, but still a live hotfix",
+        "expect": "Detected in 12 min, but 25% keeps leaking all day: ₹3,99,000 lost, root cause not found, risk 60%."
+      },
+      {
+        "k": "kill",
+        "name": "Alert and kill switch, logs only",
+        "expect": "Detected in 12 min, contained 5 min later: ₹17,000 lost, but root cause not found and risk stays 60%."
+      },
+      {
+        "k": "full",
+        "name": "Alert, kill switch, full traces, eval case",
+        "expect": "12 min to detect, 5 min to contain, ₹17,000 lost, root cause found by replay, recurrence risk 5%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "contain",
+        "text": "Keep the total loss at ₹30,000 or less.",
+        "hint": "Alert on the refund-rate anomaly and use the kill switch instead of a live hotfix."
+      },
+      {
+        "k": "replay",
+        "text": "Find the root cause and bring the recurrence risk down to 5%.",
+        "hint": "Capture full traces with tool responses, and add the failing case to the eval set."
+      },
+      {
+        "k": "slow",
+        "text": "Show that a kill switch limits the damage even when detection is slow: complaints only, loss under ₹3,00,000.",
+        "hint": "Keep merchant complaints as detection, but switch the response to the kill switch and rollback."
+      }
+    ],
+    "tools": [
+      {
+        "n": "PagerDuty",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Alert routing, on-call rotas, escalation policies and severity-based paging.",
+        "ex": "Page the payments-agents rota when the refund-rate alert fires, and escalate after 5 minutes without acknowledgement.",
+        "pros": [
+          "Mature escalation and scheduling",
+          "Integrates with most monitoring tools"
+        ],
+        "cons": [
+          "Commercial, priced per user",
+          "Paging is only as good as your alert rules"
+        ],
+        "url": "https://www.pagerduty.com/"
+      },
+      {
+        "n": "incident.io",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Incident channels, roles, status updates, timelines and post-mortems run from Slack or Teams.",
+        "ex": "Declare a SEV1, assign an incident commander, and export the timeline into the post-mortem.",
+        "pros": [
+          "Timeline captured as you work",
+          "Post-mortem template and follow-up actions"
+        ],
+        "cons": [
+          "Commercial service",
+          "Best when the team already lives in Slack or Teams"
+        ],
+        "url": "https://incident.io/"
+      },
+      {
+        "n": "LaunchDarkly",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Feature flags used as kill switches and release switches, changed in seconds without a deploy.",
+        "ex": "A refund-tool-enabled flag checked on every call, and a release flag that moves back to rel-v7.",
+        "pros": [
+          "Changes apply in seconds",
+          "Audit log of who flipped what"
+        ],
+        "cons": [
+          "Commercial, priced by usage",
+          "Flags need clean-up or they pile up"
+        ],
+        "url": "https://launchdarkly.com/docs/"
+      },
+      {
+        "n": "OpenFeature",
+        "type": "Open standard · CNCF",
+        "start": 3,
+        "prod": 2,
+        "best": "A vendor-neutral flag API in your code, with any provider, such as flagd or LaunchDarkly, behind it.",
+        "ex": "Read the kill-switch flag through OpenFeature so you can change flag vendors without touching the agent.",
+        "pros": [
+          "No lock-in to one flag vendor",
+          "In-memory provider for tests"
+        ],
+        "cons": [
+          "You still need a provider and a UI",
+          "Some vendor features sit outside the standard API"
+        ],
+        "url": "https://openfeature.dev/docs"
+      },
+      {
+        "n": "Langfuse",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Traces with inputs, tool calls and outputs, and datasets built from failing traces for regression tests.",
+        "ex": "Open trace tr-4f91, add it to the refund regression dataset, and run every new release against it.",
+        "pros": [
+          "Traces and eval datasets in one place",
+          "Self-hostable for data residency"
+        ],
+        "cons": [
+          "Replay harness is still your own code",
+          "Stored tool responses need redaction"
+        ],
+        "url": "https://langfuse.com/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Page the right person fast",
+        "tool": "PagerDuty"
+      },
+      {
+        "need": "Stop a tool in seconds without a deploy",
+        "tool": "LaunchDarkly"
+      },
+      {
+        "need": "Turn a failing trace into a regression test",
+        "tool": "Langfuse"
+      }
+    ],
+    "goals": [
+      "Explain why you contain with a kill switch or rollback before diagnosing",
+      "Explain what a deterministic replay needs: input, release and recorded tool responses",
+      "Turn an incident into an eval case and a blameless post-mortem with owned actions"
+    ]
+  },
+  "practice": {
+    "scenario": "Chukta Pay, a fictional Indian payments company, runs a refund agent for its merchants. Prompt v8 ships at 10:00 and the agent starts paying some refunds twice: about 40 duplicates an hour at ₹1,500 each. A refund-rate alert pages the on-call engineer at 10:12, a kill switch turns the refund tool off at 10:17, and the release rolls back to v7. The failing trace is replayed offline with its recorded tool responses, the double refund reproduces, and the case joins the eval set before the fix ships. Total loss: ₹17,000 instead of lakhs.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Duplicate refunds or reversals after a prompt change: kill the refund tool, roll back, replay the trace"
+      },
+      {
+        "industry": "Insurance",
+        "use": "A claims agent starts approving out-of-policy claims: pause approvals, route to people, replay the claim traces"
+      },
+      {
+        "industry": "Telecom",
+        "use": "A support agent offers unauthorised plan credits after a model update: disable the credit tool, pin the old snapshot"
+      }
+    ],
+    "analogy": "An aircraft incident. The crew first makes the aircraft safe using the checklist, not by improvising; later, investigators replay the flight data recorder exactly as it happened, and the finding becomes a new line in every checklist, without blaming a pilot.",
+    "library": {
+      "name": "OpenFeature Python SDK",
+      "what": "A vendor-neutral feature-flag API. Read a kill-switch flag on every tool call so it can be turned off in seconds, with LaunchDarkly, flagd or another provider behind it.",
+      "install": "pip install openfeature-sdk"
+    },
+    "note": "The payments call, the agent and the trace loader are stubs for your own code. InMemoryProvider is for tests and demos; in production, plug in your flag provider. A replay is only as deterministic as the model: use the recorded release’s parameters, run it several times, and let recorded tool responses remove the biggest source of difference.",
+    "samples": [
+      {
+        "file": "replay_incident.py",
+        "language": "python",
+        "code": "import json\nfrom openfeature import api\nfrom openfeature.provider.in_memory_provider import InMemoryFlag, InMemoryProvider\n\nfrom refund_agent import run_agent          # your agent: run_agent(text, release, call_tool)\nfrom payments import gateway_refund         # your payment gateway client\n\n# Kill switch: the flag is read on every call, so turning it off takes effect at once.\napi.set_provider(InMemoryProvider({\n    \"refund-tool-enabled\": InMemoryFlag(default_variant=\"off\",\n                                        variants={\"on\": True, \"off\": False}),\n}))\nflags = api.get_client()\n\ndef issue_refund(order_id: str, amount: int) -> dict:\n    if not flags.get_boolean_value(\"refund-tool-enabled\", False):\n        return {\"status\": \"QUEUED_FOR_REVIEW\", \"order_id\": order_id}\n    return gateway_refund(order_id, amount, idempotency_key=f\"refund-{order_id}\")\n\n\nclass RecordedTools:\n    \"\"\"Serve tool responses from a recorded trace, in order. Never call a live API.\"\"\"\n\n    def __init__(self, recorded_calls):\n        self.recorded = list(recorded_calls)\n        self.made = []\n\n    def __call__(self, name: str, args: dict) -> dict:\n        i = len(self.made)\n        self.made.append({\"name\": name, \"args\": args})\n        if i >= len(self.recorded) or self.recorded[i][\"name\"] != name:\n            raise RuntimeError(f\"replay diverged at call {i}: {name}\")\n        return self.recorded[i][\"response\"]\n\n\ndef replay(trace: dict, release: dict) -> int:\n    tools = RecordedTools(trace[\"tool_calls\"])\n    try:\n        run_agent(trace[\"input\"], release=release, call_tool=tools)\n    except RuntimeError:\n        pass                                   # a fixed release may stop earlier or differ\n    return sum(1 for c in tools.made if c[\"name\"] == \"issue_refund\")\n\n\nwith open(\"traces/tr-4f91.json\") as f:\n    trace = json.load(f)                       # input, release id, every tool call and response\n\nbad = {\"prompt\": \"refund-agent@v8\", \"model\": \"pinned-snapshot\", \"temperature\": 0}\ngood = {\"prompt\": \"refund-agent@v7\", \"model\": \"pinned-snapshot\", \"temperature\": 0}\n\nprint(\"v8 refunds per replay:\", [replay(trace, bad) for _ in range(5)])    # expect [2, 2, 2, 2, 2]\nprint(\"v7 refunds per replay:\", [replay(trace, good) for _ in range(5)])   # expect [1, 1, 1, 1, 1]\n\n# Keep the failure: every future release must pay this ticket exactly once.\nwith open(\"evals/refund_cases.jsonl\", \"a\") as f:\n    f.write(json.dumps({\"trace\": \"tr-4f91\", \"expect\": {\"issue_refund_calls\": 1}}) + \"\\n\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A refund agent pays duplicate refunds worth ₹60,000 an hour. Merchant complaints surface the problem after 240 minutes; a refund-rate alert would fire after 12. Either way, the kill switch stops the leak 5 minutes after detection. How many rupees does the alert save?",
+    "answer": "₹60,000 an hour is ₹1,000 a minute. Complaints: (240 + 5) × ₹1,000 = ₹2,45,000. Alert: (12 + 5) × ₹1,000 = ₹17,000. The alert saves ₹2,45,000 − ₹17,000 = ₹2,28,000.",
+    "expected": {
+      "value": 228000,
+      "tolerance": 1,
+      "label": "rupees saved ="
+    },
+    "interview": [
+      {
+        "question": "An agent starts doing harm in production. What are your first three moves?",
+        "answer": "Declare the incident with a severity and one owner. Contain before diagnosing: turn off the harmful tool with a kill switch, or roll the release (prompt, model snapshot, tools and parameters) back to the last good version. Only then investigate, starting from the traces of failing runs. A live prompt hotfix under pressure, without evals, is a guess that can make things worse."
+      },
+      {
+        "question": "Why can’t you just re-run the failing request to debug it?",
+        "answer": "A live re-run sees today’s data: the tool that returned PENDING at 10:06 now returns SUCCESS, the model may sample differently, and a refund tool would pay again. A deterministic replay loads the exact release from the trace, uses the same input and parameters, and serves the recorded tool responses instead of calling live APIs, so it reproduces the failure safely. Then the trace becomes an eval case."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Hot-fixing the prompt in production while the incident is live",
+        "fix": "Flip the kill switch or roll back first; ship the fix later through the normal eval gate"
+      },
+      {
+        "mistake": "Tracing only inputs and outputs, not tool responses",
+        "fix": "Record every tool call with its response so the run can be replayed exactly"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ir01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments company’s refund agent starts paying some refunds twice right after a prompt change. Money is still leaving. What should the on-call engineer do first?",
+      "options": [
+        "Edit the prompt live to forbid repeat refunds",
+        "Turn off the refund tool with a kill switch, then roll back to the last good release",
+        "Read the logs until the root cause is clear",
+        "Email every affected merchant"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Contain before you diagnose. A kill switch and a rollback to a tested release stop the harm without guessing under pressure."
+    },
+    {
+      "id": "ir02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Duplicate refunds leak ₹1,000 a minute. An alert detects the problem after 12 minutes and the kill switch stops it 5 minutes later. How much is lost?",
+      "options": [
+        "₹5,000",
+        "₹12,000",
+        "₹17,000",
+        "₹60,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The leak runs 12 + 5 = 17 minutes, and 17 × ₹1,000 = ₹17,000."
+    },
+    {
+      "id": "ir03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The same leak of ₹1,000 a minute is found through merchant complaints after 240 minutes instead of an alert after 12, with the same 5-minute kill switch. How much more is lost?",
+      "options": [
+        "₹2,28,000",
+        "₹2,40,000",
+        "₹2,45,000",
+        "₹17,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Complaints: 245 × ₹1,000 = ₹2,45,000. Alert: 17 × ₹1,000 = ₹17,000. The difference is ₹2,28,000."
+    },
+    {
+      "id": "ir04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace alerts when the refund rate in a 10-minute window exceeds 1.5 times its 2.1% baseline, with at least 500 orders. A window has 900 orders and 40 refunds. What happens?",
+      "options": [
+        "No alert: 40 refunds is a small number",
+        "No alert: the window is too small",
+        "The alert fires: 4.4% is above the 3.15% threshold",
+        "The alert fires only if complaints arrive too"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1.5 × 2.1% = 3.15%, and 40 ÷ 900 = 4.4%, with 900 orders above the 500 minimum."
+    },
+    {
+      "id": "ir05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s engineer re-runs a failing loan-support request against today’s live systems, and the agent behaves correctly. Why is that not proof the bug is gone?",
+      "options": [
+        "Live systems are always slower",
+        "The tools now return different data than at the time of failure, so the conditions were not reproduced",
+        "The model has been retrained overnight",
+        "Re-runs are always correct by design"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A faithful reproduction needs the original input, release and recorded tool responses; live data has moved on."
+    },
+    {
+      "id": "ir06",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "What must a trace hold so that a failing agent run can be replayed deterministically? Select all that apply.",
+      "options": [
+        "The exact user input",
+        "The release: prompt version, model snapshot and parameters",
+        "Every tool call with its recorded response",
+        "The on-call engineer’s phone number"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Input, release and recorded tool responses let the run be repeated offline without touching live systems."
+    },
+    {
+      "id": "ir07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer replays a failing claims trace, but the replay harness calls the live policy and payout APIs. What is the main danger?",
+      "options": [
+        "The replay is slower",
+        "A replay can trigger real payouts and sees different data, so it is neither safe nor faithful",
+        "Traces become too large",
+        "The model refuses to answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Replays must serve recorded responses, never call systems with side effects."
+    },
+    {
+      "id": "ir08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom support agent begins granting unauthorised plan credits after a model snapshot update. The quickest containment that keeps the rest of the agent working is:",
+      "options": [
+        "Shut down the whole support website",
+        "Disable only the credit tool with a flag, and pin the previous snapshot",
+        "Retrain the model",
+        "Ask customers to stop requesting credits"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Disabling one tool limits harm while the agent still answers questions; pinning the old snapshot restores the last good release."
+    },
+    {
+      "id": "ir09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A hotfix goes live 40 minutes after detection and stops 75% of a ₹60,000-an-hour leak. The rest continues for 20 more hours. How much does the residual leak cost?",
+      "options": [
+        "₹75,000",
+        "₹3,00,000",
+        "₹9,00,000",
+        "₹15,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "25% of ₹60,000 is ₹15,000 an hour; over 20 hours that is ₹3,00,000."
+    },
+    {
+      "id": "ir10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which signals are good automated detectors for a misbehaving production agent? Select all that apply.",
+      "options": [
+        "A drop in the sampled judge score on live traffic",
+        "A spike in tool error rates",
+        "A business-metric anomaly such as refund rate per order",
+        "The number of engineers online"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Quality scores, tool errors and business metrics detect problems early; user reports remain a backstop."
+    },
+    {
+      "id": "ir11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "After an incident, a hospital’s post-mortem draft says “Dr Rao’s team shipped a bad prompt”. What should a blameless post-mortem ask instead?",
+      "options": [
+        "Who should be disciplined",
+        "Why the system allowed an untested prompt to reach production, and what will stop it next time",
+        "Whether the prompt was long enough",
+        "Which vendor to blame"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Blameless reviews look for system causes and owned actions; blame hides information and repeats failures."
+    },
+    {
+      "id": "ir12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A SEBI-registered broker’s order-help agent gives wrong margin figures. Which severity fits best if customers are placing trades on those figures right now?",
+      "options": [
+        "SEV1: harm is happening now, page immediately",
+        "SEV3: fix in the next sprint",
+        "No incident: margins change daily",
+        "SEV2 only if the press notices"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Active harm to customers’ money calls for the top severity, a single owner and immediate containment."
+    },
+    {
+      "id": "ir13",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An incident that falls under CERT-In’s reporting directions is noticed at 22:30. By when must it be reported, under the 6-hour rule?",
+      "options": [
+        "22:36",
+        "23:30",
+        "04:30 the next morning",
+        "Within 72 hours"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Six hours after 22:30 is 04:30. Whether a given incident is reportable is for your compliance team; this is educational, not legal advice."
+    },
+    {
+      "id": "ir14",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which items belong in a blameless post-mortem? Select all that apply.",
+      "options": [
+        "A timeline from first signal to full recovery",
+        "Impact, such as orders affected and rupees lost",
+        "Root cause and contributing causes",
+        "Actions, each with an owner and a date"
+      ],
+      "correct": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "explanation": "All four make the review useful: what happened, how bad, why, and what changes, owned by someone."
+    },
+    {
+      "id": "ir15",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC fixes an incident where its collections agent sent messages at night, but adds no test. Three months later a new prompt brings the bug back. What was missing?",
+      "options": [
+        "A longer post-mortem",
+        "An eval case built from the failing trace, run in the release gate",
+        "More on-call engineers",
+        "A bigger model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Turning the failure into an eval case means any future release that repeats it fails before shipping."
+    },
+    {
+      "id": "ir16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A kill-switch flag is read once when the service starts and stored in a variable. During an incident the flag is flipped off. What happens?",
+      "options": [
+        "The tool stops at once",
+        "Nothing changes until the processes restart",
+        "The flag provider restarts the service",
+        "The model stops calling the tool"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A kill switch must be read on every call, or flipping it has no effect on running processes."
+    },
+    {
+      "id": "ir17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent’s bad behaviour began when the prompt and the model snapshot changed together in release rel-v12. What should the rollback restore?",
+      "options": [
+        "Only the previous prompt",
+        "Only the previous model",
+        "The whole previous release: prompt, snapshot, tools and parameters",
+        "Nothing: wait for the provider"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Roll back to a known-good combination; mixing an old prompt with a new model is a release nobody tested."
+    },
+    {
+      "id": "ir18",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "During a SEV1, what should the incident commander do? Select all that apply.",
+      "options": [
+        "Decide on containment and assign investigators",
+        "Post status updates on a fixed rhythm",
+        "Personally debug every trace",
+        "Check with compliance whether any reporting duty applies"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "The commander coordinates, communicates and brings in compliance; hands-on debugging is delegated."
+    },
+    {
+      "id": "ir19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A replay of trace tr-4f91 under prompt v8 calls issue_refund twice in 10 of 10 runs; under v7 it calls it once. What does that establish?",
+      "options": [
+        "The failure is random and cannot be fixed",
+        "v8 causes the double refund under the recorded conditions, so the case can become a regression test",
+        "v7 is also broken",
+        "The payment gateway is at fault"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A consistent reproduction pins the cause to the release change and gives you a ready-made eval case."
+    },
+    {
+      "id": "ir20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A health app stores full traces for replay, including patients’ messages and tool responses. What must go with that?",
+      "options": [
+        "Nothing: traces are internal",
+        "Redaction of personal data, access control and a retention limit, as DPDP-style obligations expect",
+        "Publishing traces for transparency",
+        "Keeping traces forever for audits"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Replayable traces are valuable and sensitive; redact, restrict and expire them."
+    }
+  ]
+}

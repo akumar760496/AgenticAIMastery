@@ -1,0 +1,902 @@
+{
+  "id": "hybrid",
+  "moduleSlug": "vector-databases",
+  "name": "Hybrid Search",
+  "shortName": "Dense + sparse",
+  "question": "How do I get meaning and exact matches together?",
+  "summary": "Run dense (vector) and sparse (BM25) search side by side and fuse the two result lists, usually with Reciprocal Rank Fusion, which combines ranks rather than raw scores. Add metadata filters for date, tenant and permissions so results are both relevant and allowed.",
+  "useCases": [
+    "Queries that mix meaning with codes, names or jargon",
+    "Enterprise search with permission filters",
+    "When neither vector nor keyword search alone reaches your recall target"
+  ],
+  "keyFacts": {
+    "label": "Key pieces",
+    "items": [
+      {
+        "term": "Dense retrieval",
+        "detail": "semantic matches"
+      },
+      {
+        "term": "Sparse retrieval",
+        "detail": "exact terms via BM25 or SPLADE"
+      },
+      {
+        "term": "RRF",
+        "detail": "score = Σ 1 ÷ (k + rank), k ≈ 60"
+      },
+      {
+        "term": "Weighted fusion",
+        "detail": "normalize scores, then α·dense + (1−α)·sparse"
+      },
+      {
+        "term": "Metadata filters",
+        "detail": "applied before or after the vector search"
+      }
+    ]
+  },
+  "steps": [
+    "Index each chunk in both a vector index and a keyword index",
+    "Retrieve the top 50–100 from each and fuse with RRF",
+    "Apply permission and tenant filters before results leave the database",
+    "Re-rank the fused list and test on both kinds of query"
+  ],
+  "pitfalls": [
+    "Two indexes to keep in sync",
+    "Raw scores aren’t comparable across methods; use ranks or normalize",
+    "Post-filtering can leave too few results, so oversample or pre-filter"
+  ],
+  "tools": [
+    "Elasticsearch",
+    "OpenSearch",
+    "Weaviate",
+    "Qdrant",
+    "Vespa",
+    "pgvector + Postgres full-text"
+  ],
+  "remember": "Dense for meaning, sparse for words, fuse by rank.",
+  "caption": "Documents found by both methods rise to the top. Scores are computed with k = 60.",
+  "comparison": {
+    "scope": "Two indexes, one query",
+    "cost": 3,
+    "needs": "Mixed queries: meaning + codes",
+    "best": "Two indexes to keep in sync"
+  },
+  "diagram": {
+    "file": "diagrams/hybrid.svg"
+  },
+  "lesson": {
+    "file": "hybrid_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import numpy as np",
+        "steps": []
+      },
+      {
+        "text": "from rank_bm25 import BM25Okapi",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers import SentenceTransformer, CrossEncoder",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "docs = load_chunks()                   # each chunk: text, tenant, updated_at",
+        "steps": []
+      },
+      {
+        "text": "bm25 = BM25Okapi([d.text.lower().split() for d in docs])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "model = SentenceTransformer(\"all-MiniLM-L6-v2\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "emb = model.encode([d.text for d in docs], normalize_embeddings=True)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "query = \"VPN error 809 on Windows\"",
+        "steps": []
+      },
+      {
+        "text": "allowed = np.array([d.tenant == user.tenant for d in docs])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "sparse = bm25.get_scores(query.lower().split())",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "dense = emb @ model.encode(query, normalize_embeddings=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "sparse[~allowed] = -np.inf; dense[~allowed] = -np.inf",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "top_s = np.argsort(-sparse)[:50]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "top_d = np.argsort(-dense)[:50]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def rrf(*rankings, k=60):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    scores = {}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    for ranking in rankings:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        for rank, i in enumerate(ranking, start=1):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            scores[i] = scores.get(i, 0) + 1 / (k + rank)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return sorted(scores, key=scores.get, reverse=True)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "fused = [i for i in rrf(top_d, top_s) if allowed[i]][:20]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "ce = CrossEncoder(\"cross-encoder/ms-marco-MiniLM-L-6-v2\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "order = np.argsort(-ce.predict([(query, docs[i].text) for i in fused]))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "final = [fused[j] for j in order[:5]]",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Index every chunk twice",
+        "text": "A BM25 index for exact terms and an embedding index for meaning. Both use the same chunk IDs and carry the same metadata."
+      },
+      {
+        "title": "Filter to what the user may see",
+        "text": "The tenant filter is applied before ranking, so every candidate is one this user is allowed to read."
+      },
+      {
+        "title": "Retrieve from both",
+        "text": "Dense search ranks D3 first and D1 second. BM25 ranks D1 first, because it contains the exact code 809."
+      },
+      {
+        "title": "Fuse ranks with RRF",
+        "text": "Each list adds 1 ÷ (60 + rank). D1 gets 1/62 + 1/61 = 0.0325 and D3 gets 1/61 + 1/63 = 0.0323. Raw scores are never compared."
+      },
+      {
+        "title": "Keep the fused top",
+        "text": "Documents found by both methods rise to the top; documents found by only one follow. The top 20 go forward."
+      },
+      {
+        "title": "Re-rank and test both query types",
+        "text": "A cross-encoder orders the final few. Evaluate code-style and meaning-style queries separately, since each method fails on a different kind."
+      }
+    ],
+    "sceneHeight": 260,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"4\" width=\"166\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"91\" y=\"17\">Two indexes</text><text class=\"sb\" x=\"91\" y=\"32\">BM25 + vector</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"184\" y=\"8\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"269\" y=\"24\" text-anchor=\"middle\">same IDs + metadata</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"44\" width=\"346\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"181\" y=\"59\" text-anchor=\"middle\">filter first: tenant = engineering</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"sb a\" x=\"44\" y=\"84\" style=\"--d:0s\">Dense</text><text class=\"sb a\" x=\"126\" y=\"84\" style=\"--d:0s\">Sparse</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"8\" y=\"90\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"44\" y=\"106\" text-anchor=\"middle\">1. D3</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx \" x=\"8\" y=\"120\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"44\" y=\"136\" text-anchor=\"middle\">2. D1</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx \" x=\"8\" y=\"150\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"44\" y=\"166\" text-anchor=\"middle\">3. D7</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx \" x=\"8\" y=\"180\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"44\" y=\"196\" text-anchor=\"middle\">4. D2</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"90\" y=\"90\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"126\" y=\"106\" text-anchor=\"middle\">1. D1</text></g><g class=\"a\" style=\"--d:0.28s\"><rect class=\"bx \" x=\"90\" y=\"120\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"126\" y=\"136\" text-anchor=\"middle\">2. D5</text></g><g class=\"a\" style=\"--d:0.36s\"><rect class=\"bx \" x=\"90\" y=\"150\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"126\" y=\"166\" text-anchor=\"middle\">3. D3</text></g><g class=\"a\" style=\"--d:0.44s\"><rect class=\"bx \" x=\"90\" y=\"180\" width=\"72\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"126\" y=\"196\" text-anchor=\"middle\">4. D9</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"172\" y=\"90\" width=\"44\" height=\"114\" rx=\"7\"/><text class=\"lb\" x=\"194\" y=\"151\">RRF</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M163 147L170 147\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"8\" y=\"214\" width=\"346\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"181\" y=\"228\" text-anchor=\"middle\">D1: 1/(60+2) + 1/(60+1) = 0.0325</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"sb a\" x=\"290\" y=\"84\" style=\"--d:0s\">Fused (k = 60)</text><g class=\"a\" style=\"--d:0s\"><path class=\"ln acc\" d=\"M218 147L224 147\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"226\" y=\"90\" width=\"128\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"290\" y=\"106\" text-anchor=\"middle\">D1  0.0325</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"226\" y=\"120\" width=\"128\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"290\" y=\"136\" text-anchor=\"middle\">D3  0.0323</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx \" x=\"226\" y=\"150\" width=\"128\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"290\" y=\"166\" text-anchor=\"middle\">D5  0.0161</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx \" x=\"226\" y=\"180\" width=\"128\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"290\" y=\"196\" text-anchor=\"middle\">D7  0.0159</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"238\" width=\"346\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"181\" y=\"252\" text-anchor=\"middle\">cross-encoder → top 5 · test both query types</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Catches exact codes, names and jargon that embeddings blur",
+      "RRF needs no score normalisation to start",
+      "Robust across very different query styles",
+      "Tenant and permission filters fit naturally"
+    ],
+    "cons": [
+      "Two indexes to build, store and keep in sync",
+      "Raw scores are not comparable, so fusion needs care",
+      "Weighted fusion needs tuning for each domain",
+      "Post-filtering can leave too few results"
+    ],
+    "avoidWhen": [
+      "Queries are purely semantic, with no codes or rare terms",
+      "The latency budget cannot absorb a second retrieval"
+    ],
+    "tools": [
+      {
+        "name": "Elasticsearch",
+        "type": "Source-available · managed cloud",
+        "what": "RRF retriever combining BM25 and kNN",
+        "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+      },
+      {
+        "name": "OpenSearch",
+        "type": "Open source",
+        "what": "Hybrid query with score normalisation",
+        "url": "https://opensearch.org"
+      },
+      {
+        "name": "Weaviate",
+        "type": "Open source · managed cloud",
+        "what": "One hybrid query with an alpha weight",
+        "url": "https://docs.weaviate.io/weaviate/search/hybrid"
+      },
+      {
+        "name": "Qdrant",
+        "type": "Open source · managed cloud",
+        "what": "Query API with dense, sparse and RRF fusion",
+        "url": "https://qdrant.tech"
+      },
+      {
+        "name": "Vespa",
+        "type": "Open source · managed cloud",
+        "what": "BM25 and vectors in one ranking expression",
+        "url": "https://vespa.ai"
+      },
+      {
+        "name": "rank_bm25",
+        "type": "Open source",
+        "what": "BM25 in pure Python for prototypes",
+        "url": "https://github.com/dorianbrown/rank_bm25"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An IT service desk at a Mumbai bank runs a wiki search for engineers. Three typical queries are shown: one hinges on an exact error code, one says the same thing as the right page in different words, and one mixes both. Dense and BM25 scores are fixed; you choose how to combine them and where to apply the tenant filter.",
+    "controls": [
+      "Choose one of the three queries.",
+      "Choose the fusion method, and set k for RRF or α for weighted fusion.",
+      "Choose no filter, filter after ranking, or filter before ranking."
+    ],
+    "outputs": [
+      {
+        "name": "Top 5 returned",
+        "meaning": "The results the engineer sees, with scores; green is the right page, red a page from another tenant."
+      },
+      {
+        "name": "Rank of the right page",
+        "meaning": "Where the page that answers this query lands."
+      },
+      {
+        "name": "Right page in top 3, all queries",
+        "meaning": "How many of the three query styles this setting handles."
+      },
+      {
+        "name": "Results shown",
+        "meaning": "Pages on screen after filtering."
+      },
+      {
+        "name": "Pages the user may not see",
+        "meaning": "Results from Finance or HR that should never reach this user."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Dense only",
+        "expect": "The error-code query puts D4 at #5; 2 of 3 queries hit, and one Finance page leaks."
+      },
+      {
+        "k": "rrf",
+        "name": "RRF",
+        "expect": "D4 rises to #2 and all 3 queries hit, but D6 from Finance still leaks."
+      },
+      {
+        "k": "sparse",
+        "name": "BM25 only",
+        "expect": "The meaning-style query puts D2 at #4, and two pages from other tenants appear."
+      },
+      {
+        "k": "post",
+        "name": "Filter after ranking",
+        "expect": "No leaks, but only 4 of 5 results are left on the page."
+      }
+    ],
+    "missions": [
+      {
+        "k": "all3",
+        "text": "Get the right page into the top 3 for all three queries.",
+        "hint": "Fuse the two lists by rank."
+      },
+      {
+        "k": "alpha",
+        "text": "With weighted fusion, find an α that breaks exactly one of the three queries.",
+        "hint": "Lean hard towards one method: α of 1.0, or 0.3 and below."
+      },
+      {
+        "k": "perm",
+        "text": "Show a full page of 5 allowed results, with every query still in the top 3.",
+        "hint": "Apply the tenant filter before ranking, and use RRF."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Elasticsearch",
+        "type": "Source-available · managed cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "An RRF retriever that combines BM25 and kNN results, with rank_constant defaulting to 60.",
+        "ex": "A support search that fuses a match query and a knn query on the same index.",
+        "pros": [
+          "Both retrievers in one engine",
+          "Mature security and filtering"
+        ],
+        "cons": [
+          "Heavier to operate",
+          "Licensing to review"
+        ],
+        "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+      },
+      {
+        "n": "OpenSearch",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Hybrid queries with a normalisation processor that combines lexical and vector scores.",
+        "ex": "A search pipeline applying min-max normalisation and arithmetic-mean combination.",
+        "pros": [
+          "Open source licence",
+          "Keyword and vector together"
+        ],
+        "cons": [
+          "Pipelines add configuration",
+          "Tuning weights per domain"
+        ],
+        "url": "https://opensearch.org"
+      },
+      {
+        "n": "Weaviate",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "One hybrid query with an alpha weight between BM25 and vector search.",
+        "ex": "wiki.query.hybrid(query=\"VPN error 809\", alpha=0.5) with a tenant filter.",
+        "pros": [
+          "Simple API",
+          "Several fusion methods"
+        ],
+        "cons": [
+          "Default fusion changed across versions",
+          "Alpha needs testing"
+        ],
+        "url": "https://docs.weaviate.io/weaviate/search/hybrid"
+      },
+      {
+        "n": "Qdrant",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Dense and sparse vectors in one collection, fused with RRF in the Query API.",
+        "ex": "Prefetch 50 dense and 50 sparse candidates, then fuse with RRF.",
+        "pros": [
+          "Sparse vectors native",
+          "Filters applied inside the search"
+        ],
+        "cons": [
+          "You produce the sparse vectors",
+          "Another service to run"
+        ],
+        "url": "https://qdrant.tech"
+      },
+      {
+        "n": "rank_bm25",
+        "type": "Open source",
+        "start": 3,
+        "prod": 1,
+        "best": "BM25 in pure Python for prototypes and teaching.",
+        "ex": "Score 10,000 chunks with BM25Okapi and fuse with a vector list in ten lines.",
+        "pros": [
+          "Tiny and readable",
+          "No infrastructure"
+        ],
+        "cons": [
+          "In memory, single process",
+          "Not for production scale"
+        ],
+        "url": "https://github.com/dorianbrown/rank_bm25"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype this afternoon",
+        "tool": "rank_bm25 + your vector store + RRF"
+      },
+      {
+        "need": "One engine for both",
+        "tool": "Elasticsearch or OpenSearch"
+      },
+      {
+        "need": "Vector database with sparse support",
+        "tool": "Qdrant or Weaviate"
+      }
+    ],
+    "goals": [
+      "Compute RRF scores by hand for two ranked lists",
+      "Explain why ranks fuse more safely than raw scores",
+      "Place permission filters so results are both allowed and complete"
+    ]
+  },
+  "practice": {
+    "scenario": "An internal IT wiki gets queries like “VPN error 809 on Windows”. Vector search finds VPN troubleshooting pages; BM25 finds the one page that mentions error 809. Reciprocal Rank Fusion puts the page that both methods found at the top.",
+    "industries": [
+      {
+        "industry": "Enterprise search",
+        "use": "Natural questions mixed with error codes and product names"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "“running shoe size 9 model 41” mixes intent, size and model number"
+      },
+      {
+        "industry": "Fintech support",
+        "use": "Scheme codes and ISINs alongside plain questions"
+      }
+    ],
+    "analogy": "Asking two experts, one who knows the subject and one who knows the catalogue numbers, and trusting the answers they both give.",
+    "library": {
+      "name": "Weaviate (or any DB + RRF)",
+      "what": "Weaviate runs vector and BM25 search in one hybrid query; RRF itself is ten lines if your database lacks it.",
+      "install": "pip install weaviate-client"
+    },
+    "samples": [
+      {
+        "file": "rrf.py",
+        "language": "python",
+        "code": "def rrf(*rankings, k=60):\n    scores = {}\n    for ranking in rankings:\n        for rank, doc_id in enumerate(ranking, start=1):\n            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank)\n    return sorted(scores, key=scores.get, reverse=True)\n\ndense  = [\"D3\", \"D1\", \"D7\", \"D2\"]      # vector search results\nsparse = [\"D1\", \"D5\", \"D3\", \"D9\"]      # BM25 results\nprint(rrf(dense, sparse))              # ['D1', 'D3', 'D5', 'D7', 'D2', 'D9']"
+      },
+      {
+        "file": "weaviate.py",
+        "language": "python",
+        "code": "import weaviate\n\nclient = weaviate.connect_to_local()\nwiki = client.collections.get(\"WikiPage\")\n\nres = wiki.query.hybrid(query=\"VPN error 809 on Windows\",\n                        alpha=0.5,      # 0 = keyword only, 1 = vector only\n                        limit=10)\nfor obj in res.objects:\n    print(obj.properties[\"title\"])\nclient.close()"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Dense ranks A 1st, B 2nd, C 3rd. Sparse ranks C 1st, A 2nd, D 3rd. With k = 60, which document wins RRF?",
+    "answer": "A: 1/61 + 1/62 ≈ 0.03252. C: 1/63 + 1/61 ≈ 0.03226. A wins narrowly; B and D, found by only one method, trail.",
+    "interview": [
+      {
+        "question": "Why fuse by rank instead of raw scores?",
+        "answer": "Cosine and BM25 scores sit on different, query-dependent scales, so adding them is meaningless without normalization. RRF uses only ranks, which are comparable and robust."
+      },
+      {
+        "question": "How do you enforce permissions in hybrid search?",
+        "answer": "Store access metadata (tenant, roles) with each chunk and filter inside the database before results leave it, ideally in both retrievers. Never rely on the LLM to hide content the user shouldn't see."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Adding raw BM25 and cosine scores",
+        "fix": "Use RRF or normalize scores first"
+      },
+      {
+        "mistake": "Filtering permissions after the LLM sees results",
+        "fix": "Filter in the database before results are returned"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "hy01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Dense search ranks a runbook 1st and BM25 ranks it 4th. With k = 60, what is its RRF score?",
+      "options": [
+        "0.0328",
+        "0.0164",
+        "0.0320",
+        "0.0313"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1 ÷ 61 + 1 ÷ 64 ≈ 0.01639 + 0.01563 = 0.0320."
+    },
+    {
+      "id": "hy02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Shoppers type “running shoe size 9 model 41”. Why does hybrid search help?",
+      "options": [
+        "The query mixes intent with exact size and model tokens",
+        "The query is too long for embeddings",
+        "It needs an SSD index",
+        "It needs image embeddings"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Dense search captures “running shoe”; BM25 matches “9” and “41” exactly."
+    },
+    {
+      "id": "hy03",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are valid ways to combine dense and BM25 results? Select all that apply.",
+      "options": [
+        "Reciprocal rank fusion on ranks",
+        "Normalise each score list, then weight with α",
+        "Add raw BM25 and cosine scores directly",
+        "Keep only the list whose top score is higher"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Ranks or normalised scores are comparable. Raw BM25 and cosine scores sit on different scales."
+    },
+    {
+      "id": "hy04",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What does raising the RRF constant k from 10 to 60 do?",
+      "options": [
+        "Makes top ranks dominate more",
+        "Reduces the advantage of top ranks, so agreement across lists matters more",
+        "Changes how BM25 scores terms",
+        "Nothing, because k cancels out"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With k = 10, rank 1 beats rank 2 by 1/11 versus 1/12; with k = 60 the gap between 1/61 and 1/62 is much smaller."
+    },
+    {
+      "id": "hy05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A multi-hospital search must never show one hospital’s notes to another. Where should the tenant filter go?",
+      "options": [
+        "In the prompt, asking the LLM to ignore other hospitals",
+        "After taking the fused top 5",
+        "Inside the database, in both retrievers, before results leave it",
+        "In a separate embedding model"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Permissions belong in the database query itself, never in the LLM or after ranking."
+    },
+    {
+      "id": "hy06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Document A is 1st in dense and absent from BM25. Document B is 3rd in dense and 2nd in BM25. With k = 60, which ranks higher?",
+      "options": [
+        "A, because rank 1 wins",
+        "B: about 0.0320 against 0.0164",
+        "They tie",
+        "A: about 0.0164 against 0.0159"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A = 1 ÷ 61 ≈ 0.0164. B = 1 ÷ 63 + 1 ÷ 62 ≈ 0.0159 + 0.0161 = 0.0320."
+    },
+    {
+      "id": "hy07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Clients search for the ISIN “INE002A01018” and dense search returns unrelated funds. What is the fix?",
+      "options": [
+        "Add BM25 and fuse the results",
+        "Raise ef_search",
+        "Use a bigger embedding model",
+        "Use binary quantization"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "An ISIN is a rare exact token. Keyword search matches it; embeddings blur it."
+    },
+    {
+      "id": "hy08",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are real pitfalls of hybrid search? Select all that apply.",
+      "options": [
+        "Two indexes to keep in sync",
+        "Raw scores are not comparable across methods",
+        "Filtering after ranking can leave too few results",
+        "RRF needs labelled training data"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "RRF needs no training; it only uses ranks."
+    },
+    {
+      "id": "hy09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "After min–max normalisation a product has dense 0.8 and sparse 0.2. With α = 0.7 on dense, what is its fused score?",
+      "options": [
+        "0.50",
+        "0.62",
+        "0.38",
+        "0.70"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.7 × 0.8 + 0.3 × 0.2 = 0.56 + 0.06 = 0.62."
+    },
+    {
+      "id": "hy10",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Filtering after fusion leaves 3 of 5 results on the page. Which fixes work? Select all that apply.",
+      "options": [
+        "Pre-filter inside the database",
+        "Oversample before filtering, for example fetch 50 and then filter",
+        "Use the vector database’s filter-aware search",
+        "Lower the RRF constant k"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Filtering first, or fetching enough extra candidates, keeps the page full. k does not change how many results survive."
+    },
+    {
+      "id": "hy11",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In a Weaviate hybrid query, what does alpha = 0 mean?",
+      "options": [
+        "Vector search only",
+        "Keyword (BM25) search only",
+        "Equal weight on both",
+        "Hybrid search disabled"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "In Weaviate, alpha = 1 is pure vector search and alpha = 0 is pure keyword search."
+    },
+    {
+      "id": "hy12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What is the default rank constant for reciprocal rank fusion in Elasticsearch?",
+      "options": [
+        "1",
+        "10",
+        "60",
+        "100"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Elasticsearch’s rank_constant defaults to 60, the value used in the original RRF paper."
+    },
+    {
+      "id": "hy13",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "How should you evaluate a hybrid search change? Select all that apply.",
+      "options": [
+        "Use separate code-style and meaning-style query sets",
+        "Compare recall@k for dense, sparse and fused",
+        "Check that permission filters leave no leaks",
+        "Look only at the average cosine similarity of top results"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Each method fails on different queries, and permissions must be tested too. Cosine averages say nothing about fused quality."
+    },
+    {
+      "id": "hy14",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Travellers search for flight numbers such as “AI 302”. Which part of a hybrid system handles them best?",
+      "options": [
+        "Sparse retrieval (BM25 or SPLADE)",
+        "Dense retrieval alone",
+        "The cross-encoder alone",
+        "The HNSW parameters"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Exact identifiers are a sparse-retrieval strength."
+    },
+    {
+      "id": "hy15",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Each retriever returns only its top 5 before fusion. What is the risk?",
+      "options": [
+        "Scores overflow",
+        "BM25 stops working",
+        "A document ranked 8th in both lists is never fused, although agreement would lift it",
+        "There is no risk"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "At rank 8 in both, RRF gives 2 ÷ 68 ≈ 0.029, more than a rank-1 hit in one list (≈ 0.016). Retrieve 50–100 from each."
+    },
+    {
+      "id": "hy16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why does hybrid search often beat either method alone?",
+      "options": [
+        "It doubles the number of vectors",
+        "BM25 is a semantic method",
+        "Dense and sparse fail on different queries, so fusion combines their strengths",
+        "It avoids indexing"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Dense handles paraphrases, sparse handles exact terms, and fusion keeps both."
+    },
+    {
+      "id": "hy17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Three retrievers rank a document 1st, 2nd and 3rd. With k = 60, what is its RRF score?",
+      "options": [
+        "0.0484",
+        "0.0323",
+        "0.0161",
+        "0.0500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1 ÷ 61 + 1 ÷ 62 + 1 ÷ 63 ≈ 0.01639 + 0.01613 + 0.01587 = 0.0484."
+    },
+    {
+      "id": "hy18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Where can tenant filters go safely in a hybrid pipeline? Select all that apply.",
+      "options": [
+        "As a pre-filter inside the vector search",
+        "As a filter inside the keyword query",
+        "Applied by the LLM when it writes the answer",
+        "In both retrievers, using the same tenant metadata"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Both retrievers must filter inside the database. The LLM is not an access-control layer."
+    },
+    {
+      "id": "hy19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A Postgres team wants hybrid search without adding a new database. What fits?",
+      "options": [
+        "DiskANN",
+        "pgvector plus Postgres full-text search, fused with RRF in SQL",
+        "hnswlib",
+        "Weaviate Query Agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "pgvector handles vectors and Postgres full-text search handles keywords; RRF is a few lines of SQL."
+    },
+    {
+      "id": "hy20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Weighted fusion works well on one query set and badly on another. Why?",
+      "options": [
+        "α must always be 0.5",
+        "Normalisation is never needed",
+        "RRF would need an α too",
+        "The best α depends on the query mix, so tune it on a representative evaluation set"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Code-heavy queries want more sparse weight and paraphrases want more dense weight."
+    }
+  ]
+}

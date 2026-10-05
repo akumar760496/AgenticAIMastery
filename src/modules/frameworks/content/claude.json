@@ -1,0 +1,842 @@
+{
+  "id": "claude",
+  "moduleSlug": "frameworks",
+  "name": "Claude Agent SDK",
+  "shortName": "Claude Agent SDK",
+  "question": "How do I build an autonomous agent that works with files, code and tools?",
+  "summary": "The Claude Agent SDK gives you the agent harness behind Claude Code as a library: built-in tools for files, shell and the web, context management, subagents, sessions, hooks that run before and after tool calls, and permission modes. Your own tools are added as MCP servers, including in-process ones. It runs Claude models only, and it is strongest for autonomous work such as operations, research and coding tasks where the agent needs a workspace.",
+  "useCases": [
+    "Agents that read and write files, run code or use a shell",
+    "Operations and research agents",
+    "Teams standardising on Claude models"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "query()",
+        "detail": "one-off runs, streamed"
+      },
+      {
+        "term": "ClaudeSDKClient",
+        "detail": "multi-turn sessions"
+      },
+      {
+        "term": "Built-in tools",
+        "detail": "Read, Write, Bash, WebFetch and more"
+      },
+      {
+        "term": "MCP servers",
+        "detail": "your tools, in-process or external"
+      },
+      {
+        "term": "Hooks",
+        "detail": "PreToolUse, PostToolUse and more"
+      },
+      {
+        "term": "Permissions",
+        "detail": "allowed_tools, permission_mode, max_turns"
+      }
+    ]
+  },
+  "steps": [
+    "Expose your tools through an MCP server",
+    "Allow only the tools the task needs",
+    "Gate risky tools with a PreToolUse hook",
+    "Run in a sandboxed workspace with turn limits"
+  ],
+  "pitfalls": [
+    "Granting Bash and write access by default",
+    "Bypass-permissions mode outside a sandbox",
+    "Using it where a simple loop would do"
+  ],
+  "tools": [
+    "claude-agent-sdk (Python)",
+    "@anthropic-ai/claude-agent-sdk (TypeScript)",
+    "MCP servers (Panel 8)",
+    "Container sandboxes (Panel 12)"
+  ],
+  "remember": "A full harness: allow little, hook the risky calls, sandbox the rest.",
+  "caption": "Claude models only; Python and TypeScript.",
+  "comparison": {
+    "scope": "Autonomous agents with a workspace",
+    "cost": 2,
+    "needs": "Python or TypeScript",
+    "best": "Over-broad permissions"
+  },
+  "diagram": {
+    "file": "diagrams/claude.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_claude.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "@tool(\"get_transaction\", \"Look up a UPI transaction\", {\"utr\": str})",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "async def get_transaction(args): ...",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "bank_server = create_sdk_mcp_server(name=\"bank\", version=\"1.0.0\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                                    tools=[get_transaction, raise_dispute])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def require_approval(input_data, tool_use_id, context):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if not await approvals.request(input_data[\"tool_input\"]):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return {\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                \"permissionDecision\": \"deny\"}}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return {}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "options = ClaudeAgentOptions(",
+        "steps": []
+      },
+      {
+        "text": "    system_prompt=SYSTEM, mcp_servers={\"bank\": bank_server},",
+        "steps": []
+      },
+      {
+        "text": "    allowed_tools=[\"mcp__bank__get_transaction\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                   \"mcp__bank__raise_dispute\"],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    hooks={\"PreToolUse\": [HookMatcher(matcher=\"mcp__bank__raise_dispute\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                                      hooks=[require_approval])]},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    max_turns=8)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async with ClaudeSDKClient(options=options) as client:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    await client.query(QUESTION)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    async for message in client.receive_response(): print(message)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Your tools as an MCP server",
+        "text": "The bank tools are served by an in-process MCP server, the same protocol used for external tools (Panel 8)."
+      },
+      {
+        "title": "Allow only what the task needs",
+        "text": "Only the two bank tools are allowed. The built-in Read, Write and Bash tools exist but are not granted to this agent."
+      },
+      {
+        "title": "A hook gates the risky call",
+        "text": "A PreToolUse hook on raise_dispute asks for approval and denies the call if the reviewer rejects it."
+      },
+      {
+        "title": "Limit the turns",
+        "text": "max_turns caps the loop, the same idea as a step budget."
+      },
+      {
+        "title": "A session with the harness",
+        "text": "ClaudeSDKClient runs a multi-turn session with Claude Code’s context management underneath."
+      },
+      {
+        "title": "Stream the messages",
+        "text": "Messages stream back as they happen: text, tool calls and results, which you can log or show."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">MCP server \"bank\": 2 tools</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"36\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"36\" y=\"51\" text-anchor=\"middle\">Read</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"70\" y=\"36\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"98\" y=\"51\" text-anchor=\"middle\">Write</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"132\" y=\"36\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"160\" y=\"51\" text-anchor=\"middle\">Bash</text></g><text class=\"sb a\" x=\"200\" y=\"51\" style=\"text-anchor:start;--d:0.2s\">not granted</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"66\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"81\" text-anchor=\"middle\">PreToolUse(raise_dispute) → approve or deny</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"96\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"111\" text-anchor=\"middle\">max_turns = 8</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"126\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"141\" text-anchor=\"middle\">ClaudeSDKClient session</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"171\" style=\"text-anchor:end;--d:0s\">gate everything</text><rect x=\"118\" y=\"161\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"161\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"171\" style=\"text-anchor:start;--d:0.2s\">600 / day</text><text class=\"tl a\" x=\"112\" y=\"193\" style=\"text-anchor:end;--d:0.1s\">gate the risky</text><rect x=\"118\" y=\"183\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"183\" width=\"12.5\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"193\" style=\"text-anchor:start;--d:0.30000000000000004s\">50 / day</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--ink-2)\">approvals people can actually review</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "A complete harness: files, shell, web, context management",
+      "Hooks and permissions for fine control",
+      "Subagents and sessions",
+      "MCP for your own tools"
+    ],
+    "cons": [
+      "Claude models only",
+      "More power than a chat agent needs",
+      "Permissions must be set carefully",
+      "Heavier runtime than a thin SDK"
+    ],
+    "avoidWhen": [
+      "Agents that must switch providers",
+      "Simple two-tool chat agents"
+    ],
+    "tools": [
+      {
+        "name": "Claude Agent SDK (Python)",
+        "type": "Open source",
+        "what": "Harness, tools, hooks, MCP",
+        "url": "https://docs.claude.com/en/api/agent-sdk/python"
+      },
+      {
+        "name": "Claude Agent SDK (TypeScript)",
+        "type": "Open source",
+        "what": "The same in TypeScript",
+        "url": "https://docs.claude.com/en/api/agent-sdk/typescript"
+      },
+      {
+        "name": "Agent SDK overview",
+        "type": "Documentation",
+        "what": "Permissions, hooks, subagents",
+        "url": "https://docs.claude.com/en/api/agent-sdk/overview"
+      },
+      {
+        "name": "MCP",
+        "type": "Open standard",
+        "what": "Tools for any agent",
+        "url": "https://modelcontextprotocol.io"
+      },
+      {
+        "name": "Container sandboxes",
+        "type": "Practice",
+        "what": "Isolate agents with shell access",
+        "url": "https://docs.docker.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional broker’s operations team wants an agent that investigates failed settlement files overnight: reading files, running scripts and querying systems. Set the needs and see when the Claude Agent SDK is the best fit and when it is ruled out.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Claude, long approval cases",
+        "expect": "Top pick: LangGraph. Claude Agent SDK ranks 4 of 8."
+      },
+      {
+        "k": "ops",
+        "name": "Ops agent with a workspace",
+        "expect": "Top pick: Claude Agent SDK."
+      },
+      {
+        "k": "claudecommit",
+        "name": "Committed to Claude",
+        "expect": "Top pick: Claude Agent SDK."
+      },
+      {
+        "k": "proto",
+        "name": "Quick prototype on OpenAI",
+        "expect": "Top pick: OpenAI Agents SDK. Claude Agent SDK is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make the Claude Agent SDK the top pick.",
+        "hint": "What does a harness with built-in tools give?"
+      },
+      {
+        "k": "builtin",
+        "text": "Make it top with built-in workspace tools essential.",
+        "hint": "Start from the ops scenario."
+      },
+      {
+        "k": "out",
+        "text": "Find a constraint that rules it out.",
+        "hint": "Which models does it run?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude Agent SDK",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "The Claude Code harness as a library.",
+        "ex": "An overnight settlement investigator.",
+        "pros": [
+          "Built-in tools",
+          "Hooks and permissions"
+        ],
+        "cons": [
+          "Claude models only",
+          "Heavier runtime"
+        ],
+        "url": "https://docs.claude.com/en/api/agent-sdk/overview"
+      },
+      {
+        "n": "MCP servers",
+        "type": "Open standard",
+        "start": 3,
+        "prod": 3,
+        "best": "Expose internal systems as tools.",
+        "ex": "The bank tools as an in-process server.",
+        "pros": [
+          "Reusable across frameworks",
+          "Growing ecosystem"
+        ],
+        "cons": [
+          "Server security matters",
+          "Versioning"
+        ],
+        "url": "https://modelcontextprotocol.io"
+      },
+      {
+        "n": "Hooks",
+        "type": "SDK feature",
+        "start": 3,
+        "prod": 3,
+        "best": "Run code before and after tool calls.",
+        "ex": "Deny a dispute unless approved.",
+        "pros": [
+          "Fine-grained control",
+          "Auditable"
+        ],
+        "cons": [
+          "Easy to misconfigure",
+          "Test them"
+        ],
+        "url": "https://docs.claude.com/en/api/agent-sdk/overview"
+      },
+      {
+        "n": "Container sandbox",
+        "type": "Practice",
+        "start": 2,
+        "prod": 3,
+        "best": "Isolate an agent with shell access.",
+        "ex": "Run the investigator with no production credentials.",
+        "pros": [
+          "Limits blast radius",
+          "Reproducible"
+        ],
+        "cons": [
+          "Setup effort",
+          "Resource limits to tune"
+        ],
+        "url": "https://docs.docker.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "The agent needs files and a shell",
+        "tool": "Claude Agent SDK in a sandbox"
+      },
+      {
+        "need": "We must switch providers",
+        "tool": "A provider-neutral framework"
+      },
+      {
+        "need": "A simple chat agent",
+        "tool": "A plain loop"
+      }
+    ],
+    "goals": [
+      "See what a full agent harness gives",
+      "Control permissions and hooks",
+      "Recognise model lock-in"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional broker’s operations team built an agent that investigates failed settlement files overnight: it reads the files, runs reconciliation scripts, queries internal systems through MCP and writes a report. The Claude Agent SDK provided file, shell and web tools out of the box; the team allowed only the tools the task needed, blocked writes outside a working folder with a hook, and ran it in a container.",
+    "industries": [
+      {
+        "industry": "Stockbroking operations",
+        "use": "Reconciliation and settlement investigations"
+      },
+      {
+        "industry": "IT operations",
+        "use": "Incident triage that reads logs and runs diagnostics"
+      },
+      {
+        "industry": "Research",
+        "use": "Agents that gather, analyse and write up findings"
+      }
+    ],
+    "analogy": "Hiring a capable contractor who brings their own toolbox: you decide which rooms they may enter and which tools they may use, and someone checks before anything is demolished.",
+    "library": {
+      "name": "Claude Agent SDK",
+      "what": "The Claude Code agent harness as a library: built-in tools, MCP servers, hooks, permissions, sessions and subagents.",
+      "install": "pip install claude-agent-sdk"
+    },
+    "note": "Only the two bank tools are allowed here; built-in file and shell tools are available but not granted. Check the docs for current hook and option names.",
+    "samples": [
+      {
+        "file": "upi_agent_claude.py",
+        "language": "python",
+        "code": "import json\nfrom claude_agent_sdk import (ClaudeAgentOptions, ClaudeSDKClient, HookMatcher,\n                              create_sdk_mcp_server, tool)\n\n@tool(\"get_transaction\", \"Look up a UPI transaction by its 12-digit UTR\", {\"utr\": str})\nasync def get_transaction(args):\n    txn = await bank.transactions.get(args[\"utr\"])\n    return {\"content\": [{\"type\": \"text\", \"text\": json.dumps(txn)}]}\n\n@tool(\"raise_dispute\", \"Raise a dispute for a failed UPI debit\", {\"utr\": str, \"reason\": str})\nasync def raise_dispute(args):\n    ref = await bank.disputes.create(args[\"utr\"], args[\"reason\"])\n    return {\"content\": [{\"type\": \"text\", \"text\": f\"Dispute {ref} raised\"}]}\n\nasync def require_approval(input_data, tool_use_id, context):\n    if not await approvals.request(input_data[\"tool_input\"]):\n        return {\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\",\n                \"permissionDecision\": \"deny\",\n                \"permissionDecisionReason\": \"Reviewer rejected the dispute\"}}\n    return {}\n\nbank_server = create_sdk_mcp_server(name=\"bank\", version=\"1.0.0\",\n                                    tools=[get_transaction, raise_dispute])\noptions = ClaudeAgentOptions(\n    system_prompt=SYSTEM,\n    mcp_servers={\"bank\": bank_server},\n    allowed_tools=[\"mcp__bank__get_transaction\", \"mcp__bank__raise_dispute\"],\n    hooks={\"PreToolUse\": [HookMatcher(matcher=\"mcp__bank__raise_dispute\",\n                                      hooks=[require_approval])]},\n    max_turns=8)\n\nasync def main():\n    async with ClaudeSDKClient(options=options) as client:\n        await client.query(QUESTION)\n        async for message in client.receive_response():\n            print(message)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent runs 50 tasks a day with 12 tool calls each. If every call needed a manual approval, how many approvals would that be? If only the one dispute-raising call per task is gated, how many approvals a day?",
+    "answer": "12 × 50 = 600 approvals a day if everything is gated, which nobody will review properly. Allowing read-only tools and gating only the risky call gives 50: a number people can actually review.",
+    "expected": {
+      "value": 50,
+      "tolerance": 1,
+      "label": "approvals a day ="
+    },
+    "interview": [
+      {
+        "question": "When is the Claude Agent SDK a better fit than a lighter framework?",
+        "answer": "When the agent needs a workspace: reading and writing files, running scripts or shell commands, browsing, and managing long contexts, as in operations, research or coding tasks. It gives you the Claude Code harness with those tools, subagents, sessions and hooks. For a two-tool chat agent it is more than you need."
+      },
+      {
+        "question": "How do you keep an autonomous agent with shell access safe?",
+        "answer": "Allow only the tools the task needs, gate risky ones with PreToolUse hooks or approval, avoid bypass-permissions mode outside a sandbox, run in a container with no production credentials, cap turns, and log every tool call (Panel 12)."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Granting Bash and write access by default",
+        "fix": "Allow only what the task needs"
+      },
+      {
+        "mistake": "Gating every call",
+        "fix": "Gate the risky ones so reviews stay meaningful"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ca01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What is the Claude Agent SDK?",
+      "options": [
+        "The Claude Code agent harness as a library",
+        "A vector database",
+        "A fine-tuning service",
+        "A UI kit"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Built-in tools, hooks, permissions."
+    },
+    {
+      "id": "ca02",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "How are your own tools added?",
+      "options": [
+        "As MCP servers, including in-process ones",
+        "By editing the model",
+        "Through fine-tuning",
+        "Only as Bash scripts"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "create_sdk_mcp_server."
+    },
+    {
+      "id": "ca03",
+      "kind": "single",
+      "industry": "IT operations",
+      "question": "What can a PreToolUse hook do?",
+      "options": [
+        "Inspect and deny a tool call before it runs",
+        "Change the model",
+        "Delete sessions",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Gate risky calls."
+    },
+    {
+      "id": "ca04",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Which models does it run?",
+      "options": [
+        "Claude models only",
+        "Any model",
+        "Only open-weight models",
+        "Only OpenAI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A constraint to weigh."
+    },
+    {
+      "id": "ca05",
+      "kind": "multi",
+      "industry": "IT operations",
+      "question": "Which are built-in tools? Select all that apply.",
+      "options": [
+        "Read and Write",
+        "Bash",
+        "A credit bureau",
+        "UPI payments"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Plus WebFetch and more."
+    },
+    {
+      "id": "ca06",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "50 tasks a day with 12 tool calls each; only one risky call per task is gated. Approvals a day?",
+      "options": [
+        "12",
+        "50",
+        "600",
+        "6,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Gate the risky call only."
+    },
+    {
+      "id": "ca07",
+      "kind": "single",
+      "industry": "IT operations",
+      "question": "What does max_turns do?",
+      "options": [
+        "Caps the agent loop",
+        "Limits output length",
+        "Sets temperature",
+        "Chooses the model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Like a step budget."
+    },
+    {
+      "id": "ca08",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Why avoid bypassPermissions outside a sandbox?",
+      "options": [
+        "Every available tool, including shell and writes, runs without checks",
+        "It is slower",
+        "It costs more",
+        "It disables streaming"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Allow only what is needed."
+    },
+    {
+      "id": "ca09",
+      "kind": "single",
+      "industry": "IT operations",
+      "question": "query() or ClaudeSDKClient for a multi-turn session?",
+      "options": [
+        "ClaudeSDKClient",
+        "query()",
+        "Both identical",
+        "Neither"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "query() is for one-off runs."
+    },
+    {
+      "id": "ca10",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which practices make a shell-capable agent safer? Select all that apply.",
+      "options": [
+        "Run it in a sandboxed container",
+        "Allow only the tools the task needs",
+        "Give it production credentials",
+        "Bypass permissions"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Least privilege and isolation."
+    },
+    {
+      "id": "ca11",
+      "kind": "single",
+      "industry": "Research",
+      "question": "Which kind of agent suits this SDK best?",
+      "options": [
+        "Autonomous agents that need files, code and a shell",
+        "A two-tool chat bot",
+        "A provider-neutral workflow",
+        "A .NET service"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Workspace agents."
+    },
+    {
+      "id": "ca12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "The board requires switching providers within a quarter. Effect on this SDK?",
+      "options": [
+        "It is ruled out for that system",
+        "No effect",
+        "It becomes the top pick",
+        "Only affects TypeScript"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Claude only."
+    },
+    {
+      "id": "ca13",
+      "kind": "single",
+      "industry": "IT operations",
+      "question": "What is allowed_tools for?",
+      "options": [
+        "Listing tools the agent may use without prompting",
+        "Listing models",
+        "Listing users",
+        "Listing hooks"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Least privilege."
+    },
+    {
+      "id": "ca14",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Which languages does the SDK support?",
+      "options": [
+        "Python and TypeScript",
+        "Only Java",
+        "Only Go",
+        "Only C#"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Two languages."
+    },
+    {
+      "id": "ca15",
+      "kind": "single",
+      "industry": "Research",
+      "question": "What are subagents?",
+      "options": [
+        "Specialised agents the main agent can delegate to",
+        "Separate companies",
+        "Model versions",
+        "Logging levels"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Delegation within the harness."
+    },
+    {
+      "id": "ca16",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "How are tool names from an MCP server shown in allowed_tools?",
+      "options": [
+        "mcp__server__tool",
+        "server.tool",
+        "tool@server",
+        "/server/tool"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "For example mcp__bank__get_transaction."
+    },
+    {
+      "id": "ca17",
+      "kind": "multi",
+      "industry": "IT operations",
+      "question": "Which are harness features beyond a plain loop? Select all that apply.",
+      "options": [
+        "Context management for long tasks",
+        "Hooks and permission modes",
+        "A guaranteed cheaper model",
+        "Automatic regulatory approval"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Harness capabilities."
+    },
+    {
+      "id": "ca18",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What is a hook’s deny decision for?",
+      "options": [
+        "Blocking a specific tool call with a reason",
+        "Deleting the session",
+        "Changing the prompt",
+        "Ending the company"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Returned from PreToolUse."
+    },
+    {
+      "id": "ca19",
+      "kind": "single",
+      "industry": "Research",
+      "question": "For a simple two-tool support agent, is this SDK the best fit?",
+      "options": [
+        "Usually not: it is more than needed",
+        "Always",
+        "Only on Fridays",
+        "Only with Bash"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Match power to the task."
+    },
+    {
+      "id": "ca20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "When does the SDK top the chooser?",
+      "options": [
+        "When built-in workspace tools are essential and Claude is acceptable",
+        "When Java is required",
+        "When providers must switch",
+        "When several agents must collaborate in .NET"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its sweet spot."
+    }
+  ]
+}

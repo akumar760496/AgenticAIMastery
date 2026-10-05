@@ -1,0 +1,810 @@
+{
+  "id": "tuneeval",
+  "moduleSlug": "fine-tuning",
+  "name": "Evaluate Before and After Tuning",
+  "shortName": "Before and after",
+  "question": "Did tuning actually make it better, and what did it break?",
+  "summary": "A tuned model must beat a strong prompted baseline on a held-out test set that never appeared in training, by more than the noise, and must not lose general skills or safety behaviour along the way. Deduplicate test items against training data, size the test set for the difference you expect, and run general and safety suites, because fine-tuning can cause catastrophic forgetting.",
+  "useCases": [
+    "Every fine-tuning run, before it ships",
+    "Every retrain when data or the base model changes",
+    "Vendor claims that a tuned model is better"
+  ],
+  "keyFacts": {
+    "label": "Checks",
+    "items": [
+      {
+        "term": "Held-out set",
+        "detail": "real inputs, never in training; deduplicate by exact and near match"
+      },
+      {
+        "term": "Strong baseline",
+        "detail": "the best prompted, retrieval-augmented base model"
+      },
+      {
+        "term": "Significance",
+        "detail": "the test set must be large enough for the expected gain"
+      },
+      {
+        "term": "Contamination",
+        "detail": "test items seen in training inflate the measured gain"
+      },
+      {
+        "term": "Regressions",
+        "detail": "general skills and safety suites before and after"
+      },
+      {
+        "term": "Re-evaluate",
+        "detail": "when the base model, data or task changes (Panel 1)"
+      }
+    ]
+  },
+  "steps": [
+    "Freeze a held-out test set from real traffic and deduplicate it against training data",
+    "Measure the best prompted baseline and the tuned model on it",
+    "Run general-capability and safety suites before and after",
+    "Ship only if the gain exceeds the noise and nothing important regressed"
+  ],
+  "pitfalls": [
+    "Test items leaking into training data",
+    "A test set too small to separate a 4-point gain from noise",
+    "Measuring only the target task and missing lost skills"
+  ],
+  "tools": [
+    "Inspect (UK AISI)",
+    "lm-evaluation-harness",
+    "promptfoo",
+    "OpenAI Evals",
+    "Hugging Face datasets deduplication"
+  ],
+  "remember": "Held out, deduplicated, big enough, and check what broke.",
+  "caption": "Illustrative: a 4-point gain on the task hides a 6-point loss on general skills.",
+  "comparison": {
+    "scope": "Proof that tuning helped",
+    "cost": 2,
+    "needs": "Clean test sets and suites",
+    "best": "Contamination and hidden regressions"
+  },
+  "diagram": {
+    "file": "diagrams/tuneeval.svg"
+  },
+  "lesson": {
+    "file": "compare.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def dedupe(test, train, threshold=0.8):",
+        "steps": []
+      },
+      {
+        "text": "    lsh = MinHashLSH(threshold=threshold, num_perm=128)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    for i, t in enumerate(train):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        lsh.insert(str(i), minhash(t[\"text\"]))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return [t for t in test if not lsh.query(minhash(t[\"text\"]))]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def gain_with_ci(base_scores, tuned_scores):",
+        "steps": []
+      },
+      {
+        "text": "    diffs = [t - b for b, t in zip(base_scores, tuned_scores)]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    n = len(diffs)",
+        "steps": []
+      },
+      {
+        "text": "    mean = sum(diffs) / n",
+        "steps": []
+      },
+      {
+        "text": "    sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / (n - 1))",
+        "steps": []
+      },
+      {
+        "text": "    return mean, 1.96 * sd / math.sqrt(n)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "clean = dedupe(load(\"test_1000.jsonl\"), load(\"train.jsonl\"))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "BASE = best_prompted_baseline()                 # not just the untuned model",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "for suite in [clean, load(\"general.jsonl\"), load(\"safety.jsonl\")]:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    print(gain_with_ci(score(BASE, suite), score(TUNED, suite)))",
+        "steps": []
+      },
+      {
+        "text": "decide_rollout(gain, regressions)               # keep, narrow or drop",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Remove contaminated test cases",
+        "text": "Near-duplicates of training examples inflate scores. Here 30% of the original test set had them."
+      },
+      {
+        "title": "Use enough test cases",
+        "text": "With 50 cases, the margin of error on a difference is about ±16 points. With 1,000 it is about ±3.5."
+      },
+      {
+        "title": "Report the gain with an interval",
+        "text": "Scoring both models on the same cases and giving a confidence interval shows whether the gain is real."
+      },
+      {
+        "title": "Compare with the best baseline",
+        "text": "Beating the untuned base is easy. The question is whether tuning beats the best prompted or RAG setup."
+      },
+      {
+        "title": "Check what tuning broke",
+        "text": "General-knowledge and safety suites, run on both models with the same settings, show forgetting that the target task hides."
+      },
+      {
+        "title": "Decide the rollout",
+        "text": "The real gain was 4 points, with drops of 6 on general questions and 3 on refusals. The tuned model now handles notes only."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"21\" text-anchor=\"middle\">test ∩ train: 30% near-duplicates removed</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"47\" style=\"text-anchor:end;--d:0s\">n = 50</text><rect x=\"118\" y=\"37\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"37\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"47\" style=\"text-anchor:start;--d:0.2s\">± 15.7 pts</text><text class=\"tl a\" x=\"112\" y=\"69\" style=\"text-anchor:end;--d:0.1s\">n = 1,000</text><rect x=\"118\" y=\"59\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"59\" width=\"41.8\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"69\" style=\"text-anchor:start;--d:0.30000000000000004s\">± 3.5 pts</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"99\" style=\"text-anchor:end;--d:0s\">claimed gain</text><rect x=\"118\" y=\"89\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"89\" width=\"114\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"99\" style=\"text-anchor:start;--d:0.2s\">+12</text><text class=\"tl a\" x=\"112\" y=\"121\" style=\"text-anchor:end;--d:0.1s\">clean gain</text><rect x=\"118\" y=\"111\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"111\" width=\"38\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"121\" style=\"text-anchor:start;--d:0.30000000000000004s\">+4 ± 3.5</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"138\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"153\" text-anchor=\"middle\">baseline = best prompt or RAG, not the raw base</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"168\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"183\" text-anchor=\"middle\">general −6 pts</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"184\" y=\"168\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"183\" text-anchor=\"middle\">safety −3 pts</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--pass)\">tuned model for underwriting notes only</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Shows whether the gain is real",
+      "Catches contamination and forgetting",
+      "Makes rollout decisions defensible",
+      "Reusable for every retrain"
+    ],
+    "cons": [
+      "Large clean test sets take effort",
+      "Regression suites cost compute",
+      "Intervals may show no clear winner",
+      "Needs discipline to keep test data out of training"
+    ],
+    "avoidWhen": [
+      "Reporting a single number on a small test set",
+      "Choosing checkpoints on the test set"
+    ],
+    "tools": [
+      {
+        "name": "lm-evaluation-harness",
+        "type": "Open source",
+        "what": "Standard benchmarks across checkpoints",
+        "url": "https://github.com/EleutherAI/lm-evaluation-harness"
+      },
+      {
+        "name": "Inspect (UK AISI)",
+        "type": "Open source",
+        "what": "Custom task and safety evaluations",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "Promptfoo",
+        "type": "Open source",
+        "what": "Side-by-side comparisons on your cases",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "datasketch",
+        "type": "Open source",
+        "what": "MinHash near-duplicate detection",
+        "url": "https://ekzhu.com/datasketch/"
+      },
+      {
+        "name": "OpenAI Evals",
+        "type": "Open source",
+        "what": "Eval templates and runners",
+        "url": "https://github.com/openai/evals"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A lending startup says fine-tuning improved its underwriting-notes model by 12 points. The true improvement is 4 points. Choose the test-set size and how much of it leaked from training, and switch on general and safety suites. Compare the measured gain, its margin of error and the regressions with the truth.",
+    "controls": [
+      "Choose 50, 200 or 1,000 test cases.",
+      "Choose how many test cases have near-duplicates in the training data: 0%, 10% or 30%.",
+      "Switch on general-knowledge and safety suites, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Measured gain",
+        "meaning": "The improvement the test set reports; the true value is +4."
+      },
+      {
+        "name": "Margin of error (95%)",
+        "meaning": "Half-width of the interval on the difference between two models."
+      },
+      {
+        "name": "Gain clearly above zero",
+        "meaning": "Whether the gain is larger than its margin of error."
+      },
+      {
+        "name": "General knowledge · safety refusals",
+        "meaning": "Regressions, shown only when the suites are run."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "50 cases, 10% leaked",
+        "expect": "+6.7 ± 15.7 points: impossible to tell."
+      },
+      {
+        "k": "claimed",
+        "name": "The claimed result",
+        "expect": "+12.0 on 50 cases with 30% leaked: 8 points unearned."
+      },
+      {
+        "k": "bigger",
+        "name": "200 cases, 10% leaked",
+        "expect": "+6.7 ± 7.8: still inflated and still unclear."
+      },
+      {
+        "k": "clean",
+        "name": "1,000 clean cases",
+        "expect": "+4.0 ± 3.5: a real gain, but nothing else checked."
+      }
+    ],
+    "missions": [
+      {
+        "k": "tight",
+        "text": "Get a margin of error under 4 points on a deduplicated test set.",
+        "hint": "Clean the test set and use enough cases."
+      },
+      {
+        "k": "full",
+        "text": "Get the honest picture: clean, tight, and both regression suites run.",
+        "hint": "What might tuning have broken?"
+      },
+      {
+        "k": "bigger",
+        "text": "Show that a bigger test set does not fix contamination: 1,000 cases and a measured gain of 12.",
+        "hint": "Size cannot cancel leaked cases."
+      }
+    ],
+    "tools": [
+      {
+        "n": "lm-evaluation-harness",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Standard benchmarks run the same way on base and tuned checkpoints.",
+        "ex": "Run general-knowledge suites on both models with identical settings.",
+        "pros": [
+          "Hundreds of tasks",
+          "Widely used and comparable"
+        ],
+        "cons": [
+          "Custom tasks need config",
+          "Benchmarks may not match your domain"
+        ],
+        "url": "https://github.com/EleutherAI/lm-evaluation-harness"
+      },
+      {
+        "n": "Inspect (UK AISI)",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Custom task and safety evaluations with scorers.",
+        "ex": "Build a refusal suite and score both models.",
+        "pros": [
+          "Flexible",
+          "Safety evaluations available"
+        ],
+        "cons": [
+          "Code to write",
+          "Learning curve"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "n": "datasketch",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "MinHash near-duplicate detection between test and training data.",
+        "ex": "Drop test cases with near-copies in the training set.",
+        "pros": [
+          "Fast on large sets",
+          "Simple API"
+        ],
+        "cons": [
+          "Threshold needs choosing",
+          "Text similarity only"
+        ],
+        "url": "https://ekzhu.com/datasketch/"
+      },
+      {
+        "n": "Promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Side-by-side comparisons of base, tuned and prompted models on your cases.",
+        "ex": "Compare the tuned model with the best prompted baseline.",
+        "pros": [
+          "Fast feedback",
+          "Runs in CI"
+        ],
+        "cons": [
+          "No built-in confidence intervals",
+          "You write the cases"
+        ],
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I need to prove a tuned model is better",
+        "tool": "A clean, large held-out set with intervals"
+      },
+      {
+        "need": "I worry tuning broke something",
+        "tool": "General and safety suites on both models"
+      },
+      {
+        "need": "Scores look too good",
+        "tool": "Check test–train overlap first"
+      }
+    ],
+    "goals": [
+      "See how contamination inflates scores",
+      "See how test size sets the margin of error",
+      "Check what tuning broke, not just what it fixed"
+    ]
+  },
+  "practice": {
+    "scenario": "A lending startup reported a 12-point gain from fine-tuning its underwriting-notes model. An audit found that 30% of the test cases had near-duplicates in the training set, and the test set had only 50 cases. On a clean set of 1,000, the real gain was 4 points, and a general-knowledge suite showed a 6-point drop and the refusal suite a 3-point drop. The team kept the tuned model for notes only and routed other questions to the base model.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Proving a tuned underwriting assistant is better and safe"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Checking a tuned summariser has not lost safety refusals"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Measuring a tuned model against the prompted baseline, not the untuned base"
+      }
+    ],
+    "analogy": "An exam where some questions were in the practice paper: scores rise without anyone learning more. A fair exam uses fresh questions, enough of them to trust the score, and checks the subjects you did not revise.",
+    "library": {
+      "name": "lm-evaluation-harness and Inspect",
+      "what": "Run standard and custom suites on the base and tuned models with the same settings, and compare with confidence intervals.",
+      "install": "pip install lm-eval inspect-ai"
+    },
+    "note": "Compare against the best prompted baseline, not only the untuned base model, and run general and safety suites to see what tuning broke.",
+    "samples": [
+      {
+        "file": "compare.py",
+        "language": "python",
+        "code": "import math\nfrom datasketch import MinHash, MinHashLSH\n\ndef dedupe(test, train, threshold=0.8):\n    \"\"\"Drop test cases that have a near-duplicate in the training data.\"\"\"\n    lsh = MinHashLSH(threshold=threshold, num_perm=128)\n    for i, t in enumerate(train):\n        lsh.insert(str(i), minhash(t[\"text\"]))\n    return [t for t in test if not lsh.query(minhash(t[\"text\"]))]\n\ndef gain_with_ci(base_scores, tuned_scores):\n    \"\"\"Difference in accuracy with a 95% confidence interval (paired items).\"\"\"\n    diffs = [t - b for b, t in zip(base_scores, tuned_scores)]\n    n = len(diffs)\n    mean = sum(diffs) / n\n    sd = math.sqrt(sum((d - mean) ** 2 for d in diffs) / (n - 1))\n    return mean, 1.96 * sd / math.sqrt(n)\n\nclean = dedupe(load(\"test.jsonl\"), load(\"train.jsonl\"))\nfor suite in [clean, load(\"general.jsonl\"), load(\"safety.jsonl\")]:\n    print(gain_with_ci(score(BASE, suite), score(TUNED, suite)))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Two models are compared on n = 200 test cases each, with accuracy near 80%. Using 1.96 × √(2 × 0.8 × 0.2 ÷ n), what is the 95% margin of error on the difference, in accuracy points?",
+    "answer": "√(2 × 0.16 ÷ 200) = √0.0016 = 0.04, times 1.96 = 0.0784, or about 7.8 points. A 4-point gain is within the noise; with 1,000 cases the margin is 3.5 points. (Scoring both models on the same items, a paired test, tightens this.)",
+    "expected": {
+      "value": 7.8,
+      "tolerance": 0.1,
+      "label": "± points ="
+    },
+    "interview": [
+      {
+        "question": "How can a fine-tuning gain be overstated?",
+        "answer": "Test cases that leaked into training (contamination), a test set too small to separate the models, comparing with the untuned base instead of the best prompted baseline, or cherry-picking the checkpoint on the test set. Deduplicate, use a large held-out set, compare with a strong baseline and report confidence intervals."
+      },
+      {
+        "question": "What should you check besides the target task?",
+        "answer": "What tuning may have broken: general knowledge and reasoning, instruction following, safety refusals and other tasks the model handles. Tuning on a narrow task can cause forgetting elsewhere, so run general and safety regression suites on the base and tuned models with the same settings."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "A 50-case test set",
+        "fix": "Use hundreds or thousands of cases and report intervals"
+      },
+      {
+        "mistake": "Only testing the target task",
+        "fix": "Add general and safety regression suites"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "te01",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is test-set contamination?",
+      "options": [
+        "Test cases or near-copies appearing in training data",
+        "A test set that is too large",
+        "Noise in labels",
+        "A slow GPU"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Leaked cases inflate scores."
+    },
+    {
+      "id": "te02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Two models at about 80% accuracy on 200 cases each: roughly what is the 95% margin on their difference?",
+      "options": [
+        "±2 points",
+        "±4 points",
+        "±8 points",
+        "±16 points"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1.96 × √(2 × 0.16 ÷ 200) ≈ 7.8 points."
+    },
+    {
+      "id": "te03",
+      "kind": "single",
+      "industry": "General",
+      "question": "A tuned model should be compared with…",
+      "options": [
+        "The best prompted or RAG baseline",
+        "Only the untuned base model",
+        "Last year’s model",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Beating a weak baseline proves little."
+    },
+    {
+      "id": "te04",
+      "kind": "single",
+      "industry": "General",
+      "question": "How do you find near-duplicates between test and training data at scale?",
+      "options": [
+        "MinHash or embedding similarity",
+        "Counting characters",
+        "Asking the model",
+        "Sorting alphabetically"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Approximate deduplication finds near-copies."
+    },
+    {
+      "id": "te05",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which suites should run on both base and tuned models? Select all that apply.",
+      "options": [
+        "General knowledge and reasoning",
+        "Safety refusals",
+        "Only the training data",
+        "Only one favourite example"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Regression and safety suites show what tuning broke."
+    },
+    {
+      "id": "te06",
+      "kind": "single",
+      "industry": "General",
+      "question": "Increasing the test set from 200 to 1,000 cases does what to the margin of error?",
+      "options": [
+        "Shrinks it by about √5, to under half",
+        "Leaves it unchanged",
+        "Doubles it",
+        "Makes it zero"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The margin scales with 1/√n."
+    },
+    {
+      "id": "te07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "30% of test cases leaked from training. Does a bigger test set with the same leak rate fix the bias?",
+      "options": [
+        "No: it narrows the interval around a wrong value",
+        "Yes, completely",
+        "Only on weekends",
+        "Only for small models"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Size reduces noise, not bias."
+    },
+    {
+      "id": "te08",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why score both models on the same test cases?",
+      "options": [
+        "A paired comparison removes case-to-case variation",
+        "It is faster to type",
+        "Different cases are illegal",
+        "To use fewer GPUs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pairing tightens the comparison."
+    },
+    {
+      "id": "te09",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is wrong with choosing the best checkpoint by its test-set score?",
+      "options": [
+        "The test set becomes part of training decisions, so its score is optimistic",
+        "Nothing",
+        "It is too slow",
+        "It uses too little data"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Use a separate validation set for choices."
+    },
+    {
+      "id": "te10",
+      "kind": "multi",
+      "industry": "General",
+      "question": "Which are signs a reported gain is unreliable? Select all that apply.",
+      "options": [
+        "A 50-case test set",
+        "No check for overlap with training data",
+        "A deduplicated set of 2,000 cases",
+        "A confidence interval reported"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Small and possibly contaminated sets are red flags."
+    },
+    {
+      "id": "te11",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "The tuned model gains 4 points on its task but loses 6 on general questions. A sensible choice?",
+      "options": [
+        "Route the task to the tuned model and the rest to the base",
+        "Replace the base everywhere",
+        "Discard both",
+        "Ignore the loss"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keep the gain where it applies."
+    },
+    {
+      "id": "te12",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is catastrophic forgetting?",
+      "options": [
+        "Losing previously learned abilities after further training",
+        "Forgetting the password",
+        "A crash during training",
+        "Running out of memory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Narrow tuning can erase other skills."
+    },
+    {
+      "id": "te13",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which tool runs many standard benchmarks the same way on different checkpoints?",
+      "options": [
+        "lm-evaluation-harness",
+        "Jinja2",
+        "Kafka",
+        "Terraform"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "EleutherAI’s harness standardises runs."
+    },
+    {
+      "id": "te14",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does a 95% confidence interval that includes zero tell you?",
+      "options": [
+        "You cannot rule out no improvement",
+        "The gain is certain",
+        "The model is broken",
+        "The test is contaminated"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The effect is not clearly distinguishable from zero."
+    },
+    {
+      "id": "te15",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Measured gain 12 points on 50 cases; true gain 4. Which two causes are most likely?",
+      "options": [
+        "Contamination and a small, noisy test set",
+        "Too many GPUs",
+        "A long prompt",
+        "Low temperature"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Leaked cases inflate; small sets add noise."
+    },
+    {
+      "id": "te16",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why run evaluations with identical settings for base and tuned models?",
+      "options": [
+        "So differences reflect the models, not the prompts or decoding",
+        "To save money only",
+        "It is not necessary",
+        "To confuse the judge"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Change one thing at a time."
+    },
+    {
+      "id": "te17",
+      "kind": "single",
+      "industry": "General",
+      "question": "After offline evaluation passes, what confirms a tuned model in production?",
+      "options": [
+        "A canary on a slice of live traffic with monitoring",
+        "Nothing further",
+        "A press release",
+        "A larger GPU"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Live traffic can differ from test sets."
+    },
+    {
+      "id": "te18",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which split avoids near-duplicate leakage for customer notes?",
+      "options": [
+        "Split by customer, so all of one customer’s notes are on one side",
+        "Split notes at random",
+        "Put all notes in both",
+        "Split by length"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Grouped splits prevent related leakage."
+    },
+    {
+      "id": "te19",
+      "kind": "single",
+      "industry": "General",
+      "question": "What should a before-and-after report include?",
+      "options": [
+        "Gain with interval, baseline used, contamination check and regressions",
+        "Only the best number",
+        "Only the model name",
+        "Only training loss"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Enough to judge the claim."
+    },
+    {
+      "id": "te20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A tuned summariser refuses unsafe requests 3 points less often. What should happen?",
+      "options": [
+        "Investigate and fix before rollout, or restrict its use",
+        "Ship it anyway",
+        "Remove the safety suite",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Safety regressions block release."
+    }
+  ]
+}

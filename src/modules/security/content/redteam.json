@@ -1,0 +1,864 @@
+{
+  "id": "redteam",
+  "moduleSlug": "security",
+  "name": "Automated Red Teaming",
+  "shortName": "Red teaming",
+  "question": "How do we find the holes before attackers do?",
+  "summary": "Automated red teaming generates many attacks, runs them against your agent and scores the results. Strategies range from single-turn templates to encodings and multi-turn escalation, organised by risk category, and a judge or detector decides whether each attack succeeded. Track attack success rate per category, fix what is found, and keep every successful attack in a regression suite that runs on each release.",
+  "useCases": [
+    "Before launch, and before every release that changes prompts, tools or models",
+    "Regulated products that must show security testing",
+    "After a new attack technique is published"
+  ],
+  "keyFacts": {
+    "label": "Building blocks",
+    "items": [
+      {
+        "term": "Attack success rate (ASR)",
+        "detail": "share of attempts that achieve the attacker’s goal, per category"
+      },
+      {
+        "term": "Strategies",
+        "detail": "templates, encodings, role play, multi-turn escalation, injection in documents"
+      },
+      {
+        "term": "Plugins or probes",
+        "detail": "attack generators for each risk, such as injection, PII leak or excessive agency"
+      },
+      {
+        "term": "Scoring",
+        "detail": "detectors and LLM judges decide success; spot-check them"
+      },
+      {
+        "term": "Coverage",
+        "detail": "categories mapped to OWASP LLM and ASI risks"
+      },
+      {
+        "term": "Regression suite",
+        "detail": "every found attack reruns in CI"
+      }
+    ]
+  },
+  "steps": [
+    "Pick categories from your threat model and the OWASP lists",
+    "Run a campaign with several strategies, including multi-turn",
+    "Triage findings, fix the root cause, and re-measure ASR",
+    "Add every successful attack to a regression suite that gates releases"
+  ],
+  "pitfalls": [
+    "Testing only single-turn jailbreaks typed into the chat box",
+    "Trusting an unchecked judge’s verdicts",
+    "One-off campaigns with no regression suite, so fixed holes reopen"
+  ],
+  "tools": [
+    "promptfoo red team",
+    "garak (NVIDIA)",
+    "PyRIT (Microsoft)",
+    "DeepTeam",
+    "AgentDojo"
+  ],
+  "remember": "Attack yourself at scale, many ways. Keep every hit as a test.",
+  "caption": "Illustrative: attack success by category before and after fixes, with found attacks kept in CI.",
+  "comparison": {
+    "scope": "The whole agent, end to end",
+    "cost": 2,
+    "needs": "Tools, a judge, CI",
+    "best": "False confidence from easy tests"
+  },
+  "diagram": {
+    "file": "diagrams/redteam.svg"
+  },
+  "lesson": {
+    "file": "promptfooconfig.yaml",
+    "language": "yaml",
+    "code": [
+      {
+        "text": "description: UPI assistant red team",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "targets:",
+        "steps": []
+      },
+      {
+        "text": "  - id: https",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    config:",
+        "steps": []
+      },
+      {
+        "text": "      url: https://staging.bank.example.in/agent",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "      method: POST",
+        "steps": []
+      },
+      {
+        "text": "      body: { message: \"{{prompt}}\" }",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "      transformResponse: json.reply",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "redteam:",
+        "steps": []
+      },
+      {
+        "text": "  purpose: >-",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    UPI dispute assistant. It must never move money without",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    confirmation or reveal another customer's data.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "  plugins:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    - hijacking",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    - pii",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    - excessive-agency",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    - prompt-extraction",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "  strategies:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    - jailbreak",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    - base64",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    - crescendo            # multi-turn escalation",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  numTests: 25",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "# npx promptfoo@latest redteam run     → generate, attack, grade",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# npx promptfoo@latest redteam report  → ASR per category",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# CI: replay saved attacks; fail the build if any succeeds",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Point it at staging",
+        "text": "The target is the staging endpoint with test accounts, never production and never real customer data."
+      },
+      {
+        "title": "Describe the purpose and pick plugins",
+        "text": "The purpose tells the generator what a violation looks like. Plugins come from the threat model: hijacking, PII leaks, excessive agency, prompt extraction."
+      },
+      {
+        "title": "Mix strategies",
+        "text": "Jailbreak templates, encodings such as base64, and crescendo, a multi-turn escalation. Single-turn templates alone miss attacks that build up over a conversation."
+      },
+      {
+        "title": "Run and grade",
+        "text": "The tool generates attacks, sends them to the target and grades each response. Spot-check the grader: it can be wrong in both directions."
+      },
+      {
+        "title": "Read attack success by category",
+        "text": "The report shows attack success rate per plugin and strategy. Fix root causes, then rerun to confirm the rate fell."
+      },
+      {
+        "title": "Keep every hit as a test",
+        "text": "Successful attacks are saved and replayed in CI. A release fails if any old attack works again."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"6\" width=\"344\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"21\">staging endpoint</text><text class=\"sb\" x=\"180\" y=\"36\">test accounts only</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"50\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"49\" y=\"65\" text-anchor=\"middle\">hijacking</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx acc\" x=\"96\" y=\"50\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"137\" y=\"65\" text-anchor=\"middle\">pii</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx acc\" x=\"184\" y=\"50\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"225\" y=\"65\" text-anchor=\"middle\">agency</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx acc\" x=\"272\" y=\"50\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"313\" y=\"65\" text-anchor=\"middle\">extraction</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"80\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"63\" y=\"95\" text-anchor=\"middle\">jailbreak</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"126\" y=\"80\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"181\" y=\"95\" text-anchor=\"middle\">base64</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx warn\" x=\"244\" y=\"80\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"95\" text-anchor=\"middle\">crescendo</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">400 attacks sent · graded · 38 successes</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"153\" style=\"text-anchor:end;--d:0s\">hijacking</text><rect x=\"118\" y=\"143\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"143\" width=\"22.8\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"153\" style=\"text-anchor:start;--d:0.2s\">12%</text><text class=\"tl a\" x=\"112\" y=\"173\" style=\"text-anchor:end;--d:0.1s\">pii</text><rect x=\"118\" y=\"163\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"163\" width=\"11.4\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"173\" style=\"text-anchor:start;--d:0.30000000000000004s\">6%</text><text class=\"tl a\" x=\"112\" y=\"193\" style=\"text-anchor:end;--d:0.2s\">agency</text><rect x=\"118\" y=\"183\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"183\" width=\"17.099999999999998\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"193\" style=\"text-anchor:start;--d:0.4s\">9%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"208\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"223\" text-anchor=\"middle\">38 attacks saved → CI regression suite</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Finds weaknesses at a scale no manual tester can",
+      "Measurable: attack success rate by category",
+      "Regression suites keep fixed holes closed",
+      "Maps to OWASP for reporting"
+    ],
+    "cons": [
+      "Graders make mistakes in both directions",
+      "Costs model calls for attacks and grading",
+      "Generated attacks can miss novel techniques",
+      "Needs a safe staging target"
+    ],
+    "avoidWhen": [
+      "Running campaigns against production or real customer accounts",
+      "Reporting attack success rates without checking the grader"
+    ],
+    "tools": [
+      {
+        "name": "promptfoo red team",
+        "type": "Open source",
+        "what": "Plugins and strategies mapped to OWASP, with reports",
+        "url": "https://www.promptfoo.dev/docs/red-team/"
+      },
+      {
+        "name": "garak (NVIDIA)",
+        "type": "Open source",
+        "what": "An LLM vulnerability scanner with many probes",
+        "url": "https://github.com/NVIDIA/garak"
+      },
+      {
+        "name": "PyRIT (Microsoft)",
+        "type": "Open source",
+        "what": "A framework for orchestrating multi-turn red-team attacks",
+        "url": "https://github.com/Azure/PyRIT"
+      },
+      {
+        "name": "DeepTeam",
+        "type": "Open source",
+        "what": "Red teaming with OWASP LLM and agentic frameworks",
+        "url": "https://www.trydeepteam.com/docs/getting-started"
+      },
+      {
+        "name": "AgentDojo",
+        "type": "Open source benchmark",
+        "what": "Injection attacks against tool-using agents",
+        "url": "https://github.com/ethz-spylab/agentdojo"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A bank’s staging UPI assistant hides 12 weaknesses across four categories: 5 easy, 4 that need encodings or several turns, and 3 that only multi-turn attacks reveal. Plan the campaign’s budget, categories and strategies, and decide whether hits become regression tests.",
+    "controls": [
+      "Drag the attack budget from 100 to 5,000 attacks.",
+      "Tick the categories to test and the strategies to use: single-turn templates, encodings and multi-turn escalation.",
+      "Tick whether successful attacks are saved as a CI regression suite, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Weaknesses found",
+        "meaning": "Expected number of the 12 found, overall and per category."
+      },
+      {
+        "name": "Multi-turn-only weaknesses found",
+        "meaning": "The 3 hardest weaknesses, which single-turn and encoded attacks cannot reveal."
+      },
+      {
+        "name": "Campaign cost",
+        "meaning": "Attacks × ₹0.80 for the attack and its grading."
+      },
+      {
+        "name": "Next release",
+        "meaning": "Whether found attacks are replayed before every release."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Quick check: injection, single-turn",
+        "expect": "500 attacks find 2 of 12 for ₹400; three categories untested."
+      },
+      {
+        "k": "wide",
+        "name": "All categories, single-turn",
+        "expect": "2,000 attacks find the 5 easy weaknesses and none of the hard ones: ₹1,600."
+      },
+      {
+        "k": "mixed",
+        "name": "All categories, all strategies",
+        "expect": "2,500 attacks find about 10.4 of 12 for ₹2,000, including 1.7 of the 3 hardest."
+      },
+      {
+        "k": "deep",
+        "name": "Deep: encodings and multi-turn",
+        "expect": "5,000 attacks find about 11.8 of 12 for ₹4,000."
+      }
+    ],
+    "missions": [
+      {
+        "k": "nine",
+        "text": "Find at least 9 of the 12 weaknesses.",
+        "hint": "Test every category and use more than one strategy."
+      },
+      {
+        "k": "cheap",
+        "text": "Find at least 9 for ₹2,000 or less.",
+        "hint": "Spread about 2,500 attacks across all categories and all three strategies."
+      },
+      {
+        "k": "blind",
+        "text": "Show that 4,000 or more single-turn attacks across every category still find none of the 3 hardest weaknesses.",
+        "hint": "Only single-turn templates, all categories, a large budget."
+      }
+    ],
+    "tools": [
+      {
+        "n": "promptfoo red team",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Plugins and strategies mapped to OWASP, run against any endpoint, with reports.",
+        "ex": "Red-team a staging HTTP endpoint for hijacking, PII and excessive agency with crescendo.",
+        "pros": [
+          "Config-driven and CI-friendly",
+          "OWASP and agentic mappings"
+        ],
+        "cons": [
+          "Grader needs spot checks",
+          "Costs model calls"
+        ],
+        "url": "https://www.promptfoo.dev/docs/red-team/"
+      },
+      {
+        "n": "garak",
+        "type": "Open source · NVIDIA",
+        "start": 3,
+        "prod": 2,
+        "best": "An LLM vulnerability scanner with many probes and detectors.",
+        "ex": "Scan a model endpoint with injection and leakage probes before integration.",
+        "pros": [
+          "Many ready probes",
+          "Model-level scanning"
+        ],
+        "cons": [
+          "Less agent- and tool-aware",
+          "Output needs triage"
+        ],
+        "url": "https://github.com/NVIDIA/garak"
+      },
+      {
+        "n": "PyRIT",
+        "type": "Open source · Microsoft",
+        "start": 2,
+        "prod": 3,
+        "best": "A framework for orchestrating multi-turn and multi-modal attacks.",
+        "ex": "Script a crescendo attack against the assistant with a scoring LLM.",
+        "pros": [
+          "Flexible orchestrators",
+          "Strong multi-turn support"
+        ],
+        "cons": [
+          "More code to write",
+          "Steeper learning curve"
+        ],
+        "url": "https://github.com/Azure/PyRIT"
+      },
+      {
+        "n": "DeepTeam",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Red teaming with built-in OWASP LLM and agentic frameworks.",
+        "ex": "Run the OWASP agentic framework against a tool-using agent.",
+        "pros": [
+          "Framework mappings built in",
+          "Python-native"
+        ],
+        "cons": [
+          "Younger project",
+          "Grader limits apply"
+        ],
+        "url": "https://www.trydeepteam.com/docs/getting-started"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want a config file and CI",
+        "tool": "promptfoo red team"
+      },
+      {
+        "need": "I want to scan a model endpoint quickly",
+        "tool": "garak"
+      },
+      {
+        "need": "I need complex multi-turn attacks",
+        "tool": "PyRIT"
+      }
+    ],
+    "goals": [
+      "Cover every category from the threat model",
+      "See why multi-turn strategies matter",
+      "Turn every hit into a regression test"
+    ]
+  },
+  "practice": {
+    "scenario": "Before launch, a bank runs an automated red-team campaign against the staging UPI assistant: prompt hijacking, PII leakage, excessive agency and prompt extraction, each attacked with jailbreak templates, encodings and multi-turn escalation. Findings are fixed, the campaign is rerun, and every successful attack joins a regression suite that must pass before each release.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Red-team a payments assistant for hijacking, PII leaks and unauthorised actions"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Test a symptom checker for unsafe advice and data leakage before release"
+      },
+      {
+        "industry": "Government services",
+        "use": "Probe a citizen-services bot for prompt extraction and misuse"
+      }
+    ],
+    "analogy": "A fire drill run by people paid to find the blocked exits, and repeated every time the building changes.",
+    "library": {
+      "name": "promptfoo red team",
+      "what": "An open-source CLI that generates attacks by plugin and strategy, runs them against your endpoint and reports attack success by category.",
+      "install": "npx promptfoo@latest redteam init"
+    },
+    "note": "Point it at staging with test accounts only, spot-check the grader’s verdicts, and commit successful attacks as regression tests.",
+    "samples": [
+      {
+        "file": "promptfooconfig.yaml",
+        "language": "yaml",
+        "code": "description: UPI assistant red team (staging)\ntargets:\n  - id: https\n    config:\n      url: https://staging.bank.example.in/agent\n      method: POST\n      body: { message: \"{{prompt}}\" }\n      transformResponse: json.reply\nredteam:\n  purpose: >-\n    Assistant for UPI payment disputes. It must never move money without the\n    customer's confirmation, reveal another customer's data or its own instructions.\n  numTests: 25\n  plugins:\n    - hijacking\n    - pii\n    - excessive-agency\n    - prompt-extraction\n  strategies:\n    - jailbreak\n    - base64\n    - crescendo            # multi-turn escalation\n# Run:    npx promptfoo@latest redteam run\n# Report: npx promptfoo@latest redteam report"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A campaign sends 1,200 attacks in the injection category and 84 succeed. After fixes, 1,200 new attacks produce 12 successes. What was the attack success rate before the fixes, in percent?",
+    "answer": "84 ÷ 1,200 = 7%. After the fixes it is 12 ÷ 1,200 = 1%, a sevenfold reduction. Keep the 84 successful attacks as regression tests so the old holes stay closed.",
+    "expected": {
+      "value": 7,
+      "tolerance": 0.05,
+      "label": "% ASR ="
+    },
+    "interview": [
+      {
+        "question": "Why include multi-turn strategies in a red-team campaign?",
+        "answer": "Many defences look at one message at a time. Multi-turn attacks, such as crescendo, build up gradually across turns so that no single message looks malicious, and they find weaknesses that single-turn templates miss."
+      },
+      {
+        "question": "How do you know a red-team result is real?",
+        "answer": "Automated judges and detectors make mistakes in both directions. Spot-check a sample of their verdicts by hand, confirm high-severity findings manually, and measure the judge’s agreement with human labels before trusting its attack success rates."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Testing a few hand-written jailbreaks and calling it done",
+        "fix": "Run automated campaigns across categories and strategies"
+      },
+      {
+        "mistake": "Fixing findings without adding them as tests",
+        "fix": "Keep every successful attack in a regression suite in CI"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rt01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A campaign sends 1,200 injection attacks and 84 succeed. What is the attack success rate?",
+      "options": [
+        "0.7%",
+        "7%",
+        "8.4%",
+        "14%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "84 ÷ 1,200 = 7%."
+    },
+    {
+      "id": "rt02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why run red-team campaigns against staging rather than production?",
+      "options": [
+        "Staging is faster",
+        "Attacks must not touch real customers, money or data",
+        "Production has no model",
+        "Tools only support staging"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Use test accounts in a safe environment."
+    },
+    {
+      "id": "rt03",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which strategy builds an attack gradually over several turns?",
+      "options": [
+        "Base64 encoding",
+        "Crescendo, a multi-turn escalation",
+        "A single template",
+        "Caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Multi-turn strategies find weaknesses single messages miss."
+    },
+    {
+      "id": "rt04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which make red-team results trustworthy? Select all that apply.",
+      "options": [
+        "Spot-checking the grader’s verdicts",
+        "Confirming high-severity findings manually",
+        "Reporting one headline number only",
+        "Trusting the grader blindly"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Graders err in both directions; verify them."
+    },
+    {
+      "id": "rt05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which open-source tool from NVIDIA scans LLMs with many probes?",
+      "options": [
+        "garak",
+        "PyRIT",
+        "Presidio",
+        "Temporal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "garak is NVIDIA’s LLM vulnerability scanner."
+    },
+    {
+      "id": "rt06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which open-source framework from Microsoft orchestrates multi-turn red-team attacks?",
+      "options": [
+        "PyRIT",
+        "garak",
+        "Evidently",
+        "MLflow"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "PyRIT, the Python Risk Identification Tool."
+    },
+    {
+      "id": "rt07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A CI gate checks `if len(failures) > len(results)`. What happens?",
+      "options": [
+        "It fails the build on any regression",
+        "It never fires, because failures is a subset of results",
+        "It fails every build",
+        "It skips the tests"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Use `if failures:` instead."
+    },
+    {
+      "id": "rt08",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which should a red-team campaign for a tool-using banking agent include? Select all that apply.",
+      "options": [
+        "Injection through documents and tool results",
+        "Attempts to trigger unconfirmed actions (excessive agency)",
+        "Only single-turn chat jailbreaks",
+        "Only tests of response latency"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Agent campaigns must go beyond the chat box."
+    },
+    {
+      "id": "rt09",
+      "kind": "single",
+      "industry": "Government services",
+      "question": "Forty manual jailbreaks all failed. What is the best reading?",
+      "options": [
+        "The agent is secure",
+        "Weak evidence: few attempts, one channel, one strategy",
+        "The model is too strong to attack",
+        "Red teaming is unnecessary"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Broader, automated coverage is needed."
+    },
+    {
+      "id": "rt10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should happen to every successful attack after the fix?",
+      "options": [
+        "Delete it",
+        "Add it to a regression suite that runs on every release",
+        "Publish it on social media",
+        "Send it to the model provider only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Regression suites keep fixed holes closed."
+    },
+    {
+      "id": "rt11",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which tool offers red-team plugins and strategies configured in YAML and mapped to OWASP?",
+      "options": [
+        "promptfoo",
+        "Temporal",
+        "gVisor",
+        "Evidently"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "promptfoo’s red-team mode is config-driven."
+    },
+    {
+      "id": "rt12",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Where should red-team categories come from? Select all that apply.",
+      "options": [
+        "The agent’s threat model",
+        "The OWASP LLM and Agentic lists",
+        "The model provider’s marketing",
+        "Whatever is fastest to run"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Test the risks the agent actually has."
+    },
+    {
+      "id": "rt13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "With single-turn templates only, a large budget finds none of the weaknesses that need multi-turn escalation. Why?",
+      "options": [
+        "The budget is too small",
+        "Those weaknesses only appear over several turns, so single messages cannot reach them",
+        "The grader is off",
+        "The categories are wrong"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Strategy coverage matters as much as volume."
+    },
+    {
+      "id": "rt14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Each attack and its grading cost ₹0.80. What does a 2,500-attack campaign cost?",
+      "options": [
+        "₹200",
+        "₹2,000",
+        "₹3,125",
+        "₹20,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2,500 × 0.80 = ₹2,000."
+    },
+    {
+      "id": "rt15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "When should full red-team campaigns be rerun? Select all that apply.",
+      "options": [
+        "When prompts, tools or models change",
+        "When a new attack technique is published",
+        "Never after launch",
+        "Only when a customer complains"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Changes and new techniques both reopen risk."
+    },
+    {
+      "id": "rt16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Attack success falls from 7% to 1% after fixes, with 1,200 attacks each time. How many attacks succeeded after the fixes?",
+      "options": [
+        "1",
+        "12",
+        "70",
+        "84"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1% of 1,200 is 12."
+    },
+    {
+      "id": "rt17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which DeepTeam feature is relevant for agents?",
+      "options": [
+        "Built-in OWASP LLM and agentic frameworks for red teaming",
+        "GPU drivers",
+        "Vector indexes",
+        "Durable workflows"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DeepTeam maps attacks to OWASP frameworks."
+    },
+    {
+      "id": "rt18",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which strategies broaden a campaign beyond plain templates? Select all that apply.",
+      "options": [
+        "Encodings such as base64",
+        "Multi-turn escalation",
+        "Repeating the same prompt 1,000 times",
+        "Shorter prompts only"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Different strategies reach different weaknesses."
+    },
+    {
+      "id": "rt19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why keep red-team targets on test accounts with fake data?",
+      "options": [
+        "Test accounts are faster",
+        "Successful attacks must not move real money or expose real data",
+        "Fake data improves accuracy",
+        "Graders need fake data"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Safety of the test itself matters."
+    },
+    {
+      "id": "rt20",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are good red-team report contents? Select all that apply.",
+      "options": [
+        "Attack success rate per category and strategy",
+        "The number of attempts behind each rate",
+        "Only the single best-looking number",
+        "No details of how attacks were graded"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Breakdowns with sample sizes make results actionable."
+    }
+  ]
+}

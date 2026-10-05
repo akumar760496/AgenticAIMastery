@@ -1,0 +1,210 @@
+{
+  "slug": "rag",
+  "number": 18,
+  "techniqueOrder": [
+    "parse",
+    "chunk",
+    "llm",
+    "rerank",
+    "cite",
+    "qoa",
+    "graphrag"
+  ],
+  "glossary": [
+    {
+      "term": "OCR",
+      "definition": "Optical character recognition: turning images of text, such as scanned pages, into machine-readable text."
+    },
+    {
+      "term": "text layer",
+      "definition": "The embedded, selectable text in a digital PDF; scanned pages have none."
+    },
+    {
+      "term": "reading order",
+      "definition": "The sequence in which blocks of a page should be read, which matters for multi-column layouts."
+    },
+    {
+      "term": "chunk overlap",
+      "definition": "Tokens repeated at the end of one chunk and the start of the next, so boundary sentences are not lost."
+    },
+    {
+      "term": "small-to-big retrieval",
+      "definition": "Searching small chunks for precision, then returning their larger parent section to the model."
+    },
+    {
+      "term": "contextual chunk header",
+      "definition": "The document title and section path prepended to a chunk before embedding."
+    },
+    {
+      "term": "query rewriting",
+      "definition": "Using a model to turn a vague or conversational question into a standalone search query."
+    },
+    {
+      "term": "re-ranking",
+      "definition": "Reordering a retrieved candidate list with a more precise model, keeping only the best few."
+    },
+    {
+      "term": "grounded answer",
+      "definition": "An answer whose every claim is supported by the provided sources."
+    },
+    {
+      "term": "citation verification",
+      "definition": "Checking in code that each cited span exists in its source and supports the claim."
+    },
+    {
+      "term": "corrective RAG",
+      "definition": "A pattern that grades retrieved passages and rewrites the query, switches source or abstains when they are weak."
+    },
+    {
+      "term": "community summary",
+      "definition": "An LLM-written report of a cluster of related entities in a GraphRAG index."
+    },
+    {
+      "term": "global search",
+      "definition": "GraphRAG query mode that maps over community summaries and reduces them into one answer about the whole corpus."
+    },
+    {
+      "term": "Leiden algorithm",
+      "definition": "A community detection method that groups densely connected nodes, used by GraphRAG at several levels."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "HyDE: Precise zero-shot dense retrieval (Gao et al., 2022)",
+      "url": "https://arxiv.org/abs/2212.10496"
+    },
+    {
+      "id": "S2",
+      "title": "Query rewriting for retrieval-augmented LLMs (Ma et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.14283"
+    },
+    {
+      "id": "S3",
+      "title": "Anthropic: Introducing Contextual Retrieval",
+      "url": "https://www.anthropic.com/news/contextual-retrieval"
+    },
+    {
+      "id": "S4",
+      "title": "Cohere: Rerank overview",
+      "url": "https://docs.cohere.com/docs/rerank-overview"
+    },
+    {
+      "id": "S5",
+      "title": "Weaviate: Query Agent overview",
+      "url": "https://docs.weaviate.io/query-agent"
+    },
+    {
+      "id": "S6",
+      "title": "Pydantic documentation: models and validators",
+      "url": "https://docs.pydantic.dev"
+    },
+    {
+      "id": "S7",
+      "title": "Corrective Retrieval Augmented Generation (Yan et al., 2024)",
+      "url": "https://arxiv.org/abs/2401.15884"
+    },
+    {
+      "id": "S8",
+      "title": "Docling technical report (Auer et al., 2024)",
+      "url": "https://arxiv.org/abs/2408.09869"
+    },
+    {
+      "id": "S9",
+      "title": "Tesseract OCR documentation",
+      "url": "https://tesseract-ocr.github.io/tessdoc/"
+    },
+    {
+      "id": "S10",
+      "title": "PyMuPDF documentation",
+      "url": "https://pymupdf.readthedocs.io"
+    },
+    {
+      "id": "S11",
+      "title": "LangChain: text splitters",
+      "url": "https://docs.langchain.com/oss/python/integrations/splitters"
+    },
+    {
+      "id": "S12",
+      "title": "Chroma research: Evaluating chunking strategies for retrieval",
+      "url": "https://research.trychroma.com/evaluating-chunking"
+    },
+    {
+      "id": "S13",
+      "title": "BAAI bge-reranker-v2-m3 model card",
+      "url": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+    },
+    {
+      "id": "S14",
+      "title": "Sentence Transformers: cross-encoders",
+      "url": "https://www.sbert.net/examples/cross_encoder/applications/README.html"
+    },
+    {
+      "id": "S15",
+      "title": "Anthropic: Citations",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/citations"
+    },
+    {
+      "id": "S16",
+      "title": "Ragas: faithfulness metric",
+      "url": "https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/"
+    },
+    {
+      "id": "S17",
+      "title": "Self-RAG: learning to retrieve, generate and critique (Asai et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.11511"
+    },
+    {
+      "id": "S18",
+      "title": "From local to global: a Graph RAG approach to query-focused summarization (Edge et al., 2024)",
+      "url": "https://arxiv.org/abs/2404.16130"
+    },
+    {
+      "id": "S19",
+      "title": "Microsoft GraphRAG documentation",
+      "url": "https://microsoft.github.io/graphrag/"
+    },
+    {
+      "id": "S20",
+      "title": "Microsoft Research: LazyGraphRAG",
+      "url": "https://www.microsoft.com/en-us/research/blog/lazygraphrag-setting-a-new-standard-for-quality-and-cost/"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Scanned forms and tables come back as empty or jumbled text",
+      "techniqueId": "parse",
+      "advice": "Check for a text layer, OCR the scans in the right languages, keep tables as rows and drop headers."
+    },
+    {
+      "symptom": "Answers miss the exception or condition in a clause",
+      "techniqueId": "chunk",
+      "advice": "Chunk by clause with the section path prepended, and search small chunks but return the whole clause."
+    },
+    {
+      "symptom": "Follow-up questions like “and the other one?” find nothing",
+      "techniqueId": "llm",
+      "advice": "Rewrite the follow-up into a standalone query, and add multi-query or HyDE if wording varies."
+    },
+    {
+      "symptom": "The right passage is retrieved but ranked 15th",
+      "techniqueId": "rerank",
+      "advice": "Retrieve 50 to 100 candidates and re-rank them with a cross-encoder, multilingual for Hinglish."
+    },
+    {
+      "symptom": "Staff cannot tell whether an answer is true or current",
+      "techniqueId": "cite",
+      "advice": "Answer only from sources, cite each sentence, verify citations and filter superseded versions."
+    },
+    {
+      "symptom": "Questions hide filters or need a second attempt",
+      "techniqueId": "qoa",
+      "advice": "Let an agent plan filters, grade what it retrieves and rewrite or say “not found”."
+    },
+    {
+      "symptom": "Questions about themes across all documents, or multi-hop joins, get poor answers",
+      "techniqueId": "graphrag",
+      "advice": "GraphRAG: extract a graph, summarise communities, and route global or multi-hop questions to it."
+    }
+  ]
+}

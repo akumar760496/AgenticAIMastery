@@ -1,0 +1,793 @@
+{
+  "id": "browser",
+  "moduleSlug": "computer-use",
+  "name": "Browser Automation Agents",
+  "shortName": "Browser agents",
+  "question": "Should the agent read the page or look at it?",
+  "summary": "Browser agents act on websites through a controlled browser. They can observe a page as screenshots, raw HTML or an accessibility tree; the tree gives roles, names and stable references in a few thousand tokens and is usually the best default, with screenshots added for visual layout. Hybrid designs script the known steps such as navigation and login in code and let the agent handle what varies, which is cheaper and more reliable than a fully autonomous agent.",
+  "useCases": [
+    "Portals without APIs: regulators, exchanges, vendors",
+    "Downloading statements and filings",
+    "Form filling with human review"
+  ],
+  "keyFacts": {
+    "label": "Observation choices",
+    "items": [
+      {
+        "term": "Accessibility tree",
+        "detail": "compact, semantic, element references"
+      },
+      {
+        "term": "Screenshot",
+        "detail": "layout, charts, visual cues"
+      },
+      {
+        "term": "Raw HTML",
+        "detail": "complete but huge and noisy"
+      },
+      {
+        "term": "Hybrid",
+        "detail": "tree first, screenshot on demand"
+      },
+      {
+        "term": "Scripted steps",
+        "detail": "deterministic code for what never changes"
+      },
+      {
+        "term": "Selectors",
+        "detail": "self-healing through the agent when layouts change"
+      }
+    ]
+  },
+  "steps": [
+    "Use a real browser under your control, such as Playwright",
+    "Observe through the accessibility tree",
+    "Script stable steps; let the agent handle the rest",
+    "Record sessions and verify outcomes"
+  ],
+  "pitfalls": [
+    "Feeding raw HTML to the model",
+    "Fully autonomous agents for fixed workflows",
+    "Logging into real accounts from the agent’s own browser profile"
+  ],
+  "tools": [
+    "Playwright and Playwright MCP",
+    "Browser Use",
+    "Stagehand",
+    "Browserbase or Steel for hosted browsers"
+  ],
+  "remember": "Read the tree, script what is fixed, let the agent handle the rest.",
+  "caption": "Illustrative token counts per page.",
+  "comparison": {
+    "scope": "Websites without APIs",
+    "cost": 2,
+    "needs": "A controlled browser",
+    "best": "Token bloat and brittle flows"
+  },
+  "diagram": {
+    "file": "diagrams/browser.svg"
+  },
+  "lesson": {
+    "file": "notices_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "with sync_playwright() as p:",
+        "steps": []
+      },
+      {
+        "text": "    page = p.chromium.launch().new_page()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    page.goto(\"https://www.bseindia.com/corporates/ann.html\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    page.get_by_role(\"textbox\", name=\"Security Name\").fill(company)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    page.get_by_role(\"button\", name=\"Submit\").click()",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    tree = page.locator(\"body\").aria_snapshot()          # ~3k tokens",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    choice = llm.pick_link(tree, goal=\"today's corporate actions\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    link = page.get_by_role(\"link\", name=choice.name)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    assert link.get_attribute(\"href\").split(\"/\")[2] in ALLOWED",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    link.click()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    summary = llm.extract(page.locator(\"main\").aria_snapshot(),",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                          schema=CorporateAction)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "A browser you control",
+        "text": "Playwright runs a clean browser with no personal profile. The agent never uses anyone’s everyday browser."
+      },
+      {
+        "title": "Script the fixed route",
+        "text": "Navigation, search and login never change from day to day, so they are plain code: fast, cheap and reliable."
+      },
+      {
+        "title": "Read the accessibility tree",
+        "text": "A snapshot lists roles, names and links in about 3,000 tokens, against about 25,000 for raw HTML."
+      },
+      {
+        "title": "The agent decides what varies",
+        "text": "Only the judgement goes to the model: which notice is today’s corporate action. It answers with a role and a name."
+      },
+      {
+        "title": "Stay on the allowlist",
+        "text": "Before following a link, the code checks the domain. A link to an unknown site is refused."
+      },
+      {
+        "title": "Extract into a schema",
+        "text": "The notice becomes a typed record, such as record date and ratio, validated before it reaches the system."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"21\" text-anchor=\"middle\">clean browser · no personal profile</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"34\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"63\" y=\"49\" text-anchor=\"middle\">goto</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"34\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"49\" text-anchor=\"middle\">fill</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"240\" y=\"34\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"49\" text-anchor=\"middle\">click</text></g><text class=\"sb a\" x=\"8\" y=\"72\" style=\"text-anchor:start;--d:0.3s\">scripted: same every day</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"91\" style=\"text-anchor:end;--d:0s\">raw HTML</text><rect x=\"118\" y=\"81\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"81\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"91\" style=\"text-anchor:start;--d:0.2s\">25k tokens</text><text class=\"tl a\" x=\"112\" y=\"113\" style=\"text-anchor:end;--d:0.1s\">a11y tree</text><rect x=\"118\" y=\"103\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"103\" width=\"18\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"113\" style=\"text-anchor:start;--d:0.30000000000000004s\">3k tokens</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"130\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"145\" text-anchor=\"middle\">link “Bonus issue 1:1, record date 14 Oct”</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"158\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"173\" text-anchor=\"middle\">domain on allowlist ✓</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"186\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"201\" text-anchor=\"middle\">{type: bonus, ratio: \"1:1\", record_date: …}</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"232\" style=\"text-anchor:middle;fill:var(--ink-2)\">a third of the time of the autonomous version</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Reaches portals with no API",
+      "Accessibility trees are compact and semantic",
+      "Hybrid scripts are cheap and reliable",
+      "Session recordings aid debugging"
+    ],
+    "cons": [
+      "Sites change layout and labels",
+      "Anti-bot measures and terms of use",
+      "Logins and 2FA are hard to automate safely",
+      "Dynamic pages confuse agents"
+    ],
+    "avoidWhen": [
+      "Sites with a usable API",
+      "Tasks that break a site’s terms of use"
+    ],
+    "tools": [
+      {
+        "name": "Playwright",
+        "type": "Open source",
+        "what": "Browser automation with aria snapshots",
+        "url": "https://playwright.dev"
+      },
+      {
+        "name": "Playwright MCP",
+        "type": "Open source",
+        "what": "Browser tools for agents over MCP",
+        "url": "https://github.com/microsoft/playwright-mcp"
+      },
+      {
+        "name": "Browser Use",
+        "type": "Open source",
+        "what": "Agent library for browser tasks",
+        "url": "https://browser-use.com"
+      },
+      {
+        "name": "Stagehand",
+        "type": "Open source",
+        "what": "Mix code and AI steps in browser automation",
+        "url": "https://www.stagehand.dev"
+      },
+      {
+        "name": "WebArena",
+        "type": "Benchmark",
+        "what": "Web tasks on self-hosted sites",
+        "url": "https://webarena.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional broker’s operations team collects corporate-action notices from exchange and registrar websites every morning. A task visits about 12 pages. Choose how the agent reads pages, whether the sites are static or dynamic, and whether fixed steps are scripted, and watch success, tokens and time.",
+    "controls": [
+      "Choose screenshots, raw HTML, the accessibility tree, or the tree plus screenshots on demand.",
+      "Choose mostly static or dynamic sites.",
+      "Toggle scripting the fixed steps, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Tasks completed correctly",
+        "meaning": "Share of tasks that end with the right notices extracted."
+      },
+      {
+        "name": "Tokens per task",
+        "meaning": "Input tokens the model reads across the pages it handles."
+      },
+      {
+        "name": "Cost per task",
+        "meaning": "At ₹0.25 per 1,000 input tokens."
+      },
+      {
+        "name": "Time per task",
+        "meaning": "Scripted pages take about a second; agent pages take several."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Screenshots, dynamic sites",
+        "expect": "80% of tasks, 18,000 tokens."
+      },
+      {
+        "k": "html",
+        "name": "Raw HTML",
+        "expect": "70% of tasks, 300,000 tokens a task."
+      },
+      {
+        "k": "tree",
+        "name": "Accessibility tree, static sites",
+        "expect": "94% of tasks, 36,000 tokens."
+      },
+      {
+        "k": "hybrid",
+        "name": "Hybrid with scripted steps",
+        "expect": "98% on static sites, 16,000 tokens."
+      }
+    ],
+    "missions": [
+      {
+        "k": "dyn",
+        "text": "Complete at least 90% of tasks on dynamic sites.",
+        "hint": "Tree plus screenshots handles pop-ups and lazy loading."
+      },
+      {
+        "k": "lean",
+        "text": "Do it on dynamic sites with 20,000 tokens or fewer per task.",
+        "hint": "Let code handle the fixed route."
+      },
+      {
+        "k": "html",
+        "text": "Show raw HTML pushing a task past 200,000 tokens.",
+        "hint": "Try it."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Playwright",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Browser automation with aria snapshots and role-based locators.",
+        "ex": "Script the navigation and read notices as accessibility snapshots.",
+        "pros": [
+          "Reliable and fast",
+          "Python, JS, Java, .NET"
+        ],
+        "cons": [
+          "You write the harness",
+          "Sites can block automation"
+        ],
+        "url": "https://playwright.dev"
+      },
+      {
+        "n": "Playwright MCP",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Browser tools for agents over MCP, acting on accessibility references.",
+        "ex": "Give an agent a browser as MCP tools.",
+        "pros": [
+          "Standard protocol",
+          "Accessibility-first"
+        ],
+        "cons": [
+          "Less control than your own harness",
+          "Needs sandboxing"
+        ],
+        "url": "https://github.com/microsoft/playwright-mcp"
+      },
+      {
+        "n": "Browser Use",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "An agent library for browser tasks.",
+        "ex": "Prototype a notice-collection agent quickly.",
+        "pros": [
+          "Quick to start",
+          "Active community"
+        ],
+        "cons": [
+          "Autonomy can be costly",
+          "Needs guardrails"
+        ],
+        "url": "https://browser-use.com"
+      },
+      {
+        "n": "Stagehand",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Mixes code steps with AI act, extract and observe calls.",
+        "ex": "Code the login, let AI extract the notice.",
+        "pros": [
+          "Hybrid by design",
+          "Caches actions"
+        ],
+        "cons": [
+          "TypeScript-first",
+          "Another dependency"
+        ],
+        "url": "https://www.stagehand.dev"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "The route never changes",
+        "tool": "Script it"
+      },
+      {
+        "need": "Pages are huge",
+        "tool": "Read the accessibility tree"
+      },
+      {
+        "need": "Charts or canvases matter",
+        "tool": "Add a screenshot"
+      }
+    ],
+    "goals": [
+      "Pick a compact observation",
+      "Script what is fixed",
+      "See the cost of raw HTML"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional broker’s operations team checked corporate-action notices on exchange and registrar websites every morning. A fully autonomous browser agent working from screenshots and raw HTML was slow and cost about 25,000 tokens a page. The rebuilt agent scripts navigation and login in Playwright, reads each page as an accessibility snapshot of about 3,000 tokens, and only decides which notice to open and what it says. It finishes in a third of the time.",
+    "industries": [
+      {
+        "industry": "Stockbroking",
+        "use": "Corporate actions, circulars and filings from exchange sites"
+      },
+      {
+        "industry": "Lending",
+        "use": "Downloading statements and bureau reports from portals"
+      },
+      {
+        "industry": "Procurement",
+        "use": "Checking tenders and vendor portals"
+      }
+    ],
+    "analogy": "A new analyst with a checklist: the routine route to the page is written down step by step, and judgement is spent only on reading what is there.",
+    "library": {
+      "name": "Playwright",
+      "what": "A controlled browser; aria_snapshot() gives a compact accessibility tree the model can read, and get_by_role() acts on what it chooses.",
+      "install": "pip install playwright && playwright install chromium"
+    },
+    "note": "Site structure and labels change; keep the scripted part small and let the agent handle what varies. Respect each site’s terms of use.",
+    "samples": [
+      {
+        "file": "notices_agent.py",
+        "language": "python",
+        "code": "from playwright.sync_api import sync_playwright\n\nALLOWED = (\"www.nseindia.com\", \"www.bseindia.com\")\n\ndef todays_notices(llm, company: str):\n    with sync_playwright() as p:\n        browser = p.chromium.launch()\n        page = browser.new_page()\n        page.goto(\"https://www.bseindia.com/corporates/ann.html\")   # scripted step\n        page.get_by_role(\"textbox\", name=\"Security Name\").fill(company)\n        page.get_by_role(\"button\", name=\"Submit\").click()\n\n        tree = page.locator(\"body\").aria_snapshot()                # ~3k tokens\n        choice = llm.pick_link(tree, goal=f\"today's corporate actions for {company}\")\n        link = page.get_by_role(\"link\", name=choice.name)\n        assert link.get_attribute(\"href\").split(\"/\")[2] in ALLOWED, \"off-allowlist\"\n        link.click()\n\n        summary = llm.extract(page.locator(\"main\").aria_snapshot(),\n                              schema=CorporateAction)               # structured output\n        browser.close()\n        return summary"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A browser agent reads 12 pages per task. Raw HTML costs about 25,000 tokens a page and an accessibility snapshot about 3,000. At ₹0.25 per 1,000 input tokens, how much does switching save per task, in ₹?",
+    "answer": "12 × (25,000 − 3,000) = 264,000 tokens; 264 × ₹0.25 = ₹66 saved per task. The snapshot is also easier for the model to act on, because it names roles and elements instead of burying them in markup.",
+    "expected": {
+      "value": 66,
+      "tolerance": 0.5,
+      "label": "₹ saved ="
+    },
+    "interview": [
+      {
+        "question": "Screenshot, HTML or accessibility tree: which should a browser agent observe?",
+        "answer": "Usually the accessibility tree: it is compact, lists roles and names, and gives stable references to act on. Add screenshots where layout or visuals matter, such as charts or canvases. Raw HTML is complete but large and noisy, and wastes context."
+      },
+      {
+        "question": "Why script parts of a browser workflow instead of letting the agent do everything?",
+        "answer": "Steps that never change, such as navigation and login, are faster, cheaper and more reliable in code. Letting the agent handle only what varies, such as finding the right notice or reading its contents, reduces errors and cost and keeps the flow auditable."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Raw HTML in the prompt",
+        "fix": "Use the accessibility snapshot"
+      },
+      {
+        "mistake": "A fully autonomous agent for a fixed route",
+        "fix": "Script the fixed steps, use the agent for judgement"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "br01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Which observation is usually the best default for a browser agent?",
+      "options": [
+        "Raw HTML",
+        "The accessibility tree",
+        "Network logs",
+        "Cookies"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Compact, semantic and actionable."
+    },
+    {
+      "id": "br02",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "12 pages at 25,000 tokens (HTML) versus 3,000 (tree), at ₹0.25 per 1,000 tokens. Saving per task?",
+      "options": [
+        "₹6.6",
+        "₹66",
+        "₹660",
+        "₹0.66"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "264,000 tokens × ₹0.25 / 1,000."
+    },
+    {
+      "id": "br03",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which steps should be scripted in code?",
+      "options": [
+        "The ones that never change, such as navigation",
+        "The ones needing judgement",
+        "None",
+        "All of them, always"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Script the fixed route."
+    },
+    {
+      "id": "br04",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which help a browser agent stay safe? Select all that apply.",
+      "options": [
+        "A domain allowlist",
+        "A clean browser profile",
+        "The operator’s personal browser",
+        "Following any link on the page"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Isolation and allowlists."
+    },
+    {
+      "id": "br05",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "When add a screenshot to the tree?",
+      "options": [
+        "For charts, canvases or visual layout",
+        "Never",
+        "Always, for every step",
+        "Only for login"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Visuals the tree doesn’t capture."
+    },
+    {
+      "id": "br06",
+      "kind": "single",
+      "industry": "Procurement",
+      "question": "What does Playwright’s aria_snapshot() return?",
+      "options": [
+        "A compact accessibility view of the page",
+        "The page’s HTML",
+        "A screenshot",
+        "Cookies"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Roles, names and structure."
+    },
+    {
+      "id": "br07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Why is raw HTML a poor observation?",
+      "options": [
+        "It is large and noisy",
+        "It is encrypted",
+        "It lacks text",
+        "It is illegal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Markup and scripts waste context."
+    },
+    {
+      "id": "br08",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A site redesign breaks a scripted step. What should happen?",
+      "options": [
+        "Alert and fall back to the agent or a person",
+        "Silently skip",
+        "Delete the task",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Detect and handle change."
+    },
+    {
+      "id": "br09",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What should the agent output after reading a notice?",
+      "options": [
+        "A typed record in a schema",
+        "Free prose",
+        "A screenshot",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Validate before use."
+    },
+    {
+      "id": "br10",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which are good browser-agent designs? Select all that apply.",
+      "options": [
+        "Script login and navigation",
+        "Let the agent choose among links",
+        "Give the agent a staff member’s saved passwords",
+        "Let it browse any site"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Hybrid, with credentials kept out."
+    },
+    {
+      "id": "br11",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "How many tasks does WebArena include?",
+      "options": [
+        "100",
+        "369",
+        "812",
+        "10,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "812 tasks on self-hosted sites."
+    },
+    {
+      "id": "br12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Roughly what is the human success rate on WebArena?",
+      "options": [
+        "About 50%",
+        "About 78%",
+        "About 99%",
+        "About 20%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "About 78%."
+    },
+    {
+      "id": "br13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Top reported WebArena score in mid-2026 was about…",
+      "options": [
+        "30%",
+        "74%",
+        "99%",
+        "10%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "About 74.3%."
+    },
+    {
+      "id": "br14",
+      "kind": "single",
+      "industry": "Procurement",
+      "question": "Which library mixes code steps with AI act and extract calls?",
+      "options": [
+        "Stagehand",
+        "NumPy",
+        "Flask",
+        "Pandas"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Stagehand is hybrid by design."
+    },
+    {
+      "id": "br15",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Playwright MCP gives agents a browser via…",
+      "options": [
+        "Model Context Protocol tools",
+        "Email",
+        "FTP",
+        "SMS"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Browser actions as MCP tools."
+    },
+    {
+      "id": "br16",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Why check a link’s domain before clicking?",
+      "options": [
+        "To stay on the allowlist",
+        "To save tokens",
+        "For speed",
+        "It is required by HTML"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Injected links point elsewhere."
+    },
+    {
+      "id": "br17",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Dynamic pages with pop-ups tend to…",
+      "options": [
+        "Lower agent success",
+        "Raise success",
+        "Not matter",
+        "Remove the need for a browser"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Harder to observe and act on."
+    },
+    {
+      "id": "br18",
+      "kind": "single",
+      "industry": "Procurement",
+      "question": "Respecting a site’s terms of use means…",
+      "options": [
+        "Automating only where permitted",
+        "Ignoring them",
+        "Using more proxies",
+        "Faking user agents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Check terms before automating."
+    },
+    {
+      "id": "br19",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Hosted browsers such as Browserbase or Steel provide…",
+      "options": [
+        "Isolated, recorded browser sessions",
+        "Model training",
+        "Databases",
+        "Payments"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Isolation and replay."
+    },
+    {
+      "id": "br20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "The biggest cost driver for a browser agent is usually…",
+      "options": [
+        "Tokens read per page",
+        "CPU",
+        "Disk",
+        "Bandwidth"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Observation size."
+    }
+  ]
+}

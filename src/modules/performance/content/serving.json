@@ -1,0 +1,827 @@
+{
+  "id": "serving",
+  "moduleSlug": "performance",
+  "name": "Serving Engines and Continuous Batching",
+  "shortName": "Serving engines",
+  "question": "How many requests can one GPU serve, and at what cost?",
+  "summary": "When you run open-weight models yourself, the serving engine decides how much work each GPU does. A naive server generates one request at a time and leaves the GPU mostly idle. Static batching waits for a batch to fill and for its longest answer to finish. Engines such as vLLM, SGLang, TensorRT-LLM and TGI use continuous batching, which adds a new request to the running batch at every decoding step, and paged KV-cache memory (PagedAttention), which packs many more sequences into GPU memory. The result is several times more tokens per second per GPU and a lower cost per million tokens. Capacity is then sized from load and a latency target. Prefix caching, speculative decoding and disaggregated prefill are separate techniques in this module that these engines also implement.",
+  "useCases": [
+    "Self-hosting open models for cost, data residency or latency",
+    "Serving a fine-tuned or distilled small model",
+    "High-volume internal workloads such as classification or extraction"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Continuous batching",
+        "detail": "requests join and leave the running batch at every step"
+      },
+      {
+        "term": "KV-cache memory",
+        "detail": "PagedAttention allocates the cache in pages; memory, not compute, often limits batch size"
+      },
+      {
+        "term": "Throughput",
+        "detail": "output tokens per second per GPU at your prompt and answer lengths"
+      },
+      {
+        "term": "Latency",
+        "detail": "time to first token and p95 end-to-end at your load"
+      },
+      {
+        "term": "Utilisation",
+        "detail": "load divided by capacity; above about 80% queues and latency grow fast"
+      },
+      {
+        "term": "Cost per 1M tokens",
+        "detail": "GPU price per hour ÷ millions of tokens served per hour"
+      }
+    ]
+  },
+  "steps": [
+    "Measure prompt and answer lengths and the peak requests per second",
+    "Serve with a continuous-batching engine and load-test at realistic traffic",
+    "Tune max sequences, memory use and context length; add GPUs or replicas for the latency target",
+    "Compare cost per million tokens and p95 with a hosted API before committing"
+  ],
+  "pitfalls": [
+    "Benchmarking with one request at a time and concluding the GPU is slow",
+    "Running near 100% utilisation, where p95 latency explodes",
+    "Setting a very long max context that reserves KV memory and shrinks the batch"
+  ],
+  "tools": [
+    "vLLM",
+    "SGLang",
+    "TensorRT-LLM",
+    "Hugging Face TGI",
+    "NVIDIA Triton / Dynamo",
+    "llama.cpp server"
+  ],
+  "remember": "Continuous batching plus paged KV memory; size GPUs for p95 at peak.",
+  "caption": "Illustrative: Bharat Bol, a fictional voice-bot company, self-hosts an 8B model for Hindi support calls.",
+  "comparison": {
+    "scope": "Inference server",
+    "cost": 3,
+    "needs": "Throughput and cost per token",
+    "best": "GPU operations and capacity planning"
+  },
+  "diagram": {
+    "file": "diagrams/serving.svg"
+  },
+  "lesson": {
+    "file": "serve_and_loadtest.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "# shell: vllm serve Qwen/Qwen3-8B --max-num-seqs 128 \\",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "#        --gpu-memory-utilization 0.90 --max-model-len 8192",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "import asyncio, time",
+        "steps": []
+      },
+      {
+        "text": "from openai import AsyncOpenAI",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client = AsyncOpenAI(base_url=\"http://gpu-1:8000/v1\", api_key=\"local\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def one(prompt):",
+        "steps": []
+      },
+      {
+        "text": "    t = time.perf_counter()",
+        "steps": []
+      },
+      {
+        "text": "    r = await client.chat.completions.create(model=\"Qwen/Qwen3-8B\", max_tokens=300,",
+        "steps": []
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": prompt}])",
+        "steps": []
+      },
+      {
+        "text": "    return time.perf_counter() - t, r.usage.completion_tokens",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def load(rps, seconds=120):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    tasks = []",
+        "steps": []
+      },
+      {
+        "text": "    for _ in range(rps * seconds):",
+        "steps": []
+      },
+      {
+        "text": "        tasks.append(asyncio.create_task(one(sample_prompt())))",
+        "steps": []
+      },
+      {
+        "text": "        await asyncio.sleep(1 / rps)",
+        "steps": []
+      },
+      {
+        "text": "    res = await asyncio.gather(*tasks)",
+        "steps": []
+      },
+      {
+        "text": "    lat = sorted(r[0] for r in res)",
+        "steps": []
+      },
+      {
+        "text": "    return lat[int(len(lat) * 0.95)], sum(r[1] for r in res) / seconds",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "p95, tok_s = asyncio.run(load(rps=8))",
+        "steps": []
+      },
+      {
+        "text": "print(f\"p95 {p95:.1f}s  {tok_s:.0f} tok/s  ₹/1M = {2 * 220 / (tok_s * 3600 / 1e6):.0f}\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Start a continuous-batching server",
+        "text": "Bharat Bol, a fictional voice-bot company, serves an 8B model with vLLM. The server exposes an OpenAI-compatible API, so the app code does not change."
+      },
+      {
+        "title": "Let the batch grow",
+        "text": "max-num-seqs lets up to 128 sequences share the GPU. New requests join the running batch at each step instead of waiting for a batch to finish."
+      },
+      {
+        "title": "Leave room for the KV cache",
+        "text": "90% of GPU memory is given to weights and the paged KV cache. A shorter max context of 8,192 tokens leaves room for more sequences."
+      },
+      {
+        "title": "Load-test at real traffic",
+        "text": "Replay 8 requests a second of real prompts for two minutes. One-at-a-time tests make any GPU look slow."
+      },
+      {
+        "title": "Read p95 and throughput",
+        "text": "One GPU serves the 2,400 tokens a second but runs 80% busy, so p95 is 18 s. Two GPUs bring p95 to 8 s."
+      },
+      {
+        "title": "Compare the cost",
+        "text": "At ₹220 per GPU-hour, two GPUs cost about ₹51 per million output tokens. Compare that, and p95, with a hosted API before committing."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">vllm serve · OpenAI-compatible API</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"55\" text-anchor=\"middle\">up to 128 sequences share each step</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"70\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"85\" text-anchor=\"middle\">90% memory</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"184\" y=\"70\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"85\" text-anchor=\"middle\">max context 8,192</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"100\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"115\" text-anchor=\"middle\">8 req/s × 300 tokens = 2,400 tok/s</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"130\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"146\" text-anchor=\"middle\">1 GPU: p95 18 s</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"130\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"146\" text-anchor=\"middle\">2 GPUs: p95 8 s</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"162\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"178\" text-anchor=\"middle\">≈ ₹51 per 1M output tokens</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Several times more throughput per GPU",
+      "OpenAI-compatible APIs keep app code unchanged",
+      "Control over data location and model versions",
+      "Low cost per token at steady high volume"
+    ],
+    "cons": [
+      "GPU capacity and operations are your job",
+      "Idle GPUs still cost money at low traffic",
+      "Tuning memory and batch limits takes testing",
+      "New models may need engine upgrades"
+    ],
+    "avoidWhen": [
+      "Low or spiky volume where a hosted API is cheaper",
+      "Teams with no one to run GPUs"
+    ],
+    "tools": [
+      {
+        "name": "vLLM",
+        "type": "Open source",
+        "what": "Continuous batching, PagedAttention, OpenAI-compatible server",
+        "url": "https://docs.vllm.ai"
+      },
+      {
+        "name": "SGLang",
+        "type": "Open source",
+        "what": "Fast serving with RadixAttention prefix reuse",
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "name": "TensorRT-LLM",
+        "type": "Open source · NVIDIA",
+        "what": "Optimised kernels and in-flight batching on NVIDIA GPUs",
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      },
+      {
+        "name": "Hugging Face TGI",
+        "type": "Open source",
+        "what": "Text Generation Inference server with continuous batching",
+        "url": "https://huggingface.co/docs/text-generation-inference"
+      },
+      {
+        "name": "llama.cpp server",
+        "type": "Open source",
+        "what": "CPU and small-GPU serving with batching",
+        "url": "https://github.com/ggml-org/llama.cpp"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Bharat Bol, a fictional voice-bot company, self-hosts an 8B model for Hindi support. Answers average 300 tokens; each GPU costs ₹220 an hour (illustrative).",
+    "controls": [
+      "Choose the serving engine: one at a time, static batches, or continuous batching.",
+      "Set the number of GPUs: 1, 2 or 4.",
+      "Set the load: 2, 8 or 20 requests a second."
+    ],
+    "outputs": [
+      {
+        "name": "GPU utilisation",
+        "meaning": "Load ÷ capacity."
+      },
+      {
+        "name": "Capacity",
+        "meaning": "Output tokens a second the GPUs can produce."
+      },
+      {
+        "name": "p95 latency",
+        "meaning": "Slowest 5% of answers, or timeouts if overloaded."
+      },
+      {
+        "name": "Cost per 1M tokens",
+        "meaning": "GPU cost ÷ tokens served."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One at a time, 2 req/s",
+        "expect": "Capacity 60 tok/s for 600 needed: timeouts."
+      },
+      {
+        "k": "static",
+        "name": "Static batches, 2 GPUs, 2 req/s",
+        "expect": "p95 12 s, ₹203.7 per 1M tokens."
+      },
+      {
+        "k": "vllm",
+        "name": "Continuous batching, 1 GPU, 8 req/s",
+        "expect": "80% busy, p95 18 s, ₹25.5 per 1M."
+      },
+      {
+        "k": "scaled",
+        "name": "Continuous batching, 2 GPUs, 8 req/s",
+        "expect": "p95 8 s, ₹50.9 per 1M."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "At 8 requests a second, keep p95 at 10 s or less and cost at ₹60 per 1M tokens or less.",
+        "hint": "Continuous batching with a little headroom."
+      },
+      {
+        "k": "peak",
+        "text": "Handle the 20 requests a second peak with p95 of 12 s or less.",
+        "hint": "Scale out the efficient engine."
+      },
+      {
+        "k": "static",
+        "text": "Make static batching serve 2 requests a second without timeouts.",
+        "hint": "It needs more GPUs than it should."
+      }
+    ],
+    "tools": [
+      {
+        "n": "vLLM",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "The default open serving engine.",
+        "ex": "OpenAI-compatible server for an 8B model.",
+        "pros": [
+          "High throughput",
+          "Wide model support"
+        ],
+        "cons": [
+          "GPU-focused"
+        ],
+        "url": "https://docs.vllm.ai"
+      },
+      {
+        "n": "SGLang",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Structured and multi-call workloads with prefix reuse.",
+        "ex": "Agents that share long system prompts.",
+        "pros": [
+          "Very fast",
+          "RadixAttention"
+        ],
+        "cons": [
+          "Smaller community"
+        ],
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "n": "TensorRT-LLM",
+        "type": "Open source · NVIDIA",
+        "start": 1,
+        "prod": 3,
+        "best": "Maximum speed on NVIDIA GPUs.",
+        "ex": "Latency-critical voice bots.",
+        "pros": [
+          "Fastest kernels",
+          "FP8 support"
+        ],
+        "cons": [
+          "Build steps, NVIDIA only"
+        ],
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      },
+      {
+        "n": "Hugging Face TGI",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Simple serving close to the Hub.",
+        "ex": "Serve a fine-tuned model from the Hub.",
+        "pros": [
+          "Easy start",
+          "Docker images"
+        ],
+        "cons": [
+          "Fewer tuning options"
+        ],
+        "url": "https://huggingface.co/docs/text-generation-inference"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Default choice",
+        "tool": "vLLM"
+      },
+      {
+        "need": "Shared long prefixes",
+        "tool": "SGLang"
+      },
+      {
+        "need": "NVIDIA, lowest latency",
+        "tool": "TensorRT-LLM"
+      }
+    ],
+    "goals": [
+      "Explain continuous batching and paged KV memory",
+      "Load-test at real traffic and read p95",
+      "Size GPUs and compute cost per million tokens"
+    ]
+  },
+  "practice": {
+    "scenario": "Bharat Bol, a fictional voice-bot company, self-hosts an 8B model for Hindi support calls because call transcripts must stay in its own cloud. Its first server generated one answer at a time and queued at 2 requests a second. With vLLM’s continuous batching and paged KV cache, one GPU handles 8 requests a second (2,400 output tokens a second) at 80% busy with a p95 of 18 s; two GPUs bring p95 to 8 s at about ₹51 per million output tokens.",
+    "industries": [
+      {
+        "industry": "Contact centres",
+        "use": "Hindi and regional-language voice bots with data kept in-country"
+      },
+      {
+        "industry": "Banking",
+        "use": "Internal document extraction on self-hosted models"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "High-volume product tagging with a small fine-tuned model"
+      }
+    ],
+    "analogy": "A restaurant kitchen that starts the next order on any free burner the moment a dish is done, instead of cooking tables in fixed rounds and waiting for the slowest dish.",
+    "library": {
+      "name": "vLLM",
+      "what": "A high-throughput serving engine with continuous batching, PagedAttention and an OpenAI-compatible server.",
+      "install": "pip install vllm"
+    },
+    "note": "Needs a CUDA GPU with enough memory for the model. The offline API shown batches all prompts at once; for live traffic use vllm serve and a load test.",
+    "samples": [
+      {
+        "file": "offline_batch.py",
+        "language": "python",
+        "code": "import time\nfrom vllm import LLM, SamplingParams\n\nllm = LLM(model=\"Qwen/Qwen3-8B\", gpu_memory_utilization=0.90, max_model_len=8192)\nparams = SamplingParams(max_tokens=300, temperature=0.2)\n\nprompts = [f\"Summarise this support call in Hindi, ticket {i}: ...\" for i in range(512)]\nt = time.perf_counter()\nouts = llm.generate(prompts, params)\nsecs = time.perf_counter() - t\n\ntokens = sum(len(o.outputs[0].token_ids) for o in outs)\nprint(f\"{tokens / secs:.0f} output tokens/s across {len(prompts)} prompts\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Two GPUs at ₹220 an hour each serve 2,400 output tokens a second. What is the cost per million output tokens in ₹?",
+    "answer": "Tokens an hour: 2,400 × 3,600 = 86,40,000 = 8.64 million. Cost an hour: ₹440. ₹440 ÷ 8.64 ≈ ₹50.9 per million tokens.",
+    "expected": {
+      "value": 50.9,
+      "tolerance": 1,
+      "label": "₹ ="
+    },
+    "interview": [
+      {
+        "question": "What is continuous batching?",
+        "answer": "The server adds new requests to the running batch at every decoding step and removes finished ones, instead of waiting for a whole batch to finish. GPUs stay busy, so throughput rises several-fold."
+      },
+      {
+        "question": "Why does p95 latency jump near full utilisation?",
+        "answer": "As load approaches capacity, requests queue; waiting time grows sharply above about 80% busy. Size capacity so peak load leaves headroom."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Load-testing one request at a time",
+        "fix": "Test at realistic concurrency"
+      },
+      {
+        "mistake": "Running GPUs near 100% busy",
+        "fix": "Keep headroom for the p95 target"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sg01",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "What does continuous batching do?",
+      "options": [
+        "Adds and removes requests at every decoding step",
+        "Waits for a full batch",
+        "Runs one request at a time",
+        "Caches answers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keeps the GPU busy."
+    },
+    {
+      "id": "sg02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does PagedAttention manage?",
+      "options": [
+        "KV-cache memory in pages",
+        "Prompt templates",
+        "Rate limits",
+        "Model weights on disk"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Less waste, bigger batches."
+    },
+    {
+      "id": "sg03",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "8 requests a second × 300 tokens needs how many tokens a second?",
+      "options": [
+        "300",
+        "2,400",
+        "8",
+        "24,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "8 × 300."
+    },
+    {
+      "id": "sg04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Capacity 3,000 tok/s, demand 2,400. Utilisation?",
+      "options": [
+        "50%",
+        "80%",
+        "125%",
+        "24%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2,400 ÷ 3,000."
+    },
+    {
+      "id": "sg05",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why does p95 rise sharply near full utilisation?",
+      "options": [
+        "Requests queue as load nears capacity",
+        "GPUs slow down when hot only",
+        "The model changes",
+        "Tokens get longer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Queueing."
+    },
+    {
+      "id": "sg06",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "Two GPUs at ₹220/h, 8.64M tokens an hour. Cost per 1M?",
+      "options": [
+        "₹25.5",
+        "₹50.9",
+        "₹440",
+        "₹101.9"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "440 ÷ 8.64."
+    },
+    {
+      "id": "sg07",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are serving engines with continuous batching? Select all that apply.",
+      "options": [
+        "vLLM",
+        "SGLang",
+        "TensorRT-LLM",
+        "Pandas"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Also TGI."
+    },
+    {
+      "id": "sg08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A load test sends requests one after another. Result?",
+      "options": [
+        "Measures single-stream speed, not capacity",
+        "Measures peak capacity",
+        "Measures cost",
+        "Invalid syntax"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Use concurrency."
+    },
+    {
+      "id": "sg09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A very long max context setting mainly costs?",
+      "options": [
+        "KV memory, so fewer sequences fit",
+        "Disk space",
+        "Network",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Memory is reserved per sequence."
+    },
+    {
+      "id": "sg10",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "Static batching wastes GPU time because?",
+      "options": [
+        "Batches wait for their longest answer",
+        "It uses too little memory",
+        "It skips tokens",
+        "It runs on CPU"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Idle slots."
+    },
+    {
+      "id": "sg11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "1 GPU, 60 tok/s one at a time; demand 600 tok/s. What happens?",
+      "options": [
+        "Queue grows and requests time out",
+        "Fine",
+        "GPU idles",
+        "Cost falls"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Demand ≫ capacity."
+    },
+    {
+      "id": "sg12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Why self-host instead of a hosted API? Select all that apply.",
+      "options": [
+        "Data must stay in your own cloud",
+        "Steady high volume lowers cost per token",
+        "Control over model versions",
+        "No one needs to run GPUs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Someone must run them."
+    },
+    {
+      "id": "sg13",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "Four GPUs at 20 req/s × 300 tokens with 3,000 tok/s each. Utilisation?",
+      "options": [
+        "25%",
+        "50%",
+        "75%",
+        "100%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6,000 ÷ 12,000."
+    },
+    {
+      "id": "sg14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which module-6 technique reuses a shared prompt prefix?",
+      "options": [
+        "Prefix Caching",
+        "Serving engines",
+        "Quantisation",
+        "Graphs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Engines implement it, but it is its own technique."
+    },
+    {
+      "id": "sg15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A GPU costs ₹220/h. Cost for a 30-day month running all day?",
+      "options": [
+        "₹6,600",
+        "₹1,58,400",
+        "₹5,280",
+        "₹15,840"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "220 × 24 × 30."
+    },
+    {
+      "id": "sg16",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "What does vllm serve expose?",
+      "options": [
+        "An OpenAI-compatible HTTP API",
+        "A SQL database",
+        "A vector store",
+        "A GUI only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "App code stays the same."
+    },
+    {
+      "id": "sg17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Low, spiky traffic of a few requests an hour usually favours?",
+      "options": [
+        "A hosted API",
+        "Four dedicated GPUs",
+        "Static batching",
+        "No model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Idle GPUs still cost money."
+    },
+    {
+      "id": "sg18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What should a serving load test report? Select all that apply.",
+      "options": [
+        "Throughput",
+        "p95 latency",
+        "Error or timeout rate",
+        "Font size"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "At real concurrency."
+    },
+    {
+      "id": "sg19",
+      "kind": "single",
+      "industry": "Contact centres",
+      "question": "Headroom target for p95 is usually utilisation below about?",
+      "options": [
+        "20%",
+        "80%",
+        "100%",
+        "150%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Queues grow fast above it."
+    },
+    {
+      "id": "sg20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Throughput rises from 600 to 3,000 tok/s per GPU. Factor?",
+      "options": [
+        "2×",
+        "5×",
+        "10×",
+        "50×"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 ÷ 600."
+    }
+  ]
+}

@@ -1,0 +1,811 @@
+{
+  "id": "gui",
+  "moduleSlug": "computer-use",
+  "name": "Screen-Understanding GUI Agents",
+  "shortName": "GUI agents",
+  "question": "Can an agent use an app the way a person does?",
+  "summary": "A computer-use agent looks at screenshots, decides where to click or what to type, acts through mouse and keyboard actions, and takes another screenshot to check. It can drive legacy desktop or terminal applications that have no API. Each step can fail, and failures compound over long tasks, so reliable GUI agents verify after actions, zoom into small text, use accessibility information where available, and are replaced by an API wherever one exists.",
+  "useCases": [
+    "Legacy back-office apps with no API",
+    "Cross-application tasks a person does by hand",
+    "Bridging a system until an API is built"
+  ],
+  "keyFacts": {
+    "label": "What matters",
+    "items": [
+      {
+        "term": "Grounding",
+        "detail": "finding the right element from a screenshot"
+      },
+      {
+        "term": "Per-step accuracy",
+        "detail": "compounds over the length of the task"
+      },
+      {
+        "term": "Verification",
+        "detail": "a screenshot after each action to confirm"
+      },
+      {
+        "term": "Zoom",
+        "detail": "read small text without huge screenshots"
+      },
+      {
+        "term": "Step budget",
+        "detail": "cap iterations; long tasks need more"
+      },
+      {
+        "term": "Cost and time",
+        "detail": "each step is an image and a model call"
+      }
+    ]
+  },
+  "steps": [
+    "Run the app in a VM the agent controls",
+    "Loop: screenshot, act, screenshot, check",
+    "Resize screenshots to the model’s limit and scale coordinates back",
+    "Prefer an API or accessibility data whenever one exists"
+  ],
+  "pitfalls": [
+    "Long tasks with no verification step",
+    "Tiny text in downscaled screenshots",
+    "Using a GUI agent where an API already exists"
+  ],
+  "tools": [
+    "Claude computer use (computer_toolset_20260801)",
+    "OpenAI computer-using agent",
+    "Gemini computer use",
+    "UI-TARS and other open models"
+  ],
+  "remember": "Look, act, look again; use an API when there is one.",
+  "caption": "Illustrative: 95% per step over 18 steps is 40% per task.",
+  "comparison": {
+    "scope": "Apps without APIs",
+    "cost": 3,
+    "needs": "A VM and screenshots",
+    "best": "Compounding step errors"
+  },
+  "diagram": {
+    "file": "diagrams/gui.svg"
+  },
+  "lesson": {
+    "file": "computer_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "TOOLS = [{\"type\": \"computer_toolset_20260801\"}]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_task(task, vm, max_steps=40):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    messages = [{\"role\": \"user\", \"content\": task}]",
+        "steps": []
+      },
+      {
+        "text": "    for _ in range(max_steps):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        response = client.messages.create(model=\"claude-opus-5-5\",",
+        "steps": []
+      },
+      {
+        "text": "            max_tokens=2048, tools=TOOLS, messages=messages)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"assistant\", \"content\": response.content})",
+        "steps": []
+      },
+      {
+        "text": "        results = []",
+        "steps": []
+      },
+      {
+        "text": "        for block in response.content:",
+        "steps": []
+      },
+      {
+        "text": "            if block.type != \"tool_use\": continue",
+        "steps": []
+      },
+      {
+        "text": "            output = vm.execute(block.name, block.input)    # click, type",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            shot = vm.screenshot(max_long_edge=1568)        # look again",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id,",
+        "steps": []
+      },
+      {
+        "text": "                            \"content\": [output, shot]})",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if not results:",
+        "steps": []
+      },
+      {
+        "text": "            return messages",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"user\", \"content\": results})",
+        "steps": []
+      },
+      {
+        "text": "    raise TimeoutError(\"step budget exhausted; hand to a person\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Give the model a computer",
+        "text": "The computer-use toolset exposes screenshot, zoom, click, type, key, scroll and wait actions. Your code executes them in a VM."
+      },
+      {
+        "title": "The model looks and decides",
+        "text": "It reads the latest screenshot and returns the next action, with coordinates in the screenshot’s pixel space."
+      },
+      {
+        "title": "Your code acts",
+        "text": "The harness performs the click or keystroke in the VM, scaling coordinates back to the real screen."
+      },
+      {
+        "title": "Look again after every action",
+        "text": "A fresh screenshot shows whether the click worked. Without it, a wrong state goes unnoticed and errors compound."
+      },
+      {
+        "title": "Cap the steps",
+        "text": "An 18-step task with checks needs about 24 actions; a budget of 20 would run out. Budget for verification."
+      },
+      {
+        "title": "Finish or hand over",
+        "text": "When the model stops asking for actions, the task is done; if the budget runs out, a person takes over."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"40\" y=\"21\" text-anchor=\"middle\">screenshot</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx soft\" x=\"77\" y=\"6\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"109\" y=\"21\" text-anchor=\"middle\">zoom</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"146\" y=\"6\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"21\" text-anchor=\"middle\">click</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx soft\" x=\"215\" y=\"6\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"247\" y=\"21\" text-anchor=\"middle\">type</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"284\" y=\"6\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"316\" y=\"21\" text-anchor=\"middle\">scroll</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"36\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"51\" text-anchor=\"middle\">model: left_click at (412, 318) “Save”</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"64\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"79\" text-anchor=\"middle\">harness: scale ×1.22 → click (503, 388) in VM</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"92\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"107\" text-anchor=\"middle\">screenshot</text></g><text class=\"tl a\" x=\"184\" y=\"107\" style=\"text-anchor:start;--d:0.1s\">→ “Saved” banner visible</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"135\" style=\"text-anchor:end;--d:0s\">no checks</text><rect x=\"118\" y=\"125\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"125\" width=\"60\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"135\" style=\"text-anchor:start;--d:0.2s\">40% of tasks</text><text class=\"tl a\" x=\"112\" y=\"157\" style=\"text-anchor:end;--d:0.1s\">with checks</text><rect x=\"118\" y=\"147\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"147\" width=\"136.5\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"157\" style=\"text-anchor:start;--d:0.30000000000000004s\">91% of tasks</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"176\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"191\" text-anchor=\"middle\">done, or budget exhausted → a person</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"224\" style=\"text-anchor:middle;fill:var(--ink-2)\">1,500 NEFT returns a month, re-keyed by the agent</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Works with apps that have no API",
+      "No changes to the legacy system",
+      "Handles cross-application tasks",
+      "Fast to pilot"
+    ],
+    "cons": [
+      "Slow and costly per step",
+      "Errors compound over long tasks",
+      "Brittle when screens change",
+      "Needs a VM and careful security"
+    ],
+    "avoidWhen": [
+      "Systems with an API or accessible web interface",
+      "High-volume, latency-sensitive work"
+    ],
+    "tools": [
+      {
+        "name": "Claude computer use",
+        "type": "Model API",
+        "what": "Computer-use toolset with zoom",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool"
+      },
+      {
+        "name": "OpenAI computer use",
+        "type": "Model API",
+        "what": "Computer-using agent via the Responses API",
+        "url": "https://platform.openai.com/docs/guides/tools-computer-use"
+      },
+      {
+        "name": "Gemini computer use",
+        "type": "Model API",
+        "what": "Computer-use model for browser and UI control",
+        "url": "https://ai.google.dev/gemini-api/docs/computer-use"
+      },
+      {
+        "name": "OSWorld",
+        "type": "Benchmark",
+        "what": "Desktop tasks in VMs",
+        "url": "https://os-world.github.io"
+      },
+      {
+        "name": "UI-TARS",
+        "type": "Open source",
+        "what": "Open GUI agent models",
+        "url": "https://github.com/bytedance/UI-TARS"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional cooperative bank’s staff re-key NEFT return details into a 20-year-old desktop application with no API. Each case takes 18 actions. Choose what the computer-use agent sees, the screenshot size, the step budget and whether it checks the screen after each action, and watch how many cases finish correctly.",
+    "controls": [
+      "Choose screenshots only, screenshots plus zoom, or accessibility data plus screenshots.",
+      "Choose the screenshot size and the step budget.",
+      "Toggle checking the screen after each action, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Tasks completed correctly",
+        "meaning": "Per-step accuracy raised to the 18th power, or zero if the budget runs out."
+      },
+      {
+        "name": "Per-step accuracy",
+        "meaning": "The chance each action lands and is read correctly."
+      },
+      {
+        "name": "Actions per task",
+        "meaning": "Actions needed, including checks, against the budget."
+      },
+      {
+        "name": "Time · cost per task",
+        "meaning": "About 4 seconds and one image-bearing model call per action."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Screenshots only",
+        "expect": "95.5% per step: 44% of cases correct, about 72 s and ₹10.80 each."
+      },
+      {
+        "k": "zoom",
+        "name": "With zoom",
+        "expect": "97% per step: 58% of cases correct."
+      },
+      {
+        "k": "tight",
+        "name": "Checks, but 20 steps",
+        "expect": "99.7% per step, but 23 actions needed and only 20 allowed: nothing finishes."
+      },
+      {
+        "k": "low",
+        "name": "Small screenshots",
+        "expect": "Small text is misread: 94% per step, 33% of cases."
+      }
+    ],
+    "missions": [
+      {
+        "k": "reliable",
+        "text": "Get at least 90% of cases right.",
+        "hint": "Better observations, a check after each action and enough steps."
+      },
+      {
+        "k": "budget",
+        "text": "Show verification failing because the step budget is too small.",
+        "hint": "Checks add actions."
+      },
+      {
+        "k": "tiny",
+        "text": "Show small screenshots dragging screenshot-only success below 35%.",
+        "hint": "Try 1024 × 768 without zoom."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude computer use",
+        "type": "Model API",
+        "start": 3,
+        "prod": 2,
+        "best": "Computer-use toolset with screenshot, zoom, mouse and keyboard actions.",
+        "ex": "Drive the legacy NEFT app in a VM, checking each screen.",
+        "pros": [
+          "Zoom for small text",
+          "Strong on OSWorld"
+        ],
+        "cons": [
+          "Slow per step",
+          "You run the VM and harness"
+        ],
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool"
+      },
+      {
+        "n": "OpenAI computer use",
+        "type": "Model API",
+        "start": 3,
+        "prod": 2,
+        "best": "A computer-using agent model via the Responses API.",
+        "ex": "Operate a browser or desktop in a sandbox.",
+        "pros": [
+          "Hosted tool",
+          "Good browser performance"
+        ],
+        "cons": [
+          "Preview features change",
+          "Vendor-specific"
+        ],
+        "url": "https://platform.openai.com/docs/guides/tools-computer-use"
+      },
+      {
+        "n": "Gemini computer use",
+        "type": "Model API",
+        "start": 3,
+        "prod": 2,
+        "best": "A computer-use model focused on browser and UI control.",
+        "ex": "Fill forms on web-based back-office tools.",
+        "pros": [
+          "Fast",
+          "Browser-focused"
+        ],
+        "cons": [
+          "Narrower desktop support",
+          "Vendor-specific"
+        ],
+        "url": "https://ai.google.dev/gemini-api/docs/computer-use"
+      },
+      {
+        "n": "UI-TARS",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Open GUI agent models you can host yourself.",
+        "ex": "Run a GUI agent on-premises for sensitive screens.",
+        "pros": [
+          "Self-hostable",
+          "No data leaves"
+        ],
+        "cons": [
+          "Heavier to run",
+          "Lower accuracy than top APIs"
+        ],
+        "url": "https://github.com/bytedance/UI-TARS"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "An app has no API",
+        "tool": "A GUI agent in a VM, with checks after each action"
+      },
+      {
+        "need": "The app has an API",
+        "tool": "Use the API, not the screen"
+      },
+      {
+        "need": "Text on screen is tiny",
+        "tool": "Zoom or crop, don’t send huge screenshots"
+      }
+    ],
+    "goals": [
+      "See how per-step errors compound",
+      "Budget steps for verification",
+      "Use better observations where available"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional cooperative bank’s staff re-keyed NEFT return details from emails into a 20-year-old desktop application with no API, about 1,500 cases a month. A computer-use agent in a virtual machine now opens each case, types the fields and takes a screenshot to check each screen before moving on. Without the checks, 40% of cases finished correctly; with verification, zooming into small fields and a 40-step budget, 91% did, and the rest went to staff. The bank has since asked the vendor for an API.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Legacy back-office apps without APIs"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Policy admin systems on old desktop software"
+      },
+      {
+        "industry": "Government services",
+        "use": "Portals and terminals staff operate by hand"
+      }
+    ],
+    "analogy": "A temporary clerk using a system for the first time: looks at the screen, clicks, looks again to check it worked, and asks when unsure. Good clerks check every screen; careless ones stack up errors.",
+    "library": {
+      "name": "Claude computer use",
+      "what": "The computer-use toolset returns click, type, scroll, zoom and screenshot actions that your code executes in a VM, looping until the task is done.",
+      "install": "pip install anthropic"
+    },
+    "note": "Coordinates refer to the screenshot you returned; scale them back to the VM’s real resolution. Check the current tool version in the docs.",
+    "samples": [
+      {
+        "file": "computer_agent.py",
+        "language": "python",
+        "code": "import anthropic\n\nclient = anthropic.Anthropic()\nTOOLS = [{\"type\": \"computer_toolset_20260801\"}]\n\ndef run_task(task: str, vm, max_steps: int = 40):\n    messages = [{\"role\": \"user\", \"content\": task}]\n    for _ in range(max_steps):\n        response = client.messages.create(\n            model=\"claude-opus-5-5\", max_tokens=2048,\n            tools=TOOLS, messages=messages)\n        messages.append({\"role\": \"assistant\", \"content\": response.content})\n        results = []\n        for block in response.content:\n            if block.type != \"tool_use\":\n                continue\n            output = vm.execute(block.name, block.input)       # click, type, zoom...\n            shot = vm.screenshot(max_long_edge=1568)           # resize before returning\n            results.append({\"type\": \"tool_result\", \"tool_use_id\": block.id,\n                            \"content\": [output, shot]})\n        if not results:\n            return messages                                    # task finished\n        messages.append({\"role\": \"user\", \"content\": results})\n    raise TimeoutError(\"step budget exhausted; hand to a person\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A GUI task takes 18 actions, and each succeeds independently with probability 0.97. What share of tasks succeed end to end, in percent?",
+    "answer": "0.97¹⁸ ≈ 0.578, or about 57.8%. At 0.995 per step it would be about 91.4%. Long tasks need very high per-step accuracy, which is why verifying after each action pays off.",
+    "expected": {
+      "value": 57.8,
+      "tolerance": 0.3,
+      "label": "% of tasks ="
+    },
+    "interview": [
+      {
+        "question": "When would you use a GUI agent instead of an API?",
+        "answer": "Only when there is no API or accessible interface: legacy desktop apps, terminals, or portals you cannot integrate with. GUI agents are slower, costlier and less reliable than API calls, so they bridge a gap until an API exists, and they run in a sandboxed VM with verification and a human fallback."
+      },
+      {
+        "question": "Why do GUI agents fail on long tasks?",
+        "answer": "Errors compound: a small chance of a wrong click or misread field at each step multiplies over dozens of steps. Downscaled screenshots hide small text, and without checking the screen after each action the agent carries on from a wrong state. Verification, zoom, step budgets and shorter tasks all help."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "No check after each action",
+        "fix": "Take a screenshot and verify the expected change"
+      },
+      {
+        "mistake": "Screenshots larger than the model’s limit",
+        "fix": "Resize first and scale coordinates back"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "gu01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a computer-use agent observe to decide its next action?",
+      "options": [
+        "Only the database",
+        "Screenshots of the screen",
+        "The source code of the app",
+        "Network packets"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It looks at screenshots and acts through mouse and keyboard."
+    },
+    {
+      "id": "gu02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An 18-step task at 97% per step succeeds end to end about how often?",
+      "options": [
+        "97%",
+        "78%",
+        "58%",
+        "18%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.97¹⁸ ≈ 0.58."
+    },
+    {
+      "id": "gu03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Who executes the click the model asks for?",
+      "options": [
+        "The model provider",
+        "Your harness, in the VM",
+        "The user",
+        "The operating system vendor"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The model decides; your code acts."
+    },
+    {
+      "id": "gu04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which raise a GUI agent’s end-to-end success? Select all that apply.",
+      "options": [
+        "Checking the screen after each action",
+        "Zooming into small text",
+        "Sending larger screenshots than the model accepts",
+        "Removing the step budget entirely"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Verification and legible observations help."
+    },
+    {
+      "id": "gu05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The model clicks at (412, 318) on a screenshot resized from 1920 wide to 1568. What must the harness do?",
+      "options": [
+        "Click (412, 318) directly",
+        "Scale the coordinates to the real screen",
+        "Ask the model again",
+        "Ignore the click"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Coordinates are in screenshot space."
+    },
+    {
+      "id": "gu06",
+      "kind": "single",
+      "industry": "Government services",
+      "question": "When is a GUI agent the right tool?",
+      "options": [
+        "When a well-documented API exists",
+        "When a legacy app has no API",
+        "For every integration",
+        "For high-frequency trading"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A bridge for systems without APIs."
+    },
+    {
+      "id": "gu07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Checking after each action raises an 18-step task to about 24 actions. The budget is 20. Result?",
+      "options": [
+        "It finishes faster",
+        "It runs out of steps",
+        "Nothing changes",
+        "It skips checks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Budget for verification."
+    },
+    {
+      "id": "gu08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should a computer-use agent run?",
+      "options": [
+        "On an employee’s laptop",
+        "In a dedicated VM or container",
+        "On the production database server",
+        "In the user’s browser profile"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Isolation limits damage."
+    },
+    {
+      "id": "gu09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why do small screenshots hurt GUI agents?",
+      "options": [
+        "They use too many tokens",
+        "Small text becomes unreadable",
+        "They slow the VM",
+        "They break the API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Legibility drives grounding."
+    },
+    {
+      "id": "gu10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are computer-use actions in current toolsets? Select all that apply.",
+      "options": [
+        "Zoom",
+        "Left click",
+        "Compile code",
+        "Train the model"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Screenshot, zoom, mouse and keyboard actions."
+    },
+    {
+      "id": "gu11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is GUI grounding?",
+      "options": [
+        "Mapping an instruction to the right screen element",
+        "Connecting to power",
+        "Training data labelling",
+        "A network protocol"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Finding where to act."
+    },
+    {
+      "id": "gu12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The step budget runs out mid-task. The safe behaviour?",
+      "options": [
+        "Keep going without limit",
+        "Hand the task to a person",
+        "Mark it done",
+        "Restart the VM silently"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Fail safely."
+    },
+    {
+      "id": "gu13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "At 99.5% per step, an 18-step task succeeds about how often?",
+      "options": [
+        "99%",
+        "91%",
+        "75%",
+        "50%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.995¹⁸ ≈ 0.91."
+    },
+    {
+      "id": "gu14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A vendor’s GUI agent works on an app that also has a REST API. Better choice?",
+      "options": [
+        "Keep the GUI agent",
+        "Use the API",
+        "Use both randomly",
+        "Add more screenshots"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "APIs are faster and more reliable."
+    },
+    {
+      "id": "gu15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does each GUI step typically cost?",
+      "options": [
+        "Nothing",
+        "A model call with an image",
+        "Only CPU time",
+        "A human review"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Images make steps costly."
+    },
+    {
+      "id": "gu16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which benchmark tests agents on real desktop apps in VMs?",
+      "options": [
+        "OSWorld",
+        "GLUE",
+        "ImageNet",
+        "SQuAD"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "OSWorld uses real applications."
+    },
+    {
+      "id": "gu17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Accessibility data, where available, helps a GUI agent because…",
+      "options": [
+        "It names elements precisely",
+        "It is prettier",
+        "It removes the need for a VM",
+        "It is required by law"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Structured element names aid grounding."
+    },
+    {
+      "id": "gu18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why split long GUI tasks into shorter ones?",
+      "options": [
+        "Fewer steps compound less error",
+        "To use more tokens",
+        "To slow down",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Shorter chains, higher success."
+    },
+    {
+      "id": "gu19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A GUI agent enters a policy number. How do you confirm it worked?",
+      "options": [
+        "Trust it",
+        "Screenshot and check the field shows the value",
+        "Ask the customer",
+        "Reboot"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Look again."
+    },
+    {
+      "id": "gu20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should happen to cases the GUI agent fails?",
+      "options": [
+        "Dropped",
+        "Queued for staff",
+        "Retried forever",
+        "Deleted"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Human fallback."
+    }
+  ]
+}

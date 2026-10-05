@@ -1,0 +1,870 @@
+{
+  "id": "bench",
+  "moduleSlug": "evaluation",
+  "name": "Benchmark Suites",
+  "shortName": "Benchmarks",
+  "question": "How does it compare with the field?",
+  "summary": "Public benchmark suites measure general agent capability on standard tasks with fixed harnesses. Use them to choose a model or framework. They are no substitute for an eval set built from your own tasks.",
+  "useCases": [
+    "Shortlisting models or frameworks before you build",
+    "Tracking general capability across model upgrades",
+    "Reporting progress against a shared yardstick"
+  ],
+  "keyFacts": {
+    "label": "Key benchmarks",
+    "items": [
+      {
+        "term": "SWE-bench Verified",
+        "detail": "500 human-validated GitHub issues; the patch must pass the repo’s tests"
+      },
+      {
+        "term": "GAIA",
+        "detail": "466 real-world assistant questions over 3 difficulty levels"
+      },
+      {
+        "term": "τ-bench",
+        "detail": "tool use with simulated users in retail and airline domains; reports pass^k"
+      },
+      {
+        "term": "WebArena",
+        "detail": "812 tasks on self-hosted, realistic websites"
+      },
+      {
+        "term": "OSWorld",
+        "detail": "369 computer-use tasks on real desktop apps"
+      },
+      {
+        "term": "BFCL",
+        "detail": "Berkeley Function Calling Scoreboard: tool-call accuracy"
+      }
+    ]
+  },
+  "steps": [
+    "Pick the suites closest to your agent’s work: code, web, tools or desktop",
+    "Run the official harness and settings so results are comparable",
+    "Report pass@1, cost and run time, not just the headline score",
+    "Mirror the format in a private set built from your own tasks"
+  ],
+  "pitfalls": [
+    "Contamination: test items may be in the model’s training data",
+    "Saturation: top scores stop separating strong systems",
+    "Scoreboard setups often differ from your production constraints"
+  ],
+  "tools": [
+    "SWE-bench harness",
+    "Inspect Evals",
+    "BrowserGym",
+    "BFCL"
+  ],
+  "remember": "Benchmarks to choose, private evals to ship.",
+  "caption": "Which capabilities each benchmark exercises. Choose the ones that match your agent’s job.",
+  "comparison": {
+    "scope": "General capability",
+    "cost": 4,
+    "needs": "Official harness + compute",
+    "best": "Model and framework selection"
+  },
+  "diagram": {
+    "file": "diagrams/bench.svg"
+  },
+  "lesson": {
+    "file": "run_swebench.sh",
+    "language": "bash",
+    "code": [
+      {
+        "text": "pip install swebench",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# Dataset: princeton-nlp/SWE-bench_Verified (500 issues)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Your agent writes one patch per issue:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "# {\"instance_id\": \"...\", \"model_name_or_path\": \"my-agent\", \"model_patch\": \"diff ...\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "python my_agent.py --out preds.jsonl",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "python -m swebench.harness.run_evaluation \\",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  --dataset_name princeton-nlp/SWE-bench_Verified \\",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  --predictions_path preds.jsonl \\",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  --max_workers 8 --run_id v1",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "# Per instance: build Docker env, apply patch, run tests",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "# FAIL_TO_PASS must now pass; PASS_TO_PASS must still pass",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Report resolved / 500 with cost and run time,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# then rerun the finalists on your own issues.",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Pick the benchmark",
+        "text": "Choose the suite closest to your workload. SWE-bench Verified: 500 human-checked GitHub issues from Python repositories."
+      },
+      {
+        "title": "Generate predictions",
+        "text": "Your agent attempts each issue and writes one patch per instance ID into preds.jsonl."
+      },
+      {
+        "title": "Run the official harness",
+        "text": "The harness builds a Docker environment per repository and applies each patch, so results are reproducible."
+      },
+      {
+        "title": "Tests decide",
+        "text": "FAIL_TO_PASS tests must now pass (the issue is fixed) and PASS_TO_PASS tests must still pass (nothing broke)."
+      },
+      {
+        "title": "Report, then confirm privately",
+        "text": "Report the resolved rate with cost and time. Then run the finalists on your own issues before choosing."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"20\" width=\"136\" height=\"56\" rx=\"7\"/><text class=\"lb\" x=\"76\" y=\"45\">SWE-bench Verified</text><text class=\"sb\" x=\"76\" y=\"60\">500 real issues</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M146 48L156 48\" marker-end=\"url(#arr)\"/></g><g class=\"a dark-t\" style=\"--d:0.1s\"><rect class=\"bx dark\" x=\"158\" y=\"20\" width=\"90\" height=\"56\" rx=\"7\"/><text class=\"lb\" x=\"203\" y=\"45\">Your agent</text><text class=\"sb\" x=\"203\" y=\"60\">writes patches</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M250 48L262 48\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"264\" y=\"34\" width=\"88\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"308\" y=\"52\" text-anchor=\"middle\">preds.jsonl</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"98\" width=\"344\" height=\"46\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"118\">Evaluation harness</text><text class=\"sb\" x=\"180\" y=\"133\">Docker per repo · apply patch · run tests</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"160\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"177\" text-anchor=\"middle\">FAIL_TO_PASS ✓</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"182\" y=\"160\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"177\" text-anchor=\"middle\">PASS_TO_PASS ✓</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"200\" width=\"170\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"218\" text-anchor=\"middle\">resolved 290 / 500 = 58%</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx warn\" x=\"182\" y=\"200\" width=\"170\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"218\" text-anchor=\"middle\">next: your own issues</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "A shared yardstick everyone understands",
+      "Free, public and reproducible",
+      "Covers many capabilities: code, web, tools, desktop",
+      "Good for shortlisting models and frameworks"
+    ],
+    "cons": [
+      "Test items may be in training data (contamination)",
+      "Top scores bunch together (saturation)",
+      "Not your domain, data or constraints",
+      "Harness and scaffold differences skew comparisons"
+    ],
+    "avoidWhen": [
+      "Making the final ship decision",
+      "Measuring domain-specific quality"
+    ],
+    "tools": [
+      {
+        "name": "SWE-bench",
+        "type": "Open benchmark",
+        "what": "Resolving real GitHub issues",
+        "url": "https://www.swebench.com"
+      },
+      {
+        "name": "τ-bench",
+        "type": "Open benchmark (Sierra)",
+        "what": "Tool use with simulated users; reports pass^k",
+        "url": "https://github.com/sierra-research/tau-bench"
+      },
+      {
+        "name": "GAIA",
+        "type": "Open benchmark",
+        "what": "General assistant questions needing web, files and reasoning",
+        "url": "https://huggingface.co/gaia-benchmark"
+      },
+      {
+        "name": "WebArena",
+        "type": "Open benchmark",
+        "what": "Tasks on realistic self-hosted websites",
+        "url": "https://webarena.dev"
+      },
+      {
+        "name": "OSWorld",
+        "type": "Open benchmark",
+        "what": "Computer use on real desktop apps",
+        "url": "https://os-world.github.io"
+      },
+      {
+        "name": "BFCL",
+        "type": "Open scoreboard (Berkeley)",
+        "what": "Function and tool-call accuracy",
+        "url": "https://gorilla.cs.berkeley.edu/"
+      },
+      {
+        "name": "Inspect Evals",
+        "type": "Open source (UK AISI)",
+        "what": "Many benchmarks runnable with one harness",
+        "url": "https://github.com/UKGovernmentBEIS/inspect_evals"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "You must pick a model for an internal coding assistant. Alpha, Beta and Gamma (fictional) each have a public scoreboard score and a score from your own 60-issue internal eval. See how the choice changes with what you trust and what you optimise.",
+    "controls": [
+      "Scores from: the public scoreboard or your internal eval.",
+      "Rank by: resolve rate (quality) or cost per resolved task (efficiency).",
+      "Tasks per month: your expected volume."
+    ],
+    "outputs": [
+      {
+        "name": "Resolve rate",
+        "meaning": "Share of tasks the model solves."
+      },
+      {
+        "name": "Cost / task",
+        "meaning": "What one attempt costs, successful or not."
+      },
+      {
+        "name": "Cost / resolved",
+        "meaning": "Cost per task ÷ resolve rate: the true price of each success."
+      },
+      {
+        "name": "Monthly cost",
+        "meaning": "Cost per task × tasks per month."
+      }
+    ],
+    "presets": [
+      {
+        "k": "board",
+        "name": "Scoreboard view",
+        "expect": "Public scores, ranked by quality. Alpha wins."
+      },
+      {
+        "k": "own",
+        "name": "Your data",
+        "expect": "Internal scores, ranked by quality. Beta wins: the ranking changes on your own issues."
+      },
+      {
+        "k": "budget",
+        "name": "Budget view",
+        "expect": "Internal scores, ranked by cost per resolved task. Gamma wins."
+      }
+    ],
+    "missions": [
+      {
+        "k": "gamma",
+        "text": "Find a setting where Gamma ranks first.",
+        "hint": "Rank by cost per resolved task."
+      },
+      {
+        "k": "flip",
+        "text": "See the scoreboard pick lose on your own data.",
+        "hint": "Switch scores to your internal eval, ranked by resolve rate."
+      },
+      {
+        "k": "beta5k",
+        "text": "Keep Beta first and push its monthly cost above $5,000.",
+        "hint": "At $0.15 a task you need more than 33,333 tasks a month."
+      }
+    ],
+    "tools": [
+      {
+        "n": "SWE-bench",
+        "type": "Open benchmark",
+        "start": 2,
+        "prod": 2,
+        "tag": "Model selection · coding",
+        "best": "Comparing coding agents on real GitHub issues that must pass the repository’s tests.",
+        "ex": "Shortlist two models for an internal coding assistant before a private trial.",
+        "pros": [
+          "Real repositories and real tests",
+          "Widely reported, so results are comparable"
+        ],
+        "cons": [
+          "Python repositories only",
+          "Docker-heavy to run yourself"
+        ],
+        "url": "https://www.swebench.com"
+      },
+      {
+        "n": "τ-bench",
+        "type": "Open benchmark · Sierra",
+        "start": 2,
+        "prod": 2,
+        "tag": "Model selection · tool use",
+        "best": "Customer-service agents using tools while talking to simulated users in retail and airline domains.",
+        "ex": "Check whether an agent follows booking policies consistently across repeated trials (pass^k).",
+        "pros": [
+          "Tests policy-following and consistency",
+          "Conversational, with simulated users"
+        ],
+        "cons": [
+          "Only two domains",
+          "The user simulator adds variance"
+        ],
+        "url": "https://github.com/sierra-research/tau-bench"
+      },
+      {
+        "n": "GAIA",
+        "type": "Open benchmark",
+        "start": 2,
+        "prod": 1,
+        "tag": "Research assistants",
+        "best": "General assistants that need web browsing, files and multi-step reasoning.",
+        "ex": "Compare research-assistant stacks on the public validation set.",
+        "pros": [
+          "Easy for people, hard for AI",
+          "Three difficulty levels"
+        ],
+        "cons": [
+          "Test answers are held back for the scoreboard",
+          "Live web content changes over time"
+        ],
+        "url": "https://huggingface.co/gaia-benchmark"
+      },
+      {
+        "n": "WebArena",
+        "type": "Open benchmark",
+        "start": 1,
+        "prod": 2,
+        "tag": "Browser agents",
+        "best": "Browser agents working on realistic self-hosted websites: shopping, forums, code hosting.",
+        "ex": "Evaluate a browser agent before automating back-office web tasks.",
+        "pros": [
+          "Realistic, reproducible sites",
+          "Checks whether tasks were actually completed"
+        ],
+        "cons": [
+          "Heavy to host yourself",
+          "Sites differ from your internal tools"
+        ],
+        "url": "https://webarena.dev"
+      },
+      {
+        "n": "OSWorld",
+        "type": "Open benchmark",
+        "start": 1,
+        "prod": 2,
+        "tag": "Computer use",
+        "best": "Agents operating real desktop applications inside virtual machines.",
+        "ex": "Compare computer-use agents before automating a desktop workflow.",
+        "pros": [
+          "Real apps and operating systems",
+          "Execution-based checks"
+        ],
+        "cons": [
+          "Needs virtual machines",
+          "Slow and costly to run"
+        ],
+        "url": "https://os-world.github.io"
+      },
+      {
+        "n": "BFCL",
+        "type": "Open scoreboard · UC Berkeley",
+        "start": 3,
+        "prod": 2,
+        "tag": "Tool calling",
+        "best": "How accurately models format and choose function calls across many patterns.",
+        "ex": "Check which model calls tools reliably before building an agent on it.",
+        "pros": [
+          "Focused on tool calling",
+          "Public, regularly updated scoreboard"
+        ],
+        "cons": [
+          "Focuses on individual calls more than long tasks",
+          "Many functions are synthetic"
+        ],
+        "url": "https://gorilla.cs.berkeley.edu/"
+      },
+      {
+        "n": "Inspect Evals",
+        "type": "Open source · UK AI Security Institute",
+        "start": 3,
+        "prod": 2,
+        "tag": "Many benchmarks, one harness",
+        "best": "Running many public benchmarks through one consistent harness.",
+        "ex": "Run several benchmarks against two candidate models with identical settings.",
+        "pros": [
+          "One consistent way to run them",
+          "Open implementations you can read"
+        ],
+        "cons": [
+          "Coverage varies by benchmark",
+          "You still pay for compute and model calls"
+        ],
+        "url": "https://github.com/UKGovernmentBEIS/inspect_evals"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Coding agents",
+        "tool": "SWE-bench"
+      },
+      {
+        "need": "Customer-service tool use",
+        "tool": "τ-bench"
+      },
+      {
+        "need": "Many benchmarks, one harness",
+        "tool": "Inspect Evals"
+      }
+    ],
+    "goals": [
+      "Explain what SWE-bench Verified measures and how",
+      "Compute cost per resolved task from resolve rate and price",
+      "Argue why a private eval should decide over a scoreboard"
+    ]
+  },
+  "practice": {
+    "scenario": "Before choosing a model for an internal coding assistant, a team compares published SWE-bench Verified results to shortlist two candidates. It then runs both on 60 closed issues from its own repositories, and that private result, not the scoreboard, decides the pick.",
+    "industries": [
+      {
+        "industry": "AI platform teams",
+        "use": "Shortlist models with SWE-bench, τ-bench and BFCL before building"
+      },
+      {
+        "industry": "Airlines & retail",
+        "use": "τ-bench mirrors their customer-service tool workflows"
+      },
+      {
+        "industry": "Enterprise IT",
+        "use": "OSWorld and WebArena map to desktop and browser back-office automation"
+      }
+    ],
+    "analogy": "A board-exam rank versus a job interview. The rank shortlists candidates; the interview on your real work decides who you hire.",
+    "library": {
+      "name": "SWE-bench harness",
+      "what": "The official Docker-based harness. It applies each patch, runs the repository tests and reports resolved issues.",
+      "install": "pip install swebench"
+    },
+    "samples": [
+      {
+        "file": "run_swebench.sh",
+        "language": "bash",
+        "code": "# preds.jsonl: one JSON line per issue your agent attempted\n# {\"instance_id\": \"django__django-11099\",\n#  \"model_name_or_path\": \"my-agent\",\n#  \"model_patch\": \"diff --git a/...\"}\n\npython -m swebench.harness.run_evaluation \\\n  --dataset_name princeton-nlp/SWE-bench_Verified \\\n  --predictions_path preds.jsonl \\\n  --max_workers 8 \\\n  --run_id my-agent-v1\n\n# Output: a JSON report with resolved / unresolved instance IDs"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Model A resolves 62% of SWE-bench Verified at $0.40 per task. Model B resolves 58% at $0.10. Over 1,000 tasks, what is B's cost per resolved issue, in $?",
+    "answer": "A: $400 ÷ 620 ≈ $0.65 per resolved issue. B: $100 ÷ 580 ≈ $0.17. B is about 4× cheaper per resolved issue for 4 points less.",
+    "expected": {
+      "value": 0.17,
+      "tolerance": 0.01,
+      "label": "B, $ per resolved ="
+    },
+    "interview": [
+      {
+        "question": "Why can't you choose a model on scoreboard scores alone?",
+        "answer": "Benchmarks can be contaminated or saturated, run with harness settings unlike yours, and cover different tasks. Use them to shortlist, then decide with a private eval on your own tasks."
+      },
+      {
+        "question": "What does SWE-bench Verified measure?",
+        "answer": "Whether an agent can resolve real GitHub issues from Python repositories: its patch must make the failing tests pass without breaking others. Verified is a 500-issue subset that human annotators checked."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Comparing scores produced with different harnesses",
+        "fix": "Use the official harness and report settings"
+      },
+      {
+        "mistake": "Quoting only the pass rate",
+        "fix": "Report pass@1 with cost and run time"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "bn01",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "A vendor says their agent scores 65% on SWE-bench. What do you ask first?",
+      "options": [
+        "Which split (Full, Lite or Verified), with which harness and scaffold, at what cost",
+        "Which font the report uses",
+        "Whether the model is open source",
+        "Nothing: 65% is clear"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scores are only comparable on the same split and set-up, and cost matters too."
+    },
+    {
+      "id": "bn02",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A patch fixes the issue but breaks another test. Does it count as resolved?",
+      "options": [
+        "Yes",
+        "No: the PASS_TO_PASS tests must still pass",
+        "Partially",
+        "Only if the test is flaky"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Resolved means the issue is fixed and nothing else broke."
+    },
+    {
+      "id": "bn03",
+      "kind": "multi",
+      "industry": "AI platform",
+      "question": "What are the limits of public benchmarks? Select all that apply.",
+      "options": [
+        "Contamination",
+        "Saturation",
+        "They do not reflect your domain",
+        "They are always wrong"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "They are useful for shortlisting, but they do not decide for your use case."
+    },
+    {
+      "id": "bn04",
+      "kind": "single",
+      "industry": "Enterprise IT",
+      "question": "Model B resolves 50% of tasks at $0.10 per attempt. What is its cost per resolved task?",
+      "options": [
+        "$0.20",
+        "$0.05",
+        "$0.50",
+        "$0.10"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "$0.10 ÷ 0.5 = $0.20."
+    },
+    {
+      "id": "bn05",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "You are shortlisting models for an airline customer-service agent that uses tools and follows policy. Which benchmark fits best?",
+      "options": [
+        "τ-bench",
+        "OSWorld",
+        "GAIA",
+        "SWE-bench"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "τ-bench simulates customers in retail and airline domains with tools and policies."
+    },
+    {
+      "id": "bn06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which benchmark fits a browser agent for e-commerce back-office work?",
+      "options": [
+        "WebArena",
+        "BFCL",
+        "SWE-bench",
+        "τ-bench"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "WebArena hosts realistic websites, including shopping and admin sites."
+    },
+    {
+      "id": "bn07",
+      "kind": "single",
+      "industry": "Software",
+      "question": "The public scoreboard favours Model X, but your own 60 internal issues favour Model Y. Which do you choose?",
+      "options": [
+        "X",
+        "Y, if the internal set reflects your real work",
+        "Average the two",
+        "Neither"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Your own tasks predict your results better."
+    },
+    {
+      "id": "bn08",
+      "kind": "multi",
+      "industry": "AI platform",
+      "question": "What should you report alongside a benchmark score? Select all that apply.",
+      "options": [
+        "Cost per task",
+        "Run time",
+        "Harness and scaffold settings",
+        "The model’s logo"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Without these, scores cannot be compared fairly."
+    },
+    {
+      "id": "bn09",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "Why use the official harness?",
+      "options": [
+        "For comparable, reproducible results",
+        "It is faster",
+        "It is cheaper",
+        "It is legally required"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Different harnesses produce different scores."
+    },
+    {
+      "id": "bn10",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Before building a tool-heavy trading assistant, you want to shortlist models on function-call accuracy. Which benchmark fits?",
+      "options": [
+        "BFCL",
+        "GAIA",
+        "OSWorld",
+        "WebArena"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "BFCL is Berkeley’s function-calling benchmark."
+    },
+    {
+      "id": "bn11",
+      "kind": "single",
+      "industry": "Enterprise IT",
+      "question": "You are automating desktop back-office tasks across real apps. Which benchmark fits?",
+      "options": [
+        "OSWorld",
+        "BFCL",
+        "SWE-bench",
+        "τ-bench"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "OSWorld tests agents operating real desktop applications."
+    },
+    {
+      "id": "bn12",
+      "kind": "single",
+      "industry": "Consulting",
+      "question": "Your research assistant browses the web, reads files and reasons over many steps. Which benchmark fits?",
+      "options": [
+        "GAIA",
+        "BFCL",
+        "SWE-bench",
+        "WebArena"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "GAIA targets general assistants with browsing, files and multi-step reasoning."
+    },
+    {
+      "id": "bn13",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "A model scores 20 points higher on an old benchmark than on a similar one released after its training cutoff. What is the likely cause?",
+      "options": [
+        "Contamination: old items may have been in its training data",
+        "The new benchmark is broken",
+        "Random noise",
+        "Saturation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Test items that appear in training data inflate scores."
+    },
+    {
+      "id": "bn14",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "The top 10 models are all within 1.5 points of each other on a benchmark. What does that mean?",
+      "options": [
+        "The benchmark is saturated and no longer separates models",
+        "All models are equal for your use",
+        "Pick the top one",
+        "The harness is broken"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Use harder or private evals to tell the models apart."
+    },
+    {
+      "id": "bn15",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "10,000 tasks a month. Model A resolves 60% at $0.30 per attempt; Model B resolves 50% at $0.10. Unresolved tasks go to people at $2 each. Which is cheaper per month?",
+      "options": [
+        "Model A",
+        "Model B",
+        "They cost the same",
+        "You cannot tell"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A: $3,000 + 4,000 × $2 = $11,000. B: $1,000 + 5,000 × $2 = $11,000. Include the human fallback in the cost."
+    },
+    {
+      "id": "bn16",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "A model scores pass^1 = 0.61 and pass^8 = 0.25 on τ-bench retail. What does that tell you?",
+      "options": [
+        "It is consistent",
+        "Many tasks succeed only some of the time, so reliability drops sharply over repeated tries",
+        "pass^8 is not meaningful",
+        "It resolves 61% every time"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "τ-bench introduced pass^k to expose exactly this inconsistency."
+    },
+    {
+      "id": "bn17",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "You are building a private benchmark from your own repositories. What should you do? Select all that apply.",
+      "options": [
+        "Use recently closed real issues",
+        "Hold back a set you never tune prompts on",
+        "Include tests that decide pass or fail",
+        "Copy in public SWE-bench items"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Keep it real, held out and automatically checkable."
+    },
+    {
+      "id": "bn18",
+      "kind": "single",
+      "industry": "Software",
+      "question": "The same model scores 33% with your in-house agent and 49% on the public board. What is the likely reason?",
+      "options": [
+        "The board is wrong",
+        "Differences in scaffold and harness: public entries use tuned agent set-ups",
+        "Your repository is broken",
+        "Contamination only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A score belongs to the whole system, not just the model."
+    },
+    {
+      "id": "bn19",
+      "kind": "single",
+      "industry": "AI platform",
+      "question": "Running your 500-issue suite nightly is getting expensive. What is the best move?",
+      "options": [
+        "Use batch processing and run a small smoke subset on each change",
+        "Run it once a year",
+        "Drop the benchmark",
+        "Use only public results"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Batch APIs cost about half, and a smoke subset keeps quick feedback on each change."
+    },
+    {
+      "id": "bn20",
+      "kind": "multi",
+      "industry": "AI platform",
+      "question": "Your team wants to claim “we beat Model X on SWE-bench”. What makes the claim fair? Select all that apply.",
+      "options": [
+        "The same split and the official harness",
+        "Stating attempts per issue (pass@1 or best of n)",
+        "Reporting cost and time",
+        "Quietly picking the best of five runs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Be transparent about attempts and set-up. Silent cherry-picking inflates the score."
+    }
+  ]
+}

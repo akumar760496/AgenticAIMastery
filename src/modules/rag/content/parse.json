@@ -1,0 +1,880 @@
+{
+  "id": "parse",
+  "moduleSlug": "rag",
+  "name": "Document Parsing and OCR",
+  "shortName": "Parsing and OCR",
+  "question": "Did the text, tables and layout survive ingestion?",
+  "summary": "Turns PDFs, scans, slides and spreadsheets into clean text with its structure before anything is chunked or embedded. Digital pages give up their text layer; scanned pages need OCR, including Hindi and other Indian scripts; layout detection restores reading order across columns and drops running headers; tables are kept as rows with their headers; and page and section numbers travel with the text for citations. What is lost here cannot be retrieved later.",
+  "useCases": [
+    "Scanned KYC forms, agreements and old circulars",
+    "Reports and statements full of tables",
+    "Multi-column documents such as regulations and research papers"
+  ],
+  "keyFacts": {
+    "label": "What to get right",
+    "items": [
+      {
+        "term": "Text layer",
+        "detail": "extract digital text directly; it is exact and fast"
+      },
+      {
+        "term": "OCR",
+        "detail": "render scans at about 300 dpi; set the languages, such as eng + hin"
+      },
+      {
+        "term": "Layout and reading order",
+        "detail": "columns, headings, headers and footers"
+      },
+      {
+        "term": "Tables",
+        "detail": "Markdown or HTML rows that keep the header"
+      },
+      {
+        "term": "Metadata",
+        "detail": "document, page, section and date for citations and filters"
+      },
+      {
+        "term": "Quality checks",
+        "detail": "empty pages, garbled characters, low OCR confidence"
+      }
+    ]
+  },
+  "steps": [
+    "Check each page for a text layer and OCR only the pages without one",
+    "Restore reading order and drop running headers and footers",
+    "Convert tables to Markdown with their header row",
+    "Keep page and section metadata, and send near-empty pages to review"
+  ],
+  "pitfalls": [
+    "Scanned pages ingested as blank text, silently",
+    "Tables flattened into a stream of numbers with no headers",
+    "Two-column pages read straight across both columns"
+  ],
+  "tools": [
+    "Docling",
+    "Unstructured",
+    "PyMuPDF",
+    "Tesseract",
+    "Azure AI Document Intelligence",
+    "LlamaParse"
+  ],
+  "remember": "Parse for structure, not just text.",
+  "caption": "Illustrative: Kosh Finance, a fictional NBFC, ingests 2,000 pages of loan files: digital, scanned, tabular and two-column.",
+  "comparison": {
+    "scope": "Ingestion, before chunking",
+    "cost": 2,
+    "needs": "Scans, tables, multi-column PDFs",
+    "best": "Silent text loss"
+  },
+  "diagram": {
+    "file": "diagrams/parse.svg"
+  },
+  "lesson": {
+    "file": "parse_loan_files.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import fitz                        # PyMuPDF",
+        "steps": []
+      },
+      {
+        "text": "import pytesseract",
+        "steps": []
+      },
+      {
+        "text": "from PIL import Image",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def page_text(page):",
+        "steps": []
+      },
+      {
+        "text": "    if len(page.get_text().strip()) >= 50:            # has a text layer",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        h, w = page.rect.height, page.rect.width",
+        "steps": []
+      },
+      {
+        "text": "        blocks = page.get_text(\"blocks\")              # x0, y0, x1, y1, text, ...",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        body = [b for b in blocks if 50 < b[1] < h - 50]   # drop header, footer",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        body.sort(key=lambda b: (b[0] > w / 2, b[1]))      # left column first",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        return \"\\n\".join(b[4] for b in body), \"text\"",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "    pix = page.get_pixmap(dpi=300)                    # a scan: render it",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    img = Image.frombytes(\"RGB\", (pix.width, pix.height), pix.samples)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return pytesseract.image_to_string(img, lang=\"eng+hin\"), \"ocr\"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def parse(path, doc_id):",
+        "steps": []
+      },
+      {
+        "text": "    out = []",
+        "steps": []
+      },
+      {
+        "text": "    for pno, page in enumerate(fitz.open(path), start=1):",
+        "steps": []
+      },
+      {
+        "text": "        text, how = page_text(page)",
+        "steps": []
+      },
+      {
+        "text": "        for t in page.find_tables().tables:           # keep tables as rows",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            out.append({\"doc\": doc_id, \"page\": pno, \"kind\": \"table\",",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "                        \"text\": t.to_markdown()})",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        out.append({\"doc\": doc_id, \"page\": pno, \"kind\": how, \"text\": text})",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        if len(text.strip()) < 200:                   # suspiciously empty",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            review_queue.put((doc_id, pno, how))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return out",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Check for a text layer",
+        "text": "Digital PDFs carry their text; extracting it is exact and takes milliseconds. A page with almost no extractable text is almost certainly a scan."
+      },
+      {
+        "title": "OCR the scans, in the right languages",
+        "text": "Render the scanned page at 300 dpi and run OCR with English and Hindi models. Without “hin”, a Hindi KYC declaration comes back as noise."
+      },
+      {
+        "title": "Restore the layout",
+        "text": "Drop the running header and footer bands, then read the left column before the right. Read straight across, a two-column circular mixes two paragraphs line by line."
+      },
+      {
+        "title": "Keep tables as tables",
+        "text": "The interest-rate table becomes Markdown rows with a header: | Tenure | Rate |. Flattened, it is a stream of numbers no one can match to a question."
+      },
+      {
+        "title": "Carry the metadata",
+        "text": "Every piece keeps its document, page and kind. Citations and filters later depend on it: “loan_2023.pdf, page 7”."
+      },
+      {
+        "title": "Flag near-empty pages",
+        "text": "A page with under 200 characters goes to a review queue. Silent blanks are the most common ingestion bug."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"120\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"25\" text-anchor=\"middle\">page 3: 2,140 chars</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M130 21L146 21\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"148\" y=\"8\" width=\"120\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"208\" y=\"25\" text-anchor=\"middle\">text layer ✓</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"274\" y=\"8\" width=\"78\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"313\" y=\"25\" text-anchor=\"middle\">2 ms</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"42\" width=\"120\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"68\" y=\"59\" text-anchor=\"middle\">page 9: 12 chars</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M130 55L146 55\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"148\" y=\"42\" width=\"120\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"208\" y=\"59\" text-anchor=\"middle\">OCR · eng+hin</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"274\" y=\"42\" width=\"78\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"313\" y=\"59\" text-anchor=\"middle\">1.8 s</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"78\" width=\"168\" height=\"66\" rx=\"5\"/><line x1=\"92\" x2=\"92\" y1=\"84\" y2=\"138\" class=\"ln\"/><text class=\"mono\" x=\"50\" y=\"114\" text-anchor=\"middle\" style=\"text-anchor:middle\">1 ↓</text><text class=\"mono\" x=\"134\" y=\"114\" text-anchor=\"middle\" style=\"text-anchor:middle\">2 ↓</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"184\" y=\"78\" width=\"168\" height=\"28\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"96\" text-anchor=\"middle\">header, footer dropped</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"184\" y=\"114\" width=\"168\" height=\"28\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"132\" text-anchor=\"middle\">left column, then right</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"154\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"170\" text-anchor=\"middle\">| Tenure | Rate |  | 12 m | 11.5% |  | 24 m | 12.0% |</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"186\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"201\" text-anchor=\"middle\">{doc: loan_2023, page: 7, kind: table}</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"216\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"232\" text-anchor=\"middle\">page 14: 31 chars after OCR → review queue</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Recovers text from scans, tables and columns that naive extraction loses",
+      "Metadata such as page and section makes citations and filters possible",
+      "Quality checks catch silent failures before anyone asks a question",
+      "Fixes at ingestion help every question, for every model"
+    ],
+    "cons": [
+      "OCR and layout models add minutes per thousand pages",
+      "Hindi and regional scripts need the right OCR models and testing",
+      "Complex layouts still need human review",
+      "Re-parsing means re-chunking and re-embedding"
+    ],
+    "avoidWhen": [
+      "Every document is clean digital text with no tables (plain text extraction is enough)",
+      "The documents are already structured data (load the database, do not parse exports)"
+    ],
+    "tools": [
+      {
+        "name": "Docling",
+        "type": "Open source (IBM)",
+        "what": "Layout, reading order and tables from PDFs and Office files",
+        "url": "https://github.com/docling-project/docling"
+      },
+      {
+        "name": "Unstructured",
+        "type": "Open source and hosted API",
+        "what": "Partitioning many file types into typed elements",
+        "url": "https://github.com/Unstructured-IO/unstructured"
+      },
+      {
+        "name": "PyMuPDF",
+        "type": "Open source (AGPL) or commercial",
+        "what": "Fast text, block and table extraction from PDFs",
+        "url": "https://pymupdf.readthedocs.io"
+      },
+      {
+        "name": "Tesseract",
+        "type": "Open source",
+        "what": "OCR in 100+ languages, including Hindi and other Indian scripts",
+        "url": "https://github.com/tesseract-ocr/tesseract"
+      },
+      {
+        "name": "Azure AI Document Intelligence",
+        "type": "Managed service (Microsoft)",
+        "what": "OCR, layout and table models as an API",
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/"
+      },
+      {
+        "name": "LlamaParse",
+        "type": "Hosted API (LlamaIndex)",
+        "what": "LLM-assisted parsing of complex PDFs",
+        "url": "https://docs.cloud.llamaindex.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kosh Finance, a fictional NBFC, ingests 2,000 pages of loan files: 1,500 digital and 500 scanned, 150 of them in Hindi. 300 pages hold tables and 400 are laid out in two columns. 100 test questions: 40 answered in plain prose, 25 on scans (8 in Hindi), 20 in tables and 15 on two-column pages.",
+    "controls": [
+      "Choose how scanned pages are handled: skipped, OCR in English, or OCR in English and Hindi.",
+      "Switch on the layout model, Markdown tables and header removal.",
+      "Load a scenario to compare full and lean pipelines."
+    ],
+    "outputs": [
+      {
+        "name": "Questions answerable",
+        "meaning": "Test questions whose answer text survives ingestion, out of 100."
+      },
+      {
+        "name": "By page type",
+        "meaning": "Prose, scans, tables and two-column pages, each against its total."
+      },
+      {
+        "name": "Scanned pages turned into text",
+        "meaning": "Out of 500."
+      },
+      {
+        "name": "Ingestion time",
+        "meaning": "Illustrative minutes for all 2,000 pages."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Text layer only",
+        "expect": "47 of 100 answerable: scans are blank, tables are word soup and columns are scrambled, in under 2 minutes."
+      },
+      {
+        "k": "ocr",
+        "name": "Add OCR in English and Hindi",
+        "expect": "68 of 100: the scans come back, but tables and columns still fail. About 17 minutes."
+      },
+      {
+        "k": "full",
+        "name": "Everything on",
+        "expect": "89 of 100 in about 31 minutes."
+      },
+      {
+        "k": "lean",
+        "name": "Everything but the layout model",
+        "expect": "82 of 100 in about 18 minutes: only the two-column pages suffer."
+      }
+    ],
+    "missions": [
+      {
+        "k": "all",
+        "text": "Make at least 85 of the 100 questions answerable.",
+        "hint": "OCR in both languages, the layout model, tables as Markdown and header removal."
+      },
+      {
+        "k": "fast",
+        "text": "Reach at least 80 answerable questions in 20 minutes or less.",
+        "hint": "The layout model costs over 13 minutes for 7 questions; leave it off."
+      },
+      {
+        "k": "hindi",
+        "text": "Show what English-only OCR does to Hindi documents.",
+        "hint": "Choose OCR in English."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Docling",
+        "type": "Open source · IBM",
+        "start": 3,
+        "prod": 3,
+        "best": "Layout analysis, reading order, table structure and OCR in one converter, with page provenance.",
+        "ex": "Convert loan agreements to Markdown with tables as rows and page numbers for every element.",
+        "pros": [
+          "Strong on tables and layout",
+          "Runs locally"
+        ],
+        "cons": [
+          "Heavier than plain text extraction",
+          "OCR quality depends on the chosen engine"
+        ],
+        "url": "https://github.com/docling-project/docling"
+      },
+      {
+        "n": "Unstructured",
+        "type": "Open source · hosted API",
+        "start": 3,
+        "prod": 2,
+        "best": "Partitioning many file types into typed elements such as titles, narrative text and tables.",
+        "ex": "Partition emails, Word files and PDFs into elements, then chunk by title.",
+        "pros": [
+          "Many file types",
+          "Element types help chunking"
+        ],
+        "cons": [
+          "Hi-res PDF mode is slow",
+          "Quality varies by file type"
+        ],
+        "url": "https://github.com/Unstructured-IO/unstructured"
+      },
+      {
+        "n": "PyMuPDF",
+        "type": "Open source (AGPL) · commercial licence",
+        "start": 3,
+        "prod": 3,
+        "best": "Very fast text, block and table extraction from digital PDFs.",
+        "ex": "Extract text blocks with coordinates and drop header and footer bands.",
+        "pros": [
+          "Fast and precise on digital PDFs",
+          "Table finder built in"
+        ],
+        "cons": [
+          "No OCR by itself",
+          "AGPL licence for commercial use"
+        ],
+        "url": "https://pymupdf.readthedocs.io"
+      },
+      {
+        "n": "Tesseract",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "OCR in over 100 languages, including Hindi, Tamil, Bengali and other Indian scripts.",
+        "ex": "OCR scanned KYC forms with lang=\"eng+hin\" at 300 dpi.",
+        "pros": [
+          "Free and local",
+          "Wide language coverage"
+        ],
+        "cons": [
+          "Weak on complex layouts and tables",
+          "Needs clean, well-lit scans"
+        ],
+        "url": "https://github.com/tesseract-ocr/tesseract"
+      },
+      {
+        "n": "Azure AI Document Intelligence",
+        "type": "Managed service · Microsoft",
+        "start": 3,
+        "prod": 3,
+        "best": "OCR, layout and table extraction as an API, with prebuilt models for invoices and IDs.",
+        "ex": "Layout model returns tables and reading order for scanned bank statements.",
+        "pros": [
+          "High accuracy on scans and tables",
+          "No models to host"
+        ],
+        "cons": [
+          "Per-page cost",
+          "Documents leave your systems"
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Digital PDFs, fast",
+        "tool": "PyMuPDF"
+      },
+      {
+        "need": "Complex layouts and tables, self-hosted",
+        "tool": "Docling"
+      },
+      {
+        "need": "Scans at scale, managed",
+        "tool": "Azure AI Document Intelligence"
+      }
+    ],
+    "goals": [
+      "Detect scanned pages and OCR them in the right languages",
+      "Keep tables and reading order intact",
+      "Measure ingestion quality by the questions it makes answerable"
+    ]
+  },
+  "practice": {
+    "scenario": "Kosh Finance, a fictional NBFC, indexes 2,000 pages of loan files for its credit team: agreements, sanction letters, statements and scanned KYC forms, some in Hindi. Digital pages give up their text directly; scans are OCRed in English and Hindi; tables become rows with headers; and every piece keeps its document and page so answers can cite them. Pages that come back nearly empty go to a review queue.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Loan agreements, sanction letters and scanned KYC forms"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claim forms, hospital bills and discharge summaries, often photographed"
+      },
+      {
+        "industry": "Government and legal",
+        "use": "Gazette notifications and judgments in several languages and layouts"
+      }
+    ],
+    "analogy": "Unpacking a moving van. If you throw every box's contents into one pile, you will never find the cutlery; label each box and keep the drawers together.",
+    "library": {
+      "name": "Docling",
+      "what": "Open-source document conversion from IBM: layout analysis, reading order, table structure and OCR, exporting clean Markdown or JSON with page provenance.",
+      "install": "pip install docling"
+    },
+    "note": "OCR engines and language models vary by version; test on your own scans, including Hindi and low-quality photos.",
+    "samples": [
+      {
+        "file": "convert.py",
+        "language": "python",
+        "code": "from docling.document_converter import DocumentConverter\n\nconverter = DocumentConverter()                 # layout, tables and OCR built in\nresult = converter.convert(\"loan_agreement_2023.pdf\")\ndoc = result.document\n\nmarkdown = doc.export_to_markdown()             # headings, lists and tables as Markdown\nfor table in doc.tables:\n    df = table.export_to_dataframe(doc=doc)     # keep tables as structured rows\n    print(df.head())\n\nfor item, level in doc.iterate_items():         # every element keeps its provenance\n    if item.prov:\n        print(item.prov[0].page_no, item.label, str(getattr(item, \"text\", \"\"))[:60])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "500 of 2,000 pages are scans. OCR takes 1.5 seconds a page on one worker. With 5 workers in parallel, how many minutes does OCR take?",
+    "answer": "500 × 1.5 s = 750 s of OCR work; across 5 workers that is 150 s, or 2.5 minutes. OCR only the pages without a text layer, not all 2,000.",
+    "expected": {
+      "value": 2.5,
+      "tolerance": 0.1,
+      "label": "minutes ="
+    },
+    "interview": [
+      {
+        "question": "How do you make sure scanned PDFs are actually searchable in a RAG system?",
+        "answer": "Detect pages without a text layer and OCR them at about 300 dpi with the right languages, such as English and Hindi. Check characters per page after parsing and send near-empty pages to review. Keep page numbers so answers can cite the page, and sample-check OCR quality on real documents."
+      },
+      {
+        "question": "Why do tables cause so many RAG failures, and what do you do about them?",
+        "answer": "Naive extraction flattens tables into a stream of numbers, so values lose their row and column headers. Extract tables as Markdown or HTML rows with headers, never split a row across chunks, and add table questions to the evaluation set."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Assuming every PDF has a text layer",
+        "fix": "Check each page and OCR the ones without text"
+      },
+      {
+        "mistake": "Flattening tables into plain text",
+        "fix": "Keep tables as rows with their headers"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pa01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A loan PDF page returns 8 characters from its text layer. What is the most likely explanation?",
+      "options": [
+        "The page is blank",
+        "The page is a scanned image and needs OCR",
+        "The PDF is encrypted",
+        "The embedding model failed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Scanned pages have no real text layer; a stamp or page number may be all that is extractable. Route such pages to OCR."
+    },
+    {
+      "id": "pa02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Claim forms arrive as phone photos in Hindi and English. Which OCR setting matters most?",
+      "options": [
+        "A higher chunk size",
+        "Both languages enabled, for example eng+hin",
+        "Lower image resolution to save time",
+        "A bigger LLM"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "OCR only recognises scripts it has models for; without Hindi the Devanagari text becomes noise."
+    },
+    {
+      "id": "pa03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A rate table is extracted as “12 m 11.5% 24 m 12.0% 36 m 12.5%”. What is lost?",
+      "options": [
+        "Nothing important",
+        "Which value belongs to which column header",
+        "Only the percentages",
+        "The page number"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Flattened tables lose their structure; keep them as rows with headers."
+    },
+    {
+      "id": "pa04",
+      "kind": "multi",
+      "industry": "Government",
+      "question": "Which steps belong in a parsing pipeline for mixed PDFs? Select all that apply.",
+      "options": [
+        "Detect pages without a text layer",
+        "OCR those pages",
+        "Restore reading order on multi-column pages",
+        "Translate every page into English before indexing"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Detection, OCR and layout are core. Translation is a separate choice and can hurt exact matching."
+    },
+    {
+      "id": "pa05",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A two-column judgment is read straight across each line. What happens to retrieval?",
+      "options": [
+        "It improves, because lines are longer",
+        "Sentences from both columns interleave, so chunks lose their meaning",
+        "Nothing, because embeddings ignore order",
+        "OCR fails"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Interleaved columns produce incoherent text that neither embeddings nor keywords handle well."
+    },
+    {
+      "id": "pa06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "500 pages need OCR at 1.5 seconds a page on 4 parallel workers. How long does OCR take?",
+      "options": [
+        "About 3 minutes",
+        "About 12.5 minutes",
+        "About 50 minutes",
+        "About 30 seconds"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "500 × 1.5 = 750 s of work; ÷ 4 workers ≈ 188 s, about 3 minutes."
+    },
+    {
+      "id": "pa07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Every chunk begins with “Vendor Terms · Confidential · Page n”. What is the effect?",
+      "options": [
+        "Better citations",
+        "Unrelated chunks look similar, adding noise to retrieval",
+        "Faster indexing",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Running headers repeat on every page and pull unrelated chunks together. Drop them during parsing."
+    },
+    {
+      "id": "pa08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why keep the page number and section with each parsed piece?",
+      "options": [
+        "To improve OCR accuracy",
+        "So answers can cite the page and filters can use the section",
+        "To reduce storage",
+        "Because embeddings need it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Metadata enables citations, filters and debugging; it is not mainly for retrieval scores."
+    },
+    {
+      "id": "pa09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "After parsing, 60 of 2,000 pages have under 200 characters. What should happen?",
+      "options": [
+        "Nothing; some pages are short",
+        "Review them: they may be failed OCR, photos or the wrong language",
+        "Delete the documents",
+        "Increase chunk size"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Near-empty pages are the most common silent ingestion failure."
+    },
+    {
+      "id": "pa10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which tools can OCR or analyse the layout of scanned documents? Select all that apply.",
+      "options": [
+        "Tesseract",
+        "Azure AI Document Intelligence",
+        "Docling",
+        "BM25"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "BM25 is a ranking function, not a parser."
+    },
+    {
+      "id": "pa11",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A contract PDF is digital, with tables. What is the cheapest correct approach?",
+      "options": [
+        "OCR every page",
+        "Extract the text layer and use a table extractor",
+        "Screenshot each page for a vision model",
+        "Skip the tables"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Digital pages already carry exact text; OCR would only add errors and time."
+    },
+    {
+      "id": "pa12",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Why is OCR rendered at about 300 dpi rather than 72 dpi?",
+      "options": [
+        "Smaller files",
+        "Small characters need enough pixels to be recognised",
+        "It is required by PDF",
+        "It makes tables disappear"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Low resolution blurs small text; 300 dpi is a common default for OCR."
+    },
+    {
+      "id": "pa13",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A scheme notice mixes Hindi and English on the same page. What is the best OCR setup?",
+      "options": [
+        "Hindi only",
+        "English only",
+        "Both language models together",
+        "OCR twice and keep the longer output"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Mixed-language pages need both models at once."
+    },
+    {
+      "id": "pa14",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Parsing changed, so tables are now extracted properly. What else must happen?",
+      "options": [
+        "Nothing",
+        "Re-chunk and re-embed the affected documents",
+        "Retrain the LLM",
+        "Change the vector database"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "New text means new chunks and new embeddings."
+    },
+    {
+      "id": "pa15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Test questions answered from tables fail at 65%, others at 10%. What should you inspect first?",
+      "options": [
+        "The LLM temperature",
+        "How tables were parsed and chunked",
+        "The embedding dimension",
+        "The latency budget"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The failure concentrates on one page type, which points to parsing."
+    },
+    {
+      "id": "pa16",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are signs of a parsing problem rather than a retrieval problem? Select all that apply.",
+      "options": [
+        "The answer text does not appear anywhere in the index",
+        "Tables appear as streams of numbers",
+        "The right chunk exists but ranks 20th",
+        "Two columns interleave in the chunk text"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "A chunk ranked 20th exists; that is a ranking problem."
+    },
+    {
+      "id": "pa17",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A vision-language model can read page images directly. When is that worth it?",
+      "options": [
+        "Always, for every page",
+        "For complex visual pages such as charts or forms, where text extraction fails",
+        "Never",
+        "Only for digital PDFs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Vision models are slower and costlier; use them where structure defeats ordinary parsing."
+    },
+    {
+      "id": "pa18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Headers are dropped by removing text in the top and bottom 50 points of each page. What is the risk?",
+      "options": [
+        "None",
+        "A real heading or table near the edge may be lost; check on samples",
+        "Pages become scans",
+        "OCR slows down"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Band-based rules are simple; verify them on real layouts."
+    },
+    {
+      "id": "pa19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is the most useful measure of ingestion quality?",
+      "options": [
+        "Pages processed per second",
+        "How many test questions have their answer text present in the index",
+        "Total characters extracted",
+        "Number of chunks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tie ingestion quality to answerable questions, not raw volume."
+    },
+    {
+      "id": "pa20",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A scanned gazette page OCRs with many garbled characters. What could help?",
+      "options": [
+        "A cleaner scan or preprocessing such as deskewing and binarisation",
+        "Bigger chunks",
+        "A re-ranker",
+        "More overlap"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Image quality drives OCR quality; fix the input before the downstream steps."
+    }
+  ]
+}

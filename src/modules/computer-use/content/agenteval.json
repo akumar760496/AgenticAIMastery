@@ -1,0 +1,797 @@
+{
+  "id": "agenteval",
+  "moduleSlug": "computer-use",
+  "name": "Evaluating Computer-Use Agents",
+  "shortName": "Benchmarks",
+  "question": "How do we know it works, beyond a scoreboard?",
+  "summary": "OSWorld tests agents on 369 real desktop and web tasks in virtual machines, with success checked by scripts; WebArena tests 812 tasks on self-hosted websites such as shops, forums and GitLab. They show general capability, but scores are mostly self-reported and depend on the scaffolding. For production, build an evaluation on your own tasks in a staging replica, check outcomes rather than clicks, run each task several times to measure reliability, and include injected pages and irreversible actions.",
+  "useCases": [
+    "Choosing a model or agent vendor",
+    "Deciding whether a GUI or voice agent is ready to launch",
+    "Tracking regressions after model updates"
+  ],
+  "keyFacts": {
+    "label": "Benchmarks",
+    "items": [
+      {
+        "term": "OSWorld-Verified",
+        "detail": "369 desktop and web tasks; top ~85% (Sep 2026)"
+      },
+      {
+        "term": "WebArena",
+        "detail": "812 web tasks; top 74.3%, humans ~78%"
+      },
+      {
+        "term": "Mind2Web",
+        "detail": "web tasks across real sites"
+      },
+      {
+        "term": "pass^k",
+        "detail": "share of tasks passed on all k runs"
+      },
+      {
+        "term": "Your eval",
+        "detail": "your tasks, your environment, outcome checks"
+      },
+      {
+        "term": "Voice evals",
+        "detail": "latency, WER by language, task completion"
+      }
+    ]
+  },
+  "steps": [
+    "Collect real tasks and define outcome checks",
+    "Run in a staging replica, not a static mock",
+    "Repeat each task several times and report pass^k",
+    "Add adversarial pages and irreversible-action tests"
+  ],
+  "pitfalls": [
+    "Treating a public benchmark score as your success rate",
+    "Testing on static page snapshots",
+    "One run per task"
+  ],
+  "tools": [
+    "OSWorld and OSWorld-Verified",
+    "WebArena and WebArena-Verified",
+    "Inspect and Promptfoo for custom suites",
+    "Session recordings for failure analysis"
+  ],
+  "remember": "Your tasks, your environment, several runs, adversarial cases.",
+  "caption": "Scoreboard figures as of Sep 2026; portal numbers illustrative.",
+  "comparison": {
+    "scope": "Readiness to launch",
+    "cost": 2,
+    "needs": "A staging replica and tasks",
+    "best": "Scoreboard optimism"
+  },
+  "diagram": {
+    "file": "diagrams/agenteval.svg"
+  },
+  "lesson": {
+    "file": "eval_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def run_suite(agent, tasks, env_factory, k=3):",
+        "steps": []
+      },
+      {
+        "text": "    rows = []",
+        "steps": []
+      },
+      {
+        "text": "    for task in tasks:                          # your real tasks",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        outcomes = []",
+        "steps": []
+      },
+      {
+        "text": "        for _ in range(k):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            env = env_factory(task.start_state)  # staging replica",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            agent.run(task.instruction, env, max_steps=task.budget)",
+        "steps": []
+      },
+      {
+        "text": "            outcomes.append(task.check(env))     # outcome, not clicks",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        rows.append({\"adversarial\": task.adversarial,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                     \"passes\": sum(outcomes)})",
+        "steps": []
+      },
+      {
+        "text": "    normal = [r for r in rows if not r[\"adversarial\"]]",
+        "steps": []
+      },
+      {
+        "text": "    return {\"pass@1\": mean(r[\"passes\"] / k for r in normal),",
+        "steps": []
+      },
+      {
+        "text": "            f\"pass^{k}\": mean(r[\"passes\"] == k for r in normal),",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            \"injection_fooled\": mean(r[\"passes\"] < k",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                                     for r in rows if r[\"adversarial\"])}",
+        "steps": []
+      },
+      {
+        "text": "# launch read-only tasks first; widen as results hold",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Your tasks, not the benchmark’s",
+        "text": "Collect real tasks from your processes: 400 loan-servicing tasks, not OSWorld’s office tasks."
+      },
+      {
+        "title": "A staging replica",
+        "text": "Each run starts from a fresh copy of your systems. Static page snapshots miss logins, pop-ups and slow pages."
+      },
+      {
+        "title": "Check the outcome",
+        "text": "Success means the loan record is right afterwards, not that the agent clicked the expected buttons."
+      },
+      {
+        "title": "Run each task several times",
+        "text": "One run gave 78%. Only 62% of tasks passed on all three runs; that is the reliability customers experience."
+      },
+      {
+        "title": "Add adversarial cases",
+        "text": "Pages with injected instructions fooled the agent 6% of the time; irreversible actions must be tested too."
+      },
+      {
+        "title": "Launch in stages",
+        "text": "Start with read-only tasks and widen scope as results hold in production monitoring."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"17\" style=\"text-anchor:end;--d:0s\">vendor’s OSWorld</text><rect x=\"118\" y=\"7\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"7\" width=\"127.5\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"17\" style=\"text-anchor:start;--d:0.2s\">~85%</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"34\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"49\" text-anchor=\"middle\">fresh staging replica per run</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"62\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"77\" text-anchor=\"middle\">check: loan record correct afterwards</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"105\" style=\"text-anchor:end;--d:0s\">one run</text><rect x=\"118\" y=\"95\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"95\" width=\"117\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"105\" style=\"text-anchor:start;--d:0.2s\">78%</text><text class=\"tl a\" x=\"112\" y=\"127\" style=\"text-anchor:end;--d:0.1s\">all of 3 runs</text><rect x=\"118\" y=\"117\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"117\" width=\"93\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"127\" style=\"text-anchor:start;--d:0.30000000000000004s\">62%</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"144\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"159\" text-anchor=\"middle\">injected pages fooled it 6%</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"172\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"187\" text-anchor=\"middle\">launch: read-only tasks first</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"220\" style=\"text-anchor:middle;fill:var(--ink-2)\">illustrative NBFC evaluation</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Predicts production success honestly",
+      "Measures reliability, not just capability",
+      "Catches injection weaknesses",
+      "Guides a staged launch"
+    ],
+    "cons": [
+      "Building staging replicas takes effort",
+      "Repeated runs cost more",
+      "Tasks need outcome checks",
+      "Suites must evolve with the app"
+    ],
+    "avoidWhen": [
+      "Launching on public benchmark scores alone",
+      "Evaluating on static snapshots"
+    ],
+    "tools": [
+      {
+        "name": "OSWorld-Verified",
+        "type": "Benchmark",
+        "what": "Desktop and web tasks with checks",
+        "url": "https://os-world.github.io"
+      },
+      {
+        "name": "WebArena-Verified",
+        "type": "Benchmark",
+        "what": "A verified version of WebArena",
+        "url": "https://github.com/ServiceNow/webarena-verified"
+      },
+      {
+        "name": "Mind2Web",
+        "type": "Benchmark",
+        "what": "Web tasks across real websites",
+        "url": "https://osu-nlp-group.github.io/Mind2Web/"
+      },
+      {
+        "name": "Inspect (UK AISI)",
+        "type": "Open source",
+        "what": "Custom agent evaluations",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "τ-bench",
+        "type": "Benchmark",
+        "what": "Tool agents with pass^k reliability",
+        "url": "https://github.com/sierra-research/tau-bench"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A vendor pitches a GUI agent to a fictional NBFC with a top OSWorld-Verified score. In production, the agent would complete 78% of the NBFC’s loan-servicing tasks on a single run. Choose what evidence to rely on, how many tasks and runs, and whether to include injected pages, and compare your estimate with the truth.",
+    "controls": [
+      "Choose the evidence: a public benchmark score, static snapshots, a staging replica or a production shadow.",
+      "Choose the number of tasks and runs per task.",
+      "Toggle adversarial pages, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Estimated success, one run",
+        "meaning": "Your evaluation’s estimate, with its margin of error."
+      },
+      {
+        "name": "True success, one run",
+        "meaning": "What production would show: 78%."
+      },
+      {
+        "name": "Estimate is off by",
+        "meaning": "The gap between estimate and truth."
+      },
+      {
+        "name": "Reliability · injection resistance",
+        "meaning": "Pass on all runs, and how often injected pages fool it."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Public benchmark only",
+        "expect": "85% suggested against a true 78%: 7 points too optimistic."
+      },
+      {
+        "k": "mock",
+        "name": "Static snapshots",
+        "expect": "92% ± 5.3: snapshots skip logins and pop-ups."
+      },
+      {
+        "k": "staging",
+        "name": "Staging replica",
+        "expect": "79% ± 8.0: close, but 100 tasks leave a wide interval."
+      },
+      {
+        "k": "shadow",
+        "name": "Production shadow",
+        "expect": "78% ± 8.1 on 100 read-only tasks."
+      }
+    ],
+    "missions": [
+      {
+        "k": "honest",
+        "text": "Estimate within 2 points using at least 400 tasks in a realistic environment.",
+        "hint": "Staging or shadow, more tasks."
+      },
+      {
+        "k": "reliable",
+        "text": "Measure reliability with at least three runs per task.",
+        "hint": "pass^k needs repeats."
+      },
+      {
+        "k": "adversarial",
+        "text": "Measure injection resistance on at least 100 tasks.",
+        "hint": "Include adversarial pages."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OSWorld-Verified",
+        "type": "Benchmark",
+        "start": 3,
+        "prod": 2,
+        "best": "369 desktop and web tasks with execution-based checks.",
+        "ex": "Shortlist vendors before your own evaluation.",
+        "pros": [
+          "Realistic apps",
+          "Script-checked outcomes"
+        ],
+        "cons": [
+          "Not your tasks",
+          "Mostly self-reported"
+        ],
+        "url": "https://os-world.github.io"
+      },
+      {
+        "n": "WebArena-Verified",
+        "type": "Benchmark",
+        "start": 3,
+        "prod": 2,
+        "best": "A verified version of WebArena’s web tasks.",
+        "ex": "Compare browser agents on reproducible sites.",
+        "pros": [
+          "Reproducible",
+          "Functional checks"
+        ],
+        "cons": [
+          "Synthetic sites",
+          "Not your portals"
+        ],
+        "url": "https://github.com/ServiceNow/webarena-verified"
+      },
+      {
+        "n": "Inspect (UK AISI)",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Custom agent evaluations with sandboxes and scorers.",
+        "ex": "Run 400 loan tasks three times in staging.",
+        "pros": [
+          "Flexible",
+          "Sandbox support"
+        ],
+        "cons": [
+          "Code to write",
+          "Setup effort"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "n": "τ-bench",
+        "type": "Benchmark",
+        "start": 3,
+        "prod": 2,
+        "best": "Tool-using agents with pass^k reliability.",
+        "ex": "Borrow its pass^k reporting for your suite.",
+        "pros": [
+          "Reliability metric",
+          "Realistic dialogues"
+        ],
+        "cons": [
+          "Retail and airline domains",
+          "Not GUI"
+        ],
+        "url": "https://github.com/sierra-research/tau-bench"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "A vendor quotes a benchmark",
+        "tool": "Test on your own tasks"
+      },
+      {
+        "need": "Results look too good",
+        "tool": "Check the environment isn’t a static mock"
+      },
+      {
+        "need": "Customers see inconsistency",
+        "tool": "Measure pass^k"
+      }
+    ],
+    "goals": [
+      "Separate capability from production success",
+      "Size the evaluation",
+      "Measure reliability and injection resistance"
+    ]
+  },
+  "practice": {
+    "scenario": "A vendor pitched a GUI agent to a fictional NBFC with a top OSWorld-Verified score. On 400 of the NBFC’s own loan-servicing tasks, run in a staging copy of its systems, the agent completed 78% on a single run, and only 62% of tasks passed on all three repeated runs. Adversarial pages with injected instructions fooled it 6% of the time. The NBFC launched it only for read-only tasks and kept people on anything that changes a loan.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Loan-servicing tasks in a staging copy"
+      },
+      {
+        "industry": "Banking",
+        "use": "Voice agents evaluated on recorded calls in several languages"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims portals with document uploads"
+      }
+    ],
+    "analogy": "A driving test on the roads you will actually drive, taken three times, with a few surprise hazards, rather than a certificate from another city’s test track.",
+    "library": {
+      "name": "Inspect or your own harness",
+      "what": "Define tasks with outcome checks, run them repeatedly in a staging environment and report success, pass^k and adversarial results.",
+      "install": "pip install inspect-ai"
+    },
+    "note": "Report the interval as well as the mean, and re-run the suite whenever the model, prompt or target application changes.",
+    "samples": [
+      {
+        "file": "eval_agent.py",
+        "language": "python",
+        "code": "import statistics\n\ndef run_suite(agent, tasks, env_factory, k=3):\n    rows = []\n    for task in tasks:                                   # real tasks + adversarial ones\n        outcomes = []\n        for _ in range(k):\n            env = env_factory(task.start_state)          # fresh staging replica\n            agent.run(task.instruction, env, max_steps=task.budget)\n            outcomes.append(task.check(env))             # outcome, not clicks\n        rows.append({\"task\": task.id, \"adversarial\": task.adversarial,\n                     \"passes\": sum(outcomes), \"k\": k})\n    normal = [r for r in rows if not r[\"adversarial\"]]\n    return {\n        \"pass@1\": statistics.mean(r[\"passes\"] / k for r in normal),\n        f\"pass^{k}\": statistics.mean(r[\"passes\"] == k for r in normal),\n        \"injection_fooled\": statistics.mean(\n            r[\"passes\"] < k for r in rows if r[\"adversarial\"]),\n    }"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent completes 78% of tasks on a single run. If each run were independent with the same success rate, what share of tasks would pass on all three of three runs, in percent?",
+    "answer": "0.78³ ≈ 0.475, or about 47.5%. Real agents are more consistent than independent coin flips, so measured pass^3 is usually higher, such as 62%, but it is always below the single-run rate. Reliability needs repeated runs to measure.",
+    "expected": {
+      "value": 47.5,
+      "tolerance": 0.3,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "What do OSWorld and WebArena measure, and what don’t they?",
+        "answer": "OSWorld runs agents on real desktop and web tasks in virtual machines with script-based success checks; WebArena uses self-hosted websites such as shops, forums and GitLab. They measure general capability on fixed tasks. They do not reflect your applications, logins, latency, adversarial content or reliability over repeated runs, and many reported scores are self-reported with different scaffolding."
+      },
+      {
+        "question": "How would you evaluate a computer-use agent before launch?",
+        "answer": "Collect real tasks with outcome checks, run them in a staging replica rather than static snapshots, repeat each several times and report pass^k, include adversarial pages and irreversible actions, record sessions to analyse failures, and set launch criteria per task type, starting with read-only tasks."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Taking a public benchmark score as your success rate",
+        "fix": "Evaluate on your own tasks and environment"
+      },
+      {
+        "mistake": "One run per task",
+        "fix": "Repeat runs and report pass^k"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ev01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What does OSWorld evaluate?",
+      "options": [
+        "Desktop and web tasks in VMs with scripted checks",
+        "Grammar",
+        "Image classification",
+        "Translation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Real apps, execution-based checks."
+    },
+    {
+      "id": "ev02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "How many tasks does OSWorld-Verified have?",
+      "options": [
+        "812",
+        "369",
+        "100",
+        "1,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "369 tasks."
+    },
+    {
+      "id": "ev03",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "78% single-run success; independent runs. Pass on all 3 runs?",
+      "options": [
+        "78%",
+        "62%",
+        "47.5%",
+        "26%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.78³ ≈ 0.475."
+    },
+    {
+      "id": "ev04",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which make a production evaluation realistic? Select all that apply.",
+      "options": [
+        "Your own tasks",
+        "A staging replica",
+        "Static page snapshots only",
+        "A single run per task"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Your tasks, your environment."
+    },
+    {
+      "id": "ev05",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What is pass^k?",
+      "options": [
+        "Share of tasks passed on all k runs",
+        "Pass on any of k runs",
+        "Average score",
+        "Top-k accuracy"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reliability."
+    },
+    {
+      "id": "ev06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Why are many public benchmark scores hard to compare?",
+      "options": [
+        "They are self-reported with different scaffolding",
+        "They are all identical",
+        "They are secret",
+        "They use one model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Setups differ."
+    },
+    {
+      "id": "ev07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Static snapshots overestimate success because they skip…",
+      "options": [
+        "Logins, pop-ups and slow pages",
+        "Text",
+        "Colour",
+        "Numbers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Real friction."
+    },
+    {
+      "id": "ev08",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Success should be checked by…",
+      "options": [
+        "The resulting system state",
+        "Which buttons were clicked",
+        "Screenshot count",
+        "Token count"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Outcomes."
+    },
+    {
+      "id": "ev09",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "What should an adversarial suite include? Select all that apply.",
+      "options": [
+        "Pages with injected instructions",
+        "Irreversible-action traps",
+        "Only easy tasks",
+        "Tasks from another company"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Stress the risks."
+    },
+    {
+      "id": "ev10",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "With 100 tasks at ~78%, the 95% margin of error is about…",
+      "options": [
+        "±1 point",
+        "±8 points",
+        "±25 points",
+        "±50 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1.96 × √(0.78 × 0.22 / 100)."
+    },
+    {
+      "id": "ev11",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "To narrow the margin, you should…",
+      "options": [
+        "Add more tasks",
+        "Remove hard tasks",
+        "Run fewer times",
+        "Use the scoreboard"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Sample size."
+    },
+    {
+      "id": "ev12",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A good first launch scope is…",
+      "options": [
+        "Read-only tasks",
+        "Every task including payments",
+        "Only failures",
+        "Random tasks"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Widen as evidence grows."
+    },
+    {
+      "id": "ev13",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which benchmark introduced pass^k for tool agents?",
+      "options": [
+        "τ-bench",
+        "MNIST",
+        "GLUE",
+        "COCO"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "τ-bench."
+    },
+    {
+      "id": "ev14",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Mind2Web evaluates…",
+      "options": [
+        "Web tasks across real websites",
+        "Speech",
+        "Chess",
+        "Code only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Generalist web agents."
+    },
+    {
+      "id": "ev15",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "When should the suite be re-run?",
+      "options": [
+        "When the model, prompt or app changes",
+        "Never",
+        "Once a decade",
+        "Only after incidents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Regressions."
+    },
+    {
+      "id": "ev16",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "For a voice agent, evaluate WER…",
+      "options": [
+        "Per language and channel",
+        "Only overall",
+        "Never",
+        "On studio audio only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Segments matter."
+    },
+    {
+      "id": "ev17",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A production shadow means…",
+      "options": [
+        "Running on real traffic without taking actions",
+        "A backup server",
+        "A dark theme",
+        "Deleting data"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Read-only real conditions."
+    },
+    {
+      "id": "ev18",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Session recordings in evaluation help to…",
+      "options": [
+        "Understand why tasks failed",
+        "Increase scores",
+        "Hide failures",
+        "Save tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Failure analysis."
+    },
+    {
+      "id": "ev19",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An 85% OSWorld score tells you most about…",
+      "options": [
+        "General capability on fixed tasks",
+        "Your production success",
+        "Your costs",
+        "Your customers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Capability, not fit."
+    },
+    {
+      "id": "ev20",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Launch criteria should be set…",
+      "options": [
+        "Per task type, from your evaluation",
+        "From the vendor’s slide",
+        "Once for all tasks",
+        "Never"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Evidence-based."
+    }
+  ]
+}

@@ -1,0 +1,806 @@
+{
+  "id": "llamaindex",
+  "moduleSlug": "frameworks",
+  "name": "LlamaIndex",
+  "shortName": "LlamaIndex",
+  "question": "How do I build agents that are mostly about my documents?",
+  "summary": "LlamaIndex started as a data framework for RAG and is strongest when an agent’s job is mostly about documents: readers for hundreds of sources, LlamaParse for complex PDFs, indexes and query engines that turn retrieval into a tool. On top sit FunctionAgent and AgentWorkflow for single and multi-agent loops, and Workflows, an event-driven way to write steps whose Context can be serialised and resumed, including waiting for human input. It runs in Python and TypeScript. The RAG techniques themselves (parsing, chunking, re-ranking, citations) are covered in module 18; this tab is about LlamaIndex as a framework.",
+  "useCases": [
+    "Agents over large, messy document collections",
+    "Policy, compliance and research assistants",
+    "Teams already using LlamaIndex for RAG"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "Readers and LlamaParse",
+        "detail": "load PDFs, Drive, Confluence and more; parse tables and layouts"
+      },
+      {
+        "term": "Index and query engine",
+        "detail": "VectorStoreIndex, retrievers, re-rankers behind one query call"
+      },
+      {
+        "term": "QueryEngineTool",
+        "detail": "a query engine the agent can call"
+      },
+      {
+        "term": "FunctionAgent",
+        "detail": "tool-calling agent from plain functions"
+      },
+      {
+        "term": "AgentWorkflow",
+        "detail": "several agents with handoffs"
+      },
+      {
+        "term": "Workflows and Context",
+        "detail": "event-driven steps; save and resume state, wait for humans"
+      }
+    ]
+  },
+  "steps": [
+    "Load and parse documents; build an index and query engine",
+    "Wrap the query engine and business functions as tools",
+    "Run a FunctionAgent, or an AgentWorkflow for several agents",
+    "Persist Context for long cases and evaluate retrieval and answers"
+  ],
+  "pitfalls": [
+    "Default chunking and top-k left untuned on complex PDFs",
+    "Using the framework’s agent layer when a plain loop plus its retrievers would do",
+    "Upgrading across versions without pinning; APIs have moved often"
+  ],
+  "tools": [
+    "LlamaIndex (Python, TypeScript)",
+    "LlamaParse",
+    "LlamaCloud",
+    "Workflows",
+    "Many vector store integrations"
+  ],
+  "remember": "Documents in, query engines as tools, Context you can save.",
+  "caption": "Python and TypeScript.",
+  "comparison": {
+    "scope": "Document-heavy agents and RAG",
+    "cost": 2,
+    "needs": "Python or TypeScript",
+    "best": "Untuned defaults on messy documents"
+  },
+  "diagram": {
+    "file": "diagrams/llamaindex.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_llamaindex.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "docs = SimpleDirectoryReader(\"npci_upi_circulars/\").load_data()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "index = VectorStoreIndex.from_documents(docs)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "rules = QueryEngineTool.from_defaults(",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    index.as_query_engine(similarity_top_k=4), name=\"upi_rules\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    description=\"NPCI and RBI rules on failed UPI payments and refunds\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def get_transaction(utr: str) -> dict:",
+        "steps": []
+      },
+      {
+        "text": "    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"",
+        "steps": []
+      },
+      {
+        "text": "    return await bank.transactions.get(utr)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def raise_dispute(utr: str, reason: str) -> str:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    \"\"\"Raise a dispute for a failed UPI payment.\"\"\"",
+        "steps": []
+      },
+      {
+        "text": "    if not await approvals.request(utr, reason):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"Rejected by reviewer.\"",
+        "steps": []
+      },
+      {
+        "text": "    return await disputes.create(utr, reason)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "agent = FunctionAgent(tools=[rules, get_transaction, raise_dispute],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                      llm=Anthropic(model=\"claude-sonnet-4-5\"),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                      system_prompt=SYSTEM)",
+        "steps": []
+      },
+      {
+        "text": "ctx = Context(agent)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "reply = await agent.run(QUESTION, ctx=ctx)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "saved = ctx.to_dict()        # store; Context.from_dict(agent, saved)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Load the rules",
+        "text": "Kosha Pay, a fictional UPI app, loads NPCI and RBI circulars on failed transactions and turnaround times into an index."
+      },
+      {
+        "title": "Make retrieval a tool",
+        "text": "A query engine over the index becomes the upi_rules tool, so the agent can check what the rules say about refund timelines and compensation."
+      },
+      {
+        "title": "Plain functions as tools",
+        "text": "FunctionAgent turns typed functions and docstrings into tools, next to the query engine."
+      },
+      {
+        "title": "Gate the risky tool",
+        "text": "The approval blocks here; a Workflow can instead wait for a human-response event and resume."
+      },
+      {
+        "title": "Run with a Context",
+        "text": "Context holds the run’s state and conversation for this customer."
+      },
+      {
+        "title": "Save and resume",
+        "text": "ctx.to_dict() stores the state; Context.from_dict restores it later. About 27 lines, with rules retrieval included."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">NPCI + RBI circulars → VectorStoreIndex</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"36\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"51\" text-anchor=\"middle\">QueryEngineTool “upi_rules”</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"66\" width=\"344\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"81\">FunctionAgent</text><text class=\"sb\" x=\"180\" y=\"96\">rules · get_transaction · raise_dispute</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">approval before raise_dispute</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"140\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"155\" text-anchor=\"middle\">Context(agent) · agent.run(…, ctx=ctx)</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"183\" style=\"text-anchor:end;--d:0s\">lines</text><rect x=\"118\" y=\"173\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"173\" width=\"130.6451612903226\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"183\" style=\"text-anchor:start;--d:0.2s\">27</text><text class=\"sb a\" x=\"8\" y=\"210\" style=\"text-anchor:start;--d:0.2s\">ctx.to_dict() → resume later</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Best-in-class document loading, parsing and retrieval",
+      "Query engines drop straight into agents as tools",
+      "Workflows with resumable Context",
+      "Python and TypeScript"
+    ],
+    "cons": [
+      "Many abstractions to learn",
+      "APIs have changed often between versions",
+      "Defaults need tuning on messy documents",
+      "Heavier dependency tree than a plain loop"
+    ],
+    "avoidWhen": [
+      "Agents with little document work",
+      "Teams wanting minimal dependencies"
+    ],
+    "tools": [
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "Data framework, agents and workflows",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "LlamaParse",
+        "type": "LlamaIndex cloud",
+        "what": "Parsing complex PDFs, tables and layouts",
+        "url": "https://docs.cloud.llamaindex.ai"
+      },
+      {
+        "name": "LlamaIndex.TS",
+        "type": "Open source",
+        "what": "TypeScript version",
+        "url": "https://ts.llamaindex.ai"
+      },
+      {
+        "name": "Workflows",
+        "type": "Open source",
+        "what": "Event-driven, resumable agent steps",
+        "url": "https://docs.llamaindex.ai/en/stable/module_guides/workflow/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kosha Pay, a fictional UPI app, wants its dispute agent to answer from NPCI and RBI circulars. Set the team’s needs, including document ingestion and RAG, and see where LlamaIndex ranks.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. LlamaIndex ranks 3 of 7."
+      },
+      {
+        "k": "rag",
+        "name": "Document ingestion essential",
+        "expect": "Top pick: LlamaIndex."
+      },
+      {
+        "k": "ragts",
+        "name": "TypeScript, documents essential",
+        "expect": "Top pick: LlamaIndex."
+      },
+      {
+        "k": "bank",
+        "name": "Bank case with approvals",
+        "expect": "Top pick: LangGraph. LlamaIndex ranks 3 of 7."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make LlamaIndex the top pick.",
+        "hint": "Which need is it built for?"
+      },
+      {
+        "k": "data",
+        "text": "Make it top in TypeScript with document ingestion essential.",
+        "hint": "It has a TypeScript version."
+      },
+      {
+        "k": "drop",
+        "text": "With no document needs, push it to fifth or lower.",
+        "hint": "Without RAG it is one framework among many."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LlamaIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Document-heavy agents.",
+        "ex": "NPCI rules as a query-engine tool.",
+        "pros": [
+          "Great data layer",
+          "Python and TypeScript"
+        ],
+        "cons": [
+          "Many abstractions"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "LlamaParse",
+        "type": "Cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Complex PDFs and tables.",
+        "ex": "Parse scanned circulars.",
+        "pros": [
+          "Strong parsing",
+          "Managed"
+        ],
+        "cons": [
+          "Paid, cloud"
+        ],
+        "url": "https://docs.cloud.llamaindex.ai"
+      },
+      {
+        "n": "Workflows",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Event-driven, resumable steps.",
+        "ex": "Wait for a reviewer, then resume.",
+        "pros": [
+          "Resumable Context",
+          "Human-in-the-loop events"
+        ],
+        "cons": [
+          "New concepts"
+        ],
+        "url": "https://docs.llamaindex.ai/en/stable/module_guides/workflow/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Agent over many documents",
+        "tool": "LlamaIndex"
+      },
+      {
+        "need": "Messy PDFs",
+        "tool": "LlamaParse"
+      },
+      {
+        "need": "Long cases with approvals",
+        "tool": "Workflows with saved Context"
+      }
+    ],
+    "goals": [
+      "Turn a query engine into an agent tool",
+      "Build a FunctionAgent over documents and functions",
+      "Save and resume Context"
+    ]
+  },
+  "practice": {
+    "scenario": "Kosha Pay, a fictional UPI app, wants its dispute agent to quote the actual rules: NPCI and RBI circulars on failed transactions, auto-reversal timelines and compensation. With LlamaIndex it loads the circulars into an index, exposes a query engine as the upi_rules tool next to its transaction and dispute functions, and runs a FunctionAgent with a saved Context per customer. Answers now cite the relevant circular, and long cases resume from stored Context.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Dispute agents that quote NPCI and RBI rules"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims helpers over policy wordings"
+      },
+      {
+        "industry": "Legal",
+        "use": "Research assistants over judgments and contracts"
+      }
+    ],
+    "analogy": "A clerk who has the whole rule book indexed and tabbed, and reaches for the right page before answering.",
+    "library": {
+      "name": "LlamaIndex",
+      "what": "Data framework with readers, indexes, query engines, agents and workflows.",
+      "install": "pip install llama-index llama-index-llms-anthropic"
+    },
+    "note": "Imports follow recent llama-index-core layouts; check the docs for your version. Needs an embedding model configured (defaults to OpenAI embeddings unless you set Settings.embed_model).",
+    "samples": [
+      {
+        "file": "rules_agent.py",
+        "language": "python",
+        "code": "import asyncio\nfrom llama_index.core import VectorStoreIndex, SimpleDirectoryReader\nfrom llama_index.core.agent.workflow import FunctionAgent\nfrom llama_index.core.tools import QueryEngineTool\nfrom llama_index.llms.anthropic import Anthropic\n\ndocs = SimpleDirectoryReader(\"npci_upi_circulars/\").load_data()\nrules = QueryEngineTool.from_defaults(\n    VectorStoreIndex.from_documents(docs).as_query_engine(similarity_top_k=4),\n    name=\"upi_rules\", description=\"NPCI and RBI rules on failed UPI payments\")\n\ndef get_transaction(utr: str) -> dict:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return {\"utr\": utr, \"status\": \"debited_not_credited\", \"amount\": 2450, \"days_since\": 3}\n\nagent = FunctionAgent(tools=[rules, get_transaction], llm=Anthropic(model=\"claude-sonnet-4-5\"),\n                      system_prompt=\"Help with failed UPI payments; cite the rule you rely on.\")\n\nasync def main():\n    print(await agent.run(\"My UTR 417803921556 payment failed 3 days ago. When is my refund due?\"))\nasyncio.run(main())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A query engine returns 4 chunks of 512 tokens, and the system prompt plus question are 1,200 tokens. How many input tokens per rules lookup?",
+    "answer": "4 × 512 + 1,200 = 3,248 tokens.",
+    "expected": {
+      "value": 3248,
+      "tolerance": 5,
+      "label": "tokens ="
+    },
+    "interview": [
+      {
+        "question": "When would you pick LlamaIndex over other agent frameworks?",
+        "answer": "When the agent’s work is mostly about documents: loading, parsing, indexing and querying many sources. Its query engines become tools, and Workflows add resumable steps."
+      },
+      {
+        "question": "How does a LlamaIndex agent keep state across a long case?",
+        "answer": "Run it with a Context, serialise it with to_dict, store it, and restore with Context.from_dict to resume."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Leaving default chunking and top-k on complex PDFs",
+        "fix": "Tune parsing, chunking and top-k with evals"
+      },
+      {
+        "mistake": "Not pinning versions",
+        "fix": "Pin and upgrade deliberately"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "lm01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "LlamaIndex is strongest when the agent’s work is about?",
+      "options": [
+        "Documents",
+        "GPU kernels",
+        "Payments hardware",
+        "Image generation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Data framework."
+    },
+    {
+      "id": "lm02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What turns a query engine into something an agent can call?",
+      "options": [
+        "QueryEngineTool",
+        "VectorStore",
+        "Reader",
+        "Settings"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tool wrapper."
+    },
+    {
+      "id": "lm03",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What parses complex PDFs and tables?",
+      "options": [
+        "LlamaParse",
+        "useChat",
+        "Zod",
+        "Temporal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Managed parser."
+    },
+    {
+      "id": "lm04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What makes a tool from a plain Python function?",
+      "options": [
+        "FunctionAgent uses its signature and docstring",
+        "A YAML file",
+        "Nothing",
+        " A database"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Auto-wrapped."
+    },
+    {
+      "id": "lm05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How is agent state saved for later?",
+      "options": [
+        "ctx.to_dict()",
+        "index.delete()",
+        "print()",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Serialise Context."
+    },
+    {
+      "id": "lm06",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are LlamaIndex building blocks? Select all that apply.",
+      "options": [
+        "Readers",
+        "Indexes",
+        "Workflows",
+        "Kubernetes"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Not infra."
+    },
+    {
+      "id": "lm07",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "4 chunks × 512 tokens + 1,200 tokens?",
+      "options": [
+        "3,248",
+        "2,048",
+        "1,712",
+        "4,096"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Input tokens."
+    },
+    {
+      "id": "lm08",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Several agents with handoffs in LlamaIndex use?",
+      "options": [
+        "AgentWorkflow",
+        "QueryEngineTool",
+        "Reader",
+        "Settings"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Multi-agent."
+    },
+    {
+      "id": "lm09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A tool named “tool1” with description “tool” causes?",
+      "options": [
+        "The agent rarely picks it",
+        "Faster runs",
+        "Better answers",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Names and descriptions guide choice."
+    },
+    {
+      "id": "lm10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Which languages does LlamaIndex support?",
+      "options": [
+        "Python and TypeScript",
+        "Only Java",
+        "Only Go",
+        "Only C#"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Two languages."
+    },
+    {
+      "id": "lm11",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Main risk with LlamaIndex defaults?",
+      "options": [
+        "Untuned chunking and top-k on messy documents",
+        "No retrieval",
+        "No agents",
+        "No Python"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tune with evals."
+    },
+    {
+      "id": "lm12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Where are RAG techniques like re-ranking and citations covered?",
+      "options": [
+        "Module 18",
+        "Module 3",
+        "Module 12",
+        "Nowhere"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "RAG Pipelines."
+    },
+    {
+      "id": "lm13",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When might a plain loop beat LlamaIndex? Select all that apply.",
+      "options": [
+        "Few documents",
+        "Minimal dependencies wanted",
+        "Two simple tools",
+        "Thousands of PDFs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Documents favour LlamaIndex."
+    },
+    {
+      "id": "lm14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A Workflow waiting for a reviewer uses?",
+      "options": [
+        "An event for human input, then resumes",
+        "A sleep loop",
+        "A new process each second",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Human-in-the-loop events."
+    },
+    {
+      "id": "lm15",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "top_k raised from 4 to 8 chunks of 512 tokens adds?",
+      "options": [
+        "2,048 tokens",
+        "512 tokens",
+        "4 tokens",
+        "8 tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "4 × 512."
+    },
+    {
+      "id": "lm16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Lines for the same dispute agent with rules retrieval?",
+      "options": [
+        "About 27",
+        "About 270",
+        "About 7",
+        "About 2,700"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Compact."
+    },
+    {
+      "id": "lm17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why pin LlamaIndex versions?",
+      "options": [
+        "APIs have moved between versions",
+        "It is free",
+        "Pins speed up GPUs",
+        "Required by NPCI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Upgrade deliberately."
+    },
+    {
+      "id": "lm18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The chooser ranks LlamaIndex top when?",
+      "options": [
+        "Document ingestion and RAG is essential",
+        "Only .NET is allowed",
+        "No documents",
+        "Java only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its strength."
+    },
+    {
+      "id": "lm19",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "VectorStoreIndex.from_documents does what?",
+      "options": [
+        "Chunks, embeds and indexes documents",
+        "Deletes documents",
+        "Trains a model",
+        "Sends email"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Builds the index."
+    },
+    {
+      "id": "lm20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What should the agent do with a rule it retrieved?",
+      "options": [
+        "Cite it in the answer",
+        "Hide it",
+        "Paraphrase without source",
+        "Ignore it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Traceable answers."
+    }
+  ]
+}

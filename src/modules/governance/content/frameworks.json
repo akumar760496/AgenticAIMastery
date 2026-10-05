@@ -1,0 +1,816 @@
+{
+  "id": "frameworks",
+  "moduleSlug": "governance",
+  "name": "NIST AI RMF and ISO/IEC 42001",
+  "shortName": "NIST and ISO",
+  "question": "How do we run AI governance as a system, not a scramble?",
+  "summary": "The NIST AI Risk Management Framework organises AI risk work into Govern, Map, Measure and Manage, with a Generative AI Profile (NIST AI 600-1) for LLM-specific risks. ISO/IEC 42001:2023 is a certifiable AI management system standard: policy, risk and impact assessment, controls, competence, operation, internal audit and management review. Neither is Indian law, but both give a structure that makes RBI, SEBI, DPDP and EU evidence repeatable, and one well-built control usually satisfies several frameworks.",
+  "useCases": [
+    "Building a governance programme from scratch",
+    "Clients or partners asking for certification",
+    "Mapping one set of controls to several regulations"
+  ],
+  "keyFacts": {
+    "label": "Structure",
+    "items": [
+      {
+        "term": "Govern",
+        "detail": "policy, roles, accountability, culture"
+      },
+      {
+        "term": "Map",
+        "detail": "context, intended use, impact"
+      },
+      {
+        "term": "Measure",
+        "detail": "evaluation, red teaming, monitoring"
+      },
+      {
+        "term": "Manage",
+        "detail": "prioritise and treat risks, respond to incidents"
+      },
+      {
+        "term": "ISO 42001",
+        "detail": "certifiable; Annex A lists AI controls"
+      },
+      {
+        "term": "ISO 42005",
+        "detail": "guidance on AI system impact assessment"
+      }
+    ]
+  },
+  "steps": [
+    "Adopt one framework as the backbone",
+    "Build a control library, each control mapped to every framework it serves",
+    "Run impact assessments per use case",
+    "Audit internally and review with management on a schedule"
+  ],
+  "pitfalls": [
+    "Running separate compliance projects per regulation",
+    "Certifying the paperwork while systems drift",
+    "Frameworks without evals, red teaming and monitoring behind them"
+  ],
+  "tools": [
+    "NIST AI RMF Playbook and Generative AI Profile",
+    "ISO/IEC 42001 certification bodies",
+    "GRC platforms with control crosswalks",
+    "Panel 1 eval suites and Panel 12 red teaming as evidence"
+  ],
+  "remember": "One control library, mapped many ways, audited on a schedule.",
+  "caption": "Illustrative crosswalk; confirm mappings against the standards’ texts.",
+  "comparison": {
+    "scope": "The whole AI programme",
+    "cost": 3,
+    "needs": "An owner and a control library",
+    "best": "Paper compliance"
+  },
+  "diagram": {
+    "file": "diagrams/frameworks.svg"
+  },
+  "lesson": {
+    "file": "crosswalk.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "CONTROLS = {",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"ai_policy\":     {\"NIST\": [\"GOVERN\"], \"ISO42001\": [\"5.2\"],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                      \"RBI\": [\"policy\"], \"EU\": [\"QMS\"]},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"impact_assess\": {\"NIST\": [\"MAP\"], \"ISO42001\": [\"6.1.4\"]},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    \"eval_suite\":    {\"NIST\": [\"MEASURE\"], \"RBI\": [\"validation\"]},",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    \"incident_book\": {\"NIST\": [\"MANAGE\"], \"ISO42001\": [\"10.2\"]},",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    ...",
+        "steps": []
+      },
+      {
+        "text": "}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def coverage(implemented, framework, required):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    met = set()",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    for c in implemented:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        met.update(CONTROLS.get(c, {}).get(framework, []))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return len(met & required) / len(required)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "schedule(internal_audit, every=\"6 months\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "schedule(management_review, every=\"year\")",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "# Backbone: NIST AI RMF for practice, ISO/IEC 42001 to certify",
+        "steps": [
+          1
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Pick a backbone",
+        "text": "NIST AI RMF for risk practice, ISO/IEC 42001 when clients want a certificate. Many banks use both."
+      },
+      {
+        "title": "One control, many mappings",
+        "text": "Each control lists every framework and clause it serves. An AI policy counts for NIST Govern, ISO 5.2, RBI’s policy recommendation and the EU quality system."
+      },
+      {
+        "title": "Map: assess impact per use case",
+        "text": "An impact assessment for each AI use is NIST’s Map function and ISO 42001’s AI system impact assessment; ISO/IEC 42005 gives guidance."
+      },
+      {
+        "title": "Measure and Manage need engineering",
+        "text": "Eval suites, red teaming, monitoring and incident runbooks from Panels 1, 11 and 12 are the evidence behind these functions."
+      },
+      {
+        "title": "Measure coverage per framework",
+        "text": "Coverage shows where one library falls short for a given regulator, instead of starting a new project."
+      },
+      {
+        "title": "Audit and review on a schedule",
+        "text": "Internal audit and management review keep the system alive. The bank cut evidence requests from 400 items to 150."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"21\" text-anchor=\"middle\">NIST AI RMF</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"21\" text-anchor=\"middle\">ISO/IEC 42001</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"36\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"51\" text-anchor=\"middle\">AI policy</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"128\" y=\"36\" width=\"52\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"154\" y=\"51\" text-anchor=\"middle\">NIST</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx pass\" x=\"184\" y=\"36\" width=\"52\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"210\" y=\"51\" text-anchor=\"middle\">ISO</text></g><g class=\"a\" style=\"--d:0.22s\"><rect class=\"bx pass\" x=\"240\" y=\"36\" width=\"52\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"266\" y=\"51\" text-anchor=\"middle\">RBI</text></g><g class=\"a\" style=\"--d:0.28s\"><rect class=\"bx pass\" x=\"296\" y=\"36\" width=\"52\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"322\" y=\"51\" text-anchor=\"middle\">EU</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"66\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"81\" text-anchor=\"middle\">impact assessment per use case (Map)</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"96\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"111\" text-anchor=\"middle\">evals, red team</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"96\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"111\" text-anchor=\"middle\">incident runbook</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"139\" style=\"text-anchor:end;--d:0s\">NIST</text><rect x=\"118\" y=\"129\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"129\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"139\" style=\"text-anchor:start;--d:0.2s\">100%</text><text class=\"tl a\" x=\"112\" y=\"161\" style=\"text-anchor:end;--d:0.1s\">EU high-risk</text><rect x=\"118\" y=\"151\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"151\" width=\"85.49999999999999\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"161\" style=\"text-anchor:start;--d:0.30000000000000004s\">57%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"191\" style=\"text-anchor:end;--d:0s\">before</text><rect x=\"118\" y=\"181\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"181\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"191\" style=\"text-anchor:start;--d:0.2s\">400 items</text><text class=\"tl a\" x=\"112\" y=\"213\" style=\"text-anchor:end;--d:0.1s\">one library</text><rect x=\"118\" y=\"203\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"203\" width=\"56.25\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"213\" style=\"text-anchor:start;--d:0.30000000000000004s\">150 items</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "One programme instead of one per regulation",
+      "Certification opens enterprise deals",
+      "Structure makes audits repeatable",
+      "Shared language between risk and engineering"
+    ],
+    "cons": [
+      "Setting up a management system is a real investment",
+      "Certification needs audits and upkeep",
+      "Crosswalks need maintenance as rules change",
+      "Risk of box-ticking without real controls"
+    ],
+    "avoidWhen": [
+      "A single low-risk internal tool",
+      "Certifying before any controls work"
+    ],
+    "tools": [
+      {
+        "name": "NIST AI RMF and Playbook",
+        "type": "Framework",
+        "what": "Govern, Map, Measure, Manage",
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      },
+      {
+        "name": "NIST AI 600-1 Generative AI Profile",
+        "type": "Framework",
+        "what": "LLM-specific risks and actions",
+        "url": "https://doi.org/10.6028/NIST.AI.600-1"
+      },
+      {
+        "name": "ISO/IEC 42001:2023",
+        "type": "Standard",
+        "what": "Certifiable AI management system",
+        "url": "https://www.iso.org/standard/81230.html"
+      },
+      {
+        "name": "ISO/IEC 42005:2025",
+        "type": "Standard",
+        "what": "AI system impact assessment",
+        "url": "https://www.iso.org/standard/44545.html"
+      },
+      {
+        "name": "NIST crosswalks",
+        "type": "Documents",
+        "what": "Mappings between NIST and other standards",
+        "url": "https://airc.nist.gov"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A private bank’s governance team is replacing four separate checklists with one control library. Tick the controls in place and see coverage of NIST AI RMF’s four functions, ISO/IEC 42001, RBI’s FREE-AI expectations and EU AI Act high-risk provider duties.",
+    "controls": [
+      "Tick governance controls: policy, inventory, impact assessment, training, review.",
+      "Tick engineering controls: evals, red teaming, monitoring, incident runbook, documentation.",
+      "Tick third-party due diligence, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "NIST AI RMF functions",
+        "meaning": "Share of Govern, Map, Measure and Manage with at least one control."
+      },
+      {
+        "name": "ISO/IEC 42001 elements",
+        "meaning": "Share of the management-system elements needed for certification."
+      },
+      {
+        "name": "RBI FREE-AI expectations",
+        "meaning": "Share of the framework’s main expectations covered."
+      },
+      {
+        "name": "EU AI Act high-risk (provider)",
+        "meaning": "Share of the main provider duties covered."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Engineering only",
+        "expect": "Evals and red teaming: NIST 25%, ISO 11%, RBI 14%, EU 29%."
+      },
+      {
+        "k": "paper",
+        "name": "Governance on paper",
+        "expect": "Policy, training and review: NIST 25%, ISO 33%, RBI 43%, EU 14%."
+      },
+      {
+        "k": "core",
+        "name": "Eight core controls",
+        "expect": "NIST 100%, ISO 89%, RBI 86%, EU 71%."
+      },
+      {
+        "k": "all",
+        "name": "All eleven",
+        "expect": "100% everywhere."
+      }
+    ],
+    "missions": [
+      {
+        "k": "nist",
+        "text": "Cover all four NIST functions with four controls or fewer.",
+        "hint": "One control per function."
+      },
+      {
+        "k": "iso",
+        "text": "Reach 100% of ISO/IEC 42001’s elements.",
+        "hint": "Training and review count here."
+      },
+      {
+        "k": "all",
+        "text": "Cover all four frameworks completely.",
+        "hint": "Red teaming and documentation matter for the EU."
+      }
+    ],
+    "tools": [
+      {
+        "n": "NIST AI RMF and Playbook",
+        "type": "Framework",
+        "start": 3,
+        "prod": 3,
+        "best": "Suggested actions for each Govern, Map, Measure and Manage subcategory.",
+        "ex": "Use the Playbook to write the bank’s control descriptions.",
+        "pros": [
+          "Free and detailed",
+          "Widely recognised"
+        ],
+        "cons": [
+          "Not certifiable",
+          "US-centric examples"
+        ],
+        "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+      },
+      {
+        "n": "NIST AI 600-1 Generative AI Profile",
+        "type": "Framework",
+        "start": 3,
+        "prod": 3,
+        "best": "LLM-specific risks such as confabulation and prompt injection, with actions.",
+        "ex": "Add GenAI risks to the bank’s risk register.",
+        "pros": [
+          "Specific to LLMs",
+          "Maps to the RMF"
+        ],
+        "cons": [
+          "Long",
+          "Needs tailoring"
+        ],
+        "url": "https://doi.org/10.6028/NIST.AI.600-1"
+      },
+      {
+        "n": "ISO/IEC 42001",
+        "type": "Standard",
+        "start": 2,
+        "prod": 3,
+        "best": "A certifiable AI management system with Annex A controls.",
+        "ex": "Certify the bank’s AI management system for corporate clients.",
+        "pros": [
+          "Certifiable",
+          "Integrates with ISO 27001"
+        ],
+        "cons": [
+          "Paid standard and audits",
+          "Ongoing surveillance audits"
+        ],
+        "url": "https://www.iso.org/standard/81230.html"
+      },
+      {
+        "n": "ISO/IEC 42005",
+        "type": "Standard",
+        "start": 2,
+        "prod": 3,
+        "best": "Guidance on AI system impact assessment.",
+        "ex": "Structure the impact assessment for each AI use.",
+        "pros": [
+          "Fills a common gap",
+          "Aligns with 42001"
+        ],
+        "cons": [
+          "Guidance, not certifiable",
+          "New"
+        ],
+        "url": "https://www.iso.org/standard/44545.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We have many regulations to meet",
+        "tool": "One control library mapped to all"
+      },
+      {
+        "need": "A client asks for certification",
+        "tool": "ISO/IEC 42001"
+      },
+      {
+        "need": "We want practical risk guidance",
+        "tool": "NIST AI RMF and its GenAI Profile"
+      }
+    ],
+    "goals": [
+      "See how one control serves several frameworks",
+      "Spot governance without engineering and the reverse",
+      "Find the smallest set that covers a framework"
+    ]
+  },
+  "practice": {
+    "scenario": "A private bank’s governance team was running four separate checklists: RBI expectations, DPDP, an ISO/IEC 42001 request from a corporate client, and the EU AI Act for its London and Frankfurt desks. It replaced them with one library of 38 controls, each mapped to every framework it served. Evidence requests from auditors fell from about 400 items to 150, because one eval report or incident runbook now answered several frameworks at once.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "One control library across RBI, DPDP and client demands"
+      },
+      {
+        "industry": "IT services",
+        "use": "ISO/IEC 42001 certification for clients who ask for it"
+      },
+      {
+        "industry": "Insurance",
+        "use": "NIST AI RMF as the backbone for group-wide AI risk"
+      }
+    ],
+    "analogy": "One set of house wiring certified once, rather than rewiring for every inspector. Each inspector checks the same circuits against their own list.",
+    "library": {
+      "name": "NIST AI RMF Playbook",
+      "what": "NIST’s companion to the framework, with suggested actions for each Govern, Map, Measure and Manage subcategory; the Generative AI Profile adds LLM-specific risks."
+    },
+    "note": "The clause references are simplified for illustration; confirm mappings against the standards and regulations before relying on them.",
+    "samples": [
+      {
+        "file": "crosswalk.py",
+        "language": "python",
+        "code": "CONTROLS = {\n    \"ai_policy\":        {\"NIST\": [\"GOVERN\"], \"ISO42001\": [\"5.2\"], \"RBI\": [\"policy\"], \"EU\": [\"QMS\"]},\n    \"ai_inventory\":     {\"NIST\": [\"GOVERN\", \"MAP\"], \"ISO42001\": [\"6.1\"], \"RBI\": [\"inventory\"]},\n    \"impact_assessment\":{\"NIST\": [\"MAP\"], \"ISO42001\": [\"6.1.4\"], \"EU\": [\"risk management\", \"FRIA\"]},\n    \"eval_suite\":       {\"NIST\": [\"MEASURE\"], \"ISO42001\": [\"8\"], \"RBI\": [\"validation\"], \"EU\": [\"accuracy\"]},\n    \"red_teaming\":      {\"NIST\": [\"MEASURE\"], \"EU\": [\"robustness\"]},\n    \"monitoring\":       {\"NIST\": [\"MEASURE\", \"MANAGE\"], \"ISO42001\": [\"9.1\"], \"EU\": [\"post-market monitoring\"]},\n    \"incident_runbook\": {\"NIST\": [\"MANAGE\"], \"ISO42001\": [\"10.2\"], \"RBI\": [\"incident\"], \"EU\": [\"serious incidents\"]},\n    \"vendor_review\":    {\"NIST\": [\"GOVERN\", \"MANAGE\"], \"ISO42001\": [\"A.10\"], \"RBI\": [\"third party\"]},\n}\n\ndef coverage(implemented: set, framework: str, required: set) -> float:\n    met = set()\n    for c in implemented:\n        met.update(CONTROLS.get(c, {}).get(framework, []))\n    return len(met & required) / len(required)\n\nprint(coverage({\"ai_policy\", \"eval_suite\", \"incident_runbook\"},\n               \"NIST\", {\"GOVERN\", \"MAP\", \"MEASURE\", \"MANAGE\"}))     # 0.75"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A bank replaced four separate compliance checklists with one control library, cutting auditor evidence requests from 400 items to 150. By what percentage did the evidence requests fall?",
+    "answer": "(400 − 150) ÷ 400 = 62.5%. The saving comes from mapping each control, such as one eval report or one incident runbook, to every framework it satisfies, so it is produced once and cited many times.",
+    "expected": {
+      "value": 62.5,
+      "tolerance": 0.1,
+      "label": "% fewer ="
+    },
+    "interview": [
+      {
+        "question": "How do the NIST AI RMF and ISO/IEC 42001 differ?",
+        "answer": "The NIST AI RMF is a voluntary framework organised into Govern, Map, Measure and Manage, with profiles such as the Generative AI Profile; it guides what to do but is not certifiable. ISO/IEC 42001 is a management-system standard with requirements and Annex A controls that an accredited body can certify, which clients often ask for. Many organisations use NIST for risk practice and ISO 42001 for the certifiable system."
+      },
+      {
+        "question": "Why use a framework if no Indian law requires it?",
+        "answer": "Because regulators ask for evidence of governance, not for a particular framework. A framework gives a repeatable structure, avoids a separate project per regulation, and lets one well-built control satisfy RBI, SEBI, DPDP and EU expectations at once."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "A separate project for each regulation",
+        "fix": "One control library mapped to all of them"
+      },
+      {
+        "mistake": "Certificates without working controls",
+        "fix": "Back every control with evals, red teaming and monitoring"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fw01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What are the four functions of the NIST AI RMF?",
+      "options": [
+        "Plan, Do, Check, Act",
+        "Govern, Map, Measure, Manage",
+        "Identify, Protect, Detect, Respond",
+        "Build, Test, Ship, Watch"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Govern, Map, Measure, Manage."
+    },
+    {
+      "id": "fw02",
+      "kind": "single",
+      "industry": "IT services",
+      "question": "Which is a certifiable AI management system standard?",
+      "options": [
+        "NIST AI RMF",
+        "ISO/IEC 42001",
+        "NIST AI 600-1",
+        "Model cards"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "ISO/IEC 42001:2023."
+    },
+    {
+      "id": "fw03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is NIST AI 600-1?",
+      "options": [
+        "A GPU",
+        "The Generative AI Profile of the AI RMF",
+        "A privacy law",
+        "A model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "LLM-specific risks and actions."
+    },
+    {
+      "id": "fw04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which NIST functions does production monitoring support? Select all that apply.",
+      "options": [
+        "Measure",
+        "Manage",
+        "Only Govern",
+        "Only Map"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Monitoring measures and triggers management."
+    },
+    {
+      "id": "fw05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which ISO standard gives guidance on AI system impact assessment?",
+      "options": [
+        "ISO/IEC 42005",
+        "ISO 9001",
+        "ISO 27001",
+        "ISO 14001"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ISO/IEC 42005:2025."
+    },
+    {
+      "id": "fw06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why map one control library to many frameworks?",
+      "options": [
+        "To produce evidence once and reuse it",
+        "To confuse auditors",
+        "To avoid controls",
+        "It is required by law"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Build once, cite many times."
+    },
+    {
+      "id": "fw07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which NIST function covers impact assessment for a use case?",
+      "options": [
+        "Govern",
+        "Map",
+        "Measure",
+        "Manage"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Map: context and impact."
+    },
+    {
+      "id": "fw08",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "A team has excellent evals and red teaming but no policy, owner or inventory. What is missing?",
+      "options": [
+        "Measure",
+        "Govern",
+        "Nothing",
+        "Manage"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Governance to hang the evidence on."
+    },
+    {
+      "id": "fw09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are part of running an ISO/IEC 42001 management system? Select all that apply.",
+      "options": [
+        "Internal audit",
+        "Management review",
+        "Ignoring incidents",
+        "Removing documentation"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Audit and review keep it alive."
+    },
+    {
+      "id": "fw10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Is the NIST AI RMF legally required in India?",
+      "options": [
+        "Yes",
+        "No, it is voluntary, but useful as structure",
+        "Only for banks",
+        "Only for startups"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Voluntary framework."
+    },
+    {
+      "id": "fw11",
+      "kind": "single",
+      "industry": "IT services",
+      "question": "Why do clients ask vendors for ISO/IEC 42001?",
+      "options": [
+        "It is an independent, certifiable assurance of AI governance",
+        "It makes models faster",
+        "It is free",
+        "It replaces all laws"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Certification gives outside assurance."
+    },
+    {
+      "id": "fw12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An incident runbook maps mainly to which NIST function?",
+      "options": [
+        "Map",
+        "Manage",
+        "Govern",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Manage: respond and recover."
+    },
+    {
+      "id": "fw13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the risk of certification without engineering controls?",
+      "options": [
+        "None",
+        "Paper compliance: certificates describing controls that don’t work",
+        "Faster audits",
+        "Cheaper models"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Controls must be real."
+    },
+    {
+      "id": "fw14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which Annex of ISO/IEC 42001 lists AI-specific controls?",
+      "options": [
+        "Annex A",
+        "Annex Z",
+        "There is no annex",
+        "Annex III"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Annex A controls."
+    },
+    {
+      "id": "fw15",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "When was ISO/IEC 42001 published?",
+      "options": [
+        "2023",
+        "2015",
+        "2027",
+        "2019"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ISO/IEC 42001:2023."
+    },
+    {
+      "id": "fw16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Staff AI training maps best to which NIST function?",
+      "options": [
+        "Govern",
+        "Measure",
+        "Map",
+        "Manage"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Culture and competence are Govern."
+    },
+    {
+      "id": "fw17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Evals and red teaming map to which function?",
+      "options": [
+        "Govern",
+        "Map",
+        "Measure",
+        "None"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Testing is Measure."
+    },
+    {
+      "id": "fw18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A control library covers NIST fully but EU high-risk duties only 57%. What next?",
+      "options": [
+        "Start a separate EU programme",
+        "Add the controls the EU duties need to the same library",
+        "Drop the EU",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Extend, don’t fork."
+    },
+    {
+      "id": "fw19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What was the status of NIST AI RMF 1.0 in 2026?",
+      "options": [
+        "Withdrawn",
+        "In force as version 1.0, with revisions under way",
+        "Replaced by ISO",
+        "Mandatory"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Version 1.0 from 2023, being revised."
+    },
+    {
+      "id": "fw20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which evidence best supports NIST’s Measure function for an agent?",
+      "options": [
+        "A marketing brochure",
+        "Eval suite results and red-team reports",
+        "An org chart",
+        "A logo"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Measurement needs results."
+    }
+  ]
+}

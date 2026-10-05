@@ -1,0 +1,868 @@
+{
+  "id": "cite",
+  "moduleSlug": "rag",
+  "name": "Citations and Grounded Answers",
+  "shortName": "Citations",
+  "question": "Can every sentence in the answer be traced to a source?",
+  "summary": "Makes answers checkable. The model answers only from the retrieved passages and cites a source for each claim; the system checks that the cited text really is in that source and supports the sentence, drops what is unsupported, and says “not found” when nothing supports an answer. Sources are shown with the document, section, page and effective date, and superseded versions are filtered out before the model sees them.",
+  "useCases": [
+    "Policy, HR, legal and compliance assistants",
+    "Customer-facing answers about fees, limits and eligibility",
+    "Any answer a person will act on or an auditor may question"
+  ],
+  "keyFacts": {
+    "label": "Parts",
+    "items": [
+      {
+        "term": "Numbered sources",
+        "detail": "each passage labelled with title, section and date"
+      },
+      {
+        "term": "Claim-level citations",
+        "detail": "a source after every sentence, not one list at the end"
+      },
+      {
+        "term": "Cited text",
+        "detail": "the exact span the claim rests on"
+      },
+      {
+        "term": "Verification",
+        "detail": "the span exists in the source and supports the claim"
+      },
+      {
+        "term": "Abstain rule",
+        "detail": "no supporting source, no answer"
+      },
+      {
+        "term": "Current versions only",
+        "detail": "filter superseded documents by metadata"
+      }
+    ]
+  },
+  "steps": [
+    "Label each passage with its title, section and effective date, and filter out superseded versions",
+    "Instruct the model to answer only from the sources and cite each sentence",
+    "Verify every citation in code and drop sentences that fail",
+    "Say “not found” when nothing is supported, and show the sources"
+  ],
+  "pitfalls": [
+    "Citations that point to a real passage that does not say what the sentence claims",
+    "Valid citations to an outdated version of a policy",
+    "Forcing an answer when the sources are empty"
+  ],
+  "tools": [
+    "Anthropic Citations",
+    "Cohere RAG with citations",
+    "OpenAI file search annotations",
+    "LlamaIndex CitationQueryEngine",
+    "Ragas faithfulness"
+  ],
+  "remember": "No source, no sentence.",
+  "caption": "Illustrative: Kaveri Bank, a fictional bank, runs a staff policy assistant with 100 test questions.",
+  "comparison": {
+    "scope": "Generation and display",
+    "cost": 2,
+    "needs": "Answers people will act on",
+    "best": "Outdated but valid citations"
+  },
+  "diagram": {
+    "file": "diagrams/cite.svg"
+  },
+  "lesson": {
+    "file": "grounded_answer.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "current = [p for p in passages if p.is_current]        # drop superseded",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "docs = [{\"type\": \"document\",",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "         \"source\": {\"type\": \"text\", \"media_type\": \"text/plain\", \"data\": p.text},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "         \"title\": f\"{p.title} §{p.section} · effective {p.effective}\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "         \"citations\": {\"enabled\": True}} for p in current]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "msg = client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "    model=\"claude-sonnet-5\", max_tokens=800,",
+        "steps": []
+      },
+      {
+        "text": "    system=\"Answer only from the documents. If they do not answer, say so.\",",
+        "steps": [
+          2,
+          5
+        ]
+      },
+      {
+        "text": "    messages=[{\"role\": \"user\", \"content\": docs + [{\"type\": \"text\", \"text\": question}]}])",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "answer, sources = [], []",
+        "steps": []
+      },
+      {
+        "text": "for block in msg.content:",
+        "steps": []
+      },
+      {
+        "text": "    if block.type != \"text\":",
+        "steps": []
+      },
+      {
+        "text": "        continue",
+        "steps": []
+      },
+      {
+        "text": "    cites = block.citations or []",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    ok = [c for c in cites if c.cited_text in current[c.document_index].text]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if states_a_fact(block.text) and not ok:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        continue                            # unsupported: drop the sentence",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    answer.append(block.text)",
+        "steps": []
+      },
+      {
+        "text": "    sources += [(c.document_title, c.cited_text) for c in ok]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "reply = \"\".join(answer) if sources else \"I could not find this in the policies.\"",
+        "steps": [
+          5,
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Label the sources, current versions only",
+        "text": "Each passage becomes a document with its title, section and effective date. The 2023 leave policy is superseded, so it is filtered out before the model sees it."
+      },
+      {
+        "title": "Switch on citations and ground the prompt",
+        "text": "With citations enabled, the model’s answer comes back as text blocks, each carrying the source spans it relied on. The system prompt says: answer only from the documents."
+      },
+      {
+        "title": "Read what each sentence rests on",
+        "text": "Every citation names the document and quotes the exact cited text, for example “10 working days of paternity leave”."
+      },
+      {
+        "title": "Verify in code, drop what fails",
+        "text": "Check that each cited span is really in that document. A sentence that states a fact without a valid citation is dropped, not shown."
+      },
+      {
+        "title": "No support, no answer",
+        "text": "If nothing survives verification, the assistant says it could not find the answer. Declining beats a confident guess about someone’s leave."
+      },
+      {
+        "title": "Show the sources",
+        "text": "The reply ends with each source’s title, section and effective date, so staff can check it in seconds."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"24\" text-anchor=\"middle\">Leave §5 · 2026 ✓</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"24\" text-anchor=\"middle\">Leave §5 · 2023 ✗</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"56\" text-anchor=\"middle\">citations: enabled · “answer only from the documents”</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx\" x=\"8\" y=\"72\" width=\"344\" height=\"44\" rx=\"6\"/><text class=\"tl l\" x=\"18\" y=\"90\" style=\"fill:var(--ink)\">You get 10 working days of paternity leave.</text><text class=\"mono\" x=\"18\" y=\"108\" style=\"font-size:9.5px\">cited: “10 working days of paternity leave” · doc 0</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"124\" width=\"230\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"123\" y=\"140\" text-anchor=\"middle\">span found in doc 0</text></g><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"250\" cy=\"136\" r=\"9\" class=\"bd-pass\"/><path d=\"M246 136l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"8\" y=\"154\" width=\"230\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"123\" y=\"170\" text-anchor=\"middle\">“You can carry it over.” no cite</text></g><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"250\" cy=\"166\" r=\"9\" class=\"bd-fail\"/><path d=\"M246.5 162.5l7 7M253.5 162.5l-7 7\" class=\"bd-mark\"/></g><text class=\"tl l a\" x=\"270\" y=\"170\" style=\"--d:0.35s\">dropped</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"186\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"201\" text-anchor=\"middle\">nothing verified → “I could not find this”</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"216\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"232\" text-anchor=\"middle\">Source: Leave policy §5, effective 1 Apr 2026</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Every claim can be checked in seconds",
+      "Verification drops unsupported sentences before anyone reads them",
+      "Abstaining beats a confident wrong answer",
+      "Auditors and staff can see which version of a policy was used"
+    ],
+    "cons": [
+      "Stricter grounding means more “not found” replies",
+      "Verification code and version metadata to maintain",
+      "Claim-level citations make answers longer",
+      "Valid citations can still point to the wrong version unless filtered"
+    ],
+    "avoidWhen": [
+      "Creative or brainstorming tasks where there is no source to cite",
+      "Internal drafts that a person rewrites anyway (cite loosely, verify later)"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic Citations",
+        "type": "API feature (Anthropic)",
+        "what": "Document blocks with citations enabled; answers carry cited spans",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/citations"
+      },
+      {
+        "name": "Cohere RAG",
+        "type": "API feature (Cohere)",
+        "what": "Grounded generation with citations over supplied documents",
+        "url": "https://docs.cohere.com/docs/retrieval-augmented-generation-rag"
+      },
+      {
+        "name": "OpenAI file search",
+        "type": "API feature (OpenAI)",
+        "what": "File citations as annotations on responses",
+        "url": "https://platform.openai.com/docs/guides/tools-file-search"
+      },
+      {
+        "name": "LlamaIndex",
+        "type": "Open source",
+        "what": "CitationQueryEngine for sentence-level sources",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "Ragas",
+        "type": "Open source",
+        "what": "Faithfulness and context metrics for grounded answers",
+        "url": "https://docs.ragas.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kaveri Bank, a fictional bank, runs a policy assistant for its staff. 100 test questions: 80 answerable, 20 of which also have an older, superseded policy version in the index, and 20 that the policies do not answer.",
+    "controls": [
+      "Choose the prompt: free, or answer only from the documents.",
+      "Choose the citation style: none, a list per answer, or a source after every sentence.",
+      "Switch on citation verification, version filtering and the abstain rule."
+    ],
+    "outputs": [
+      {
+        "name": "Answers with an unsupported claim",
+        "meaning": "Answered questions containing at least one claim no source supports."
+      },
+      {
+        "name": "Answers quoting an outdated policy",
+        "meaning": "Correctly cited, but from a superseded version."
+      },
+      {
+        "name": "Unanswerable questions declined",
+        "meaning": "Of 20."
+      },
+      {
+        "name": "Answerable questions answered",
+        "meaning": "Of 80; the abstain rule costs a few."
+      },
+      {
+        "name": "Time to check an answer",
+        "meaning": "How long staff need to verify it."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Grounded prompt, source list",
+        "expect": "7 of 80 answers with an unsupported claim, 8 quoting outdated policy, 12 of 20 unanswerable questions declined."
+      },
+      {
+        "k": "free",
+        "name": "Free prompt, no citations",
+        "expect": "14 unsupported answers, 90 seconds to check each, and only 2 of 20 declined."
+      },
+      {
+        "k": "full",
+        "name": "Everything on",
+        "expect": "1 unsupported answer in 77, none outdated, 19 of 20 declined, 15 seconds to check."
+      },
+      {
+        "k": "nofilter",
+        "name": "Everything but version filtering",
+        "expect": "Citations verify, yet 8 answers quote an outdated policy."
+      }
+    ],
+    "missions": [
+      {
+        "k": "trust",
+        "text": "Get unsupported answers to 2% or less, none outdated, at least 18 declined and at least 76 answered.",
+        "hint": "Grounded prompt, a source per sentence, verification, version filtering and the abstain rule."
+      },
+      {
+        "k": "stale",
+        "text": "Show that verified citations can still quote an outdated policy.",
+        "hint": "Turn verification on and version filtering off."
+      },
+      {
+        "k": "nocite",
+        "text": "Show how often a free prompt with no citations invents claims.",
+        "hint": "Free prompt, no citations."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic Citations",
+        "type": "API feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Document blocks with citations enabled; answers return the exact cited text and its source.",
+        "ex": "Pass five policy passages as documents and verify each cited span.",
+        "pros": [
+          "Exact spans returned",
+          "Works with plain text and PDFs"
+        ],
+        "cons": [
+          "Tied to Claude models",
+          "Verification is still your job"
+        ],
+        "url": "https://docs.claude.com/en/docs/build-with-claude/citations"
+      },
+      {
+        "n": "Cohere RAG",
+        "type": "API feature · Cohere",
+        "start": 3,
+        "prod": 3,
+        "best": "Grounded generation over supplied documents with fine-grained citations.",
+        "ex": "Chat with documents and render each citation as a link to its passage.",
+        "pros": [
+          "Citations built into the chat API",
+          "Multilingual"
+        ],
+        "cons": [
+          "Tied to Cohere models"
+        ],
+        "url": "https://docs.cohere.com/docs/retrieval-augmented-generation-rag"
+      },
+      {
+        "n": "OpenAI file search",
+        "type": "API feature · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "Hosted retrieval over uploaded files with file citations as annotations.",
+        "ex": "Answer from an uploaded policy library and show the cited files.",
+        "pros": [
+          "Retrieval and citations managed",
+          "Quick to start"
+        ],
+        "cons": [
+          "Less control over chunking and ranking",
+          "Annotations cite files, not always exact spans"
+        ],
+        "url": "https://platform.openai.com/docs/guides/tools-file-search"
+      },
+      {
+        "n": "LlamaIndex CitationQueryEngine",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Splits sources into small numbered pieces and asks the model to cite them.",
+        "ex": "Sentence-level sources for an internal wiki assistant.",
+        "pros": [
+          "Model-agnostic",
+          "Easy to add"
+        ],
+        "cons": [
+          "Citation quality depends on the model",
+          "No built-in verification"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "Ragas",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Faithfulness and context metrics that measure groundedness on an eval set.",
+        "ex": "Track faithfulness weekly on 200 policy questions.",
+        "pros": [
+          "Standard RAG metrics",
+          "Works with any stack"
+        ],
+        "cons": [
+          "LLM-judged metrics need spot checks"
+        ],
+        "url": "https://docs.ragas.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Exact cited spans from the API",
+        "tool": "Anthropic Citations"
+      },
+      {
+        "need": "Model-agnostic, open source",
+        "tool": "LlamaIndex CitationQueryEngine"
+      },
+      {
+        "need": "Measure groundedness",
+        "tool": "Ragas faithfulness"
+      }
+    ],
+    "goals": [
+      "Ground answers in sources and cite each claim",
+      "Verify citations in code and abstain when nothing is supported",
+      "Explain why version filtering is separate from citation checks"
+    ]
+  },
+  "practice": {
+    "scenario": "Kaveri Bank, a fictional bank, runs a policy assistant for its staff. Only current policy versions are retrieved; each is passed as a document with its title, section and effective date and with citations enabled. Every sentence in the answer must carry a citation whose text is found in its source, or it is dropped. With nothing left, the assistant says it could not find the answer.",
+    "industries": [
+      {
+        "industry": "Banking and HR",
+        "use": "Staff policy assistants for leave, conduct and product rules"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Answers from clinical guidelines with the exact passage shown"
+      },
+      {
+        "industry": "Legal and compliance",
+        "use": "Research answers that cite the clause and the version"
+      }
+    ],
+    "analogy": "A good analyst's report: every number has a footnote, and a reviewer can check any footnote in seconds.",
+    "library": {
+      "name": "Anthropic Citations",
+      "what": "Pass sources as document blocks with citations enabled; the answer comes back as text blocks with the exact cited spans.",
+      "install": "pip install anthropic"
+    },
+    "note": "Check the current model names and the citation fields in the API documentation for your SDK version.",
+    "samples": [
+      {
+        "file": "cite.py",
+        "language": "python",
+        "code": "import anthropic\n\nclient = anthropic.Anthropic()\npolicy = \"Paternity leave: employees get 10 working days, to be taken within 3 months of the birth.\"\n\nmsg = client.messages.create(\n    model=\"claude-sonnet-5\", max_tokens=500,\n    messages=[{\"role\": \"user\", \"content\": [\n        {\"type\": \"document\", \"title\": \"Leave policy §5 · effective 1 Apr 2026\",\n         \"source\": {\"type\": \"text\", \"media_type\": \"text/plain\", \"data\": policy},\n         \"citations\": {\"enabled\": True}},\n        {\"type\": \"text\", \"text\": \"How many days of paternity leave do I get?\"}]}])\n\nfor block in msg.content:\n    if block.type == \"text\":\n        print(block.text)\n        for c in block.citations or []:\n            assert c.cited_text in policy          # verify against the source\n            print(\"   cited:\", c.cited_text)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An assistant answers 80 questions; 9% contain an unsupported claim. Claim-level citations cut that by a fifth, and verification removes 80% of what remains. About how many answers still contain an unsupported claim?",
+    "answer": "80 × 0.09 = 7.2; × 0.8 = 5.76; × 0.2 ≈ 1.15, so about 1 answer.",
+    "expected": {
+      "value": 1.15,
+      "tolerance": 0.2,
+      "label": "answers ≈"
+    },
+    "interview": [
+      {
+        "question": "How do you stop a RAG assistant from making things up?",
+        "answer": "Ground it: answer only from retrieved sources, cite each sentence, verify each citation against its source in code, drop unsupported sentences and abstain when nothing is supported. Measure faithfulness on an eval set and track the abstain rate."
+      },
+      {
+        "question": "Your citations are all valid but some answers are outdated. Why?",
+        "answer": "Superseded documents are still in the index, so the model cites real text from old versions. Store version and effective-date metadata, filter to current versions before retrieval and show dates with sources."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Treating a citation as proof",
+        "fix": "Verify that the cited text is in the source and supports the claim"
+      },
+      {
+        "mistake": "Leaving old versions in the index",
+        "fix": "Filter by version metadata before retrieval"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ci01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does “grounded” mean for a RAG answer?",
+      "options": [
+        "It is short",
+        "Every claim is supported by the provided sources",
+        "It uses a large model",
+        "It has no citations"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Groundedness is support by sources, not style."
+    },
+    {
+      "id": "ci02",
+      "kind": "single",
+      "industry": "HR",
+      "question": "A citation points to a real policy passage, but the passage does not say what the sentence claims. What catches this?",
+      "options": [
+        "Nothing can",
+        "Checking that the cited span supports the claim, for figures that the number appears in it",
+        "A bigger model",
+        "More citations"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Existence of a citation is not support; verify the content."
+    },
+    {
+      "id": "ci03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "All citations verify, yet answers quote a 2023 policy replaced in 2025. What is missing?",
+      "options": [
+        "A re-ranker",
+        "Version filtering by effective date or a current flag",
+        "More overlap",
+        "A lower temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Valid citations to outdated sources pass verification; filter versions before retrieval."
+    },
+    {
+      "id": "ci04",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which belong in a grounded-answer pipeline? Select all that apply.",
+      "options": [
+        "Answer only from the documents",
+        "Cite each sentence",
+        "Verify citations in code",
+        "Let the model add facts it is confident about"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Model knowledge without a source breaks grounding."
+    },
+    {
+      "id": "ci05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Nothing in the sources answers the question. What should the assistant do?",
+      "options": [
+        "Answer from general knowledge",
+        "Say it could not find the answer in the documents",
+        "Pick the closest passage and answer",
+        "Ask the model to guess"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Abstaining beats a confident wrong answer."
+    },
+    {
+      "id": "ci06",
+      "kind": "single",
+      "industry": "HR",
+      "question": "Staff take 90 seconds to check an answer without citations and 15 seconds with a source per sentence. For 400 answers a day, how many staff-hours are saved?",
+      "options": [
+        "About 8.3",
+        "About 1",
+        "About 25",
+        "About 100"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(90 − 15) × 400 = 30,000 s ≈ 8.3 hours."
+    },
+    {
+      "id": "ci07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why cite after each sentence rather than listing sources at the end?",
+      "options": [
+        "It is shorter",
+        "Each claim can be traced and checked on its own",
+        "Models require it",
+        "It improves retrieval"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Claim-level citations make checking fast and specific."
+    },
+    {
+      "id": "ci08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "With Anthropic’s Citations feature, what comes back with the answer?",
+      "options": [
+        "Only a list of document titles",
+        "Text blocks carrying the exact cited text and the document it came from",
+        "A confidence score only",
+        "Nothing extra"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The cited spans are what you verify."
+    },
+    {
+      "id": "ci09",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which metadata should each source carry for display? Select all that apply.",
+      "options": [
+        "Document title",
+        "Section or page",
+        "Effective date or version",
+        "The embedding vector"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "People need to find and trust the source; vectors mean nothing to them."
+    },
+    {
+      "id": "ci10",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Verification removes 80% of unsupported claims. If 6 answers of 80 have one before verification, how many remain?",
+      "options": [
+        "About 1",
+        "About 5",
+        "0",
+        "6"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "6 × 0.2 = 1.2, about 1."
+    },
+    {
+      "id": "ci11",
+      "kind": "single",
+      "industry": "HR",
+      "question": "Adding an abstain rule costs 3 answerable questions but declines 7 more unanswerable ones. Is it worth it?",
+      "options": [
+        "Never",
+        "Usually, where wrong answers are costly; measure both numbers",
+        "Only for chatbots",
+        "It depends on the model size"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Weigh false abstentions against confident wrong answers for your use."
+    },
+    {
+      "id": "ci12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does the Ragas faithfulness metric measure?",
+      "options": [
+        "Retrieval latency",
+        "How many claims in the answer are supported by the retrieved context",
+        "Answer length",
+        "Citation formatting"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It checks claims against context."
+    },
+    {
+      "id": "ci13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should superseded versions be filtered?",
+      "options": [
+        "After the answer is written",
+        "Before retrieval, as a metadata filter",
+        "In the prompt, by asking the model to ignore them",
+        "Nowhere"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Filter before the model sees them; prompts are not a reliable filter."
+    },
+    {
+      "id": "ci14",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A citizen assistant must show where each rule comes from. What is the minimum?",
+      "options": [
+        "A link to the ministry home page",
+        "The document, section and date for each cited claim",
+        "A disclaimer",
+        "The model name"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Specific, checkable sources."
+    },
+    {
+      "id": "ci15",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are warning signs of weak grounding? Select all that apply.",
+      "options": [
+        "Sentences with no citation",
+        "Citations whose text is not in the source",
+        "Numbers in the answer that do not appear in the cited span",
+        "Short answers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Length is not a grounding signal."
+    },
+    {
+      "id": "ci16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The model cites passage 3 for “the fee is ₹500”, but passage 3 says ₹250. What should verification do?",
+      "options": [
+        "Accept it: a citation exists",
+        "Reject the sentence because the figure is not in the cited text",
+        "Round the fee",
+        "Ask the user"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "For figures, check the number itself appears in the cited span."
+    },
+    {
+      "id": "ci17",
+      "kind": "single",
+      "industry": "HR",
+      "question": "A free prompt yields 18% answers with unsupported claims; a grounded prompt yields 9%. What does grounding alone not guarantee?",
+      "options": [
+        "Anything",
+        "That the remaining claims are supported; verification is still needed",
+        "Shorter answers",
+        "Faster answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Prompts reduce the rate; code checks enforce it."
+    },
+    {
+      "id": "ci18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why is “not found” sometimes the best answer?",
+      "options": [
+        "It is faster",
+        "When sources do not support an answer, any answer would be a guess",
+        "Users prefer it",
+        "It saves tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Declining preserves trust."
+    },
+    {
+      "id": "ci19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should citation verification run?",
+      "options": [
+        "In the prompt",
+        "In code, after generation and before display",
+        "In the vector database",
+        "In the user’s browser only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deterministic checks after generation, before anyone sees the answer."
+    },
+    {
+      "id": "ci20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does citation verification not catch?",
+      "options": [
+        "A cited span missing from the source",
+        "A sentence with no citation",
+        "A correct citation to an outdated document",
+        "A number that differs from the cited text"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The span is real; the document is stale. Use version filtering."
+    }
+  ]
+}

@@ -1,0 +1,871 @@
+{
+  "id": "disagg",
+  "moduleSlug": "performance",
+  "name": "Disaggregated Prefill",
+  "shortName": "Split serving",
+  "question": "Why make prefill and decode share a GPU?",
+  "summary": "Inference has two phases with different needs. Prefill processes the whole prompt at once and is compute-bound; decode produces one token at a time and is limited by memory bandwidth. Running them on separate GPU pools and handing the KV cache across stops long prompts from stalling other users’ token streams, and lets each pool be sized and tuned on its own.",
+  "useCases": [
+    "High-traffic serving with long prompts and many concurrent streams",
+    "Strict targets for both time to first token and tokens per second",
+    "Large deployments where GPU utilization matters"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Prefill",
+        "detail": "compute-bound; sets time to first token (TTFT)"
+      },
+      {
+        "term": "Decode",
+        "detail": "memory-bound; sets time per output token (TPOT)"
+      },
+      {
+        "term": "KV transfer",
+        "detail": "cache moved from prefill to decode workers over fast links"
+      },
+      {
+        "term": "Independent scaling",
+        "detail": "tune the prefill-to-decode GPU ratio to traffic"
+      },
+      {
+        "term": "Research",
+        "detail": "DistServe, Splitwise, Mooncake"
+      }
+    ]
+  },
+  "steps": [
+    "Measure TTFT and TPOT separately under real load",
+    "Consider disaggregation when long prompts and many streams compete",
+    "Use a fast interconnect (NVLink, RDMA) for KV transfer",
+    "Rebalance the prefill-to-decode ratio as traffic shifts"
+  ],
+  "pitfalls": [
+    "KV transfer adds network overhead and complexity",
+    "Little benefit for small models or light traffic",
+    "More components to operate and monitor"
+  ],
+  "tools": [
+    "NVIDIA Dynamo",
+    "vLLM disaggregated prefill",
+    "SGLang",
+    "llm-d",
+    "Mooncake"
+  ],
+  "remember": "Compute-heavy prefill, memory-heavy decode: split them.",
+  "caption": "On a shared GPU the long prefill blocks decoding. Separate pools keep tokens flowing.",
+  "comparison": {
+    "scope": "Serving infrastructure",
+    "cost": 4,
+    "needs": "Tail latency and throughput",
+    "best": "Operational complexity"
+  },
+  "diagram": {
+    "file": "diagrams/disagg.svg"
+  },
+  "lesson": {
+    "file": "split_serving.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "# 1. Measure the two phases separately, from serving logs",
+        "steps": []
+      },
+      {
+        "text": "ttft = [r.first_token_at - r.arrived_at for r in reqs]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "tpot = [(r.done_at - r.first_token_at) / (r.out_tokens - 1) for r in reqs]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "print(p95(ttft), p95(tpot))        # shared GPUs: 2.2 s, 61 ms",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "stall = 1.5 / 0.030                # 30k-token prefill ÷ 30 ms per token = 50",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "PREFILL = Pool(gpus=2, role=\"prefill\")     # compute-bound work",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "DECODE  = Pool(gpus=6, role=\"decode\")      # memory-bandwidth-bound",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def serve(req):",
+        "steps": []
+      },
+      {
+        "text": "    p = PREFILL.least_loaded()",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    kv, first = await p.prefill(req.prompt)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    d = DECODE.least_loaded()",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    await d.receive_kv(kv, link=\"rdma\")    # 30k × 128 KiB ≈ 3.9 GB",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    yield first",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    async for tok in d.decode(kv, max_tokens=req.max_tokens):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        yield tok                          # no prefill in this pool",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def rebalance():",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if p95(ttft) > TTFT_SLO and p95(tpot) < TPOT_SLO:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        move_gpu(src=DECODE, dst=PREFILL)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    elif p95(tpot) > TPOT_SLO and p95(ttft) < TTFT_SLO:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        move_gpu(src=PREFILL, dst=DECODE)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Measure TTFT and TPOT separately",
+        "text": "Averages hide the problem. On shared GPUs, p95 time to first token is 2.2 s and p95 time per output token is 61 ms, above a 50 ms target."
+      },
+      {
+        "title": "See the interference",
+        "text": "A 30,000-token prefill occupies a GPU for about 1.5 s. Every stream decoding on that GPU waits: 1.5 s ÷ 30 ms = 50 tokens it could have produced."
+      },
+      {
+        "title": "Split into two pools",
+        "text": "Prefill runs on its own GPUs, which are compute-bound. Decode runs on the others, which are limited by memory bandwidth. Here 2 and 6 of 8 GPUs."
+      },
+      {
+        "title": "Hand over the KV cache",
+        "text": "The finished prompt’s KV cache moves to a decode GPU. For an 8B model with 8 KV heads that is 128 KiB per token, about 3.9 GB, roughly 80 ms over 400 Gb/s RDMA."
+      },
+      {
+        "title": "Decode stays steady",
+        "text": "No prefill ever lands in the decode pool, so p95 TPOT falls to about 35 ms while the long prompts are still processed."
+      },
+      {
+        "title": "Rebalance as traffic shifts",
+        "text": "If TTFT breaches its target while TPOT has room, move a GPU to prefill; if TPOT breaches, move one back to decode."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Shared GPUs (p95)</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"35\" text-anchor=\"middle\">TTFT 2.2 s</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"182\" y=\"20\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"35\" text-anchor=\"middle\">TPOT 61 ms > 50 ms</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<rect class=\"a\" x=\"8\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0s\"/><rect class=\"a\" x=\"20\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.02s\"/><rect class=\"a\" x=\"32\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.04s\"/><rect class=\"a\" x=\"44\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.06s\"/><rect class=\"a\" x=\"56\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.08s\"/><rect class=\"a\" x=\"68\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.1s\"/><rect class=\"a\" x=\"80\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.12s\"/><rect class=\"a\" x=\"92\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.14s\"/><rect class=\"a\" x=\"104\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.16s\"/><rect class=\"a\" x=\"116\" y=\"54\" width=\"96\" height=\"22\" rx=\"3\" style=\"fill:var(--accent);--d:0.3s\"/><text class=\"a\" x=\"164\" y=\"69\" text-anchor=\"middle\" style=\"font:500 10.5px var(--sans);fill:var(--bg);--d:0.3s\">30k prefill 1.5 s</text><rect class=\"a\" x=\"216\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.2s\"/><rect class=\"a\" x=\"228\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.22s\"/><rect class=\"a\" x=\"240\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.24s\"/><rect class=\"a\" x=\"252\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.26s\"/><rect class=\"a\" x=\"264\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.28s\"/><rect class=\"a\" x=\"276\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.3s\"/><rect class=\"a\" x=\"288\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.32s\"/><rect class=\"a\" x=\"300\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.34s\"/><rect class=\"a\" x=\"312\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.36s\"/><rect class=\"a\" x=\"324\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.38s\"/><rect class=\"a\" x=\"336\" y=\"58\" width=\"8\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.4s\"/><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t fail\" x=\"180\" y=\"92\">every stream on this GPU waits 50 tokens</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"104\" width=\"120\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"68\" y=\"122\">Prefill pool</text><text class=\"sb\" x=\"68\" y=\"137\">2 GPUs · compute</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"232\" y=\"104\" width=\"120\" height=\"42\" rx=\"7\"/><text class=\"lb\" x=\"292\" y=\"122\">Decode pool</text><text class=\"sb\" x=\"292\" y=\"137\">6 GPUs · bandwidth</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln acc\" d=\"M130 125L230 125\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.15s\"><text class=\"tag-t\" x=\"180\" y=\"118\" style=\"fill:var(--accent)\">KV 3.9 GB</text><text class=\"tag-t\" x=\"180\" y=\"140\" style=\"fill:var(--accent)\">≈ 80 ms</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<rect class=\"a\" x=\"8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0s\"/><rect class=\"a\" x=\"21.4\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.02s\"/><rect class=\"a\" x=\"34.8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.04s\"/><rect class=\"a\" x=\"48.2\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.06s\"/><rect class=\"a\" x=\"61.6\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.08s\"/><rect class=\"a\" x=\"75\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.1s\"/><rect class=\"a\" x=\"88.4\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.12s\"/><rect class=\"a\" x=\"101.8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.14s\"/><rect class=\"a\" x=\"115.2\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.16s\"/><rect class=\"a\" x=\"128.60000000000002\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.18s\"/><rect class=\"a\" x=\"142\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.2s\"/><rect class=\"a\" x=\"155.4\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.22s\"/><rect class=\"a\" x=\"168.8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.24s\"/><rect class=\"a\" x=\"182.20000000000002\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.26s\"/><rect class=\"a\" x=\"195.6\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.28s\"/><rect class=\"a\" x=\"209\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.3s\"/><rect class=\"a\" x=\"222.4\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.32s\"/><rect class=\"a\" x=\"235.8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.34s\"/><rect class=\"a\" x=\"249.20000000000002\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.36s\"/><rect class=\"a\" x=\"262.6\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.38s\"/><rect class=\"a\" x=\"276\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.4s\"/><rect class=\"a\" x=\"289.40000000000003\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.42s\"/><rect class=\"a\" x=\"302.8\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.44s\"/><rect class=\"a\" x=\"316.2\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.46s\"/><rect class=\"a\" x=\"329.6\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.48s\"/><rect class=\"a\" x=\"343\" y=\"160\" width=\"9\" height=\"14\" rx=\"2\" style=\"fill:var(--ink-2);--d:0.5s\"/><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx pass\" x=\"182\" y=\"182\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"197\" text-anchor=\"middle\">TPOT 35 ms ✓</text></g><g class=\"a\" style=\"--d:0.6s\"><rect class=\"bx pass\" x=\"8\" y=\"182\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"197\" text-anchor=\"middle\">TTFT 2.3 s ✓</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"218\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"234\" text-anchor=\"middle\">TTFT high → +prefill GPU · TPOT high → +decode GPU</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Long prompts no longer stall other users’ token streams",
+      "Prefill and decode are sized and tuned independently",
+      "Separate targets for TTFT and TPOT become achievable",
+      "Better GPU utilization at large scale"
+    ],
+    "cons": [
+      "KV transfer needs fast interconnects",
+      "More components to deploy, route and monitor",
+      "Little gain for small models or light traffic",
+      "Choosing the prefill-to-decode ratio is an ongoing job"
+    ],
+    "avoidWhen": [
+      "Traffic is light or prompts are short",
+      "Only ordinary networking is available between GPUs"
+    ],
+    "tools": [
+      {
+        "name": "NVIDIA Dynamo",
+        "type": "Open source (NVIDIA)",
+        "what": "Disaggregated serving with KV-aware routing",
+        "url": "https://github.com/ai-dynamo/dynamo"
+      },
+      {
+        "name": "vLLM disaggregated prefill",
+        "type": "Open source (experimental)",
+        "what": "Separate prefill and decode instances with KV connectors",
+        "url": "https://docs.vllm.ai/en/latest/features/disagg_prefill/"
+      },
+      {
+        "name": "llm-d",
+        "type": "Open source (Kubernetes)",
+        "what": "Kubernetes-native distributed serving on vLLM",
+        "url": "https://github.com/llm-d/llm-d"
+      },
+      {
+        "name": "SGLang",
+        "type": "Open source inference server",
+        "what": "Prefill–decode disaggregation mode",
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "name": "Mooncake",
+        "type": "Open source",
+        "what": "KV-cache-centric disaggregated architecture and transfer engine",
+        "url": "https://github.com/kvcache-ai/Mooncake"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Eight GPUs serve 200 live chats while users upload long documents, each a 30,000-token prompt that takes 1.5 s of prefill on a dedicated GPU. The service promises p95 time to first token (TTFT) of at most 2.5 s and p95 time per output token (TPOT) of at most 50 ms. The latency figures come from a simple illustrative model, not a benchmark.",
+    "controls": [
+      "Drag how many long prompts arrive per minute.",
+      "Choose shared GPUs or separate prefill and decode pools, and size the prefill pool.",
+      "Choose the link that carries each 3.9 GB KV cache from prefill to decode."
+    ],
+    "outputs": [
+      {
+        "name": "p95 TTFT",
+        "meaning": "Queueing plus prefill, plus KV transfer when pools are split."
+      },
+      {
+        "name": "p95 TPOT",
+        "meaning": "Decode speed per stream, including stalls from prefills on the same GPU."
+      },
+      {
+        "name": "Targets met",
+        "meaning": "TTFT ≤ 2.5 s and TPOT ≤ 50 ms."
+      },
+      {
+        "name": "KV transfer per upload",
+        "meaning": "3.93 GB ÷ link bandwidth."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Shared GPUs",
+        "expect": "20 uploads a minute on shared GPUs: TTFT 2.21 s passes, but prefills steal 6% of GPU time and TPOT is 61 ms, over the target."
+      },
+      {
+        "k": "split",
+        "name": "Split pools",
+        "expect": "2 prefill and 6 decode GPUs over RDMA: TTFT 2.33 s (including 79 ms of KV transfer) and TPOT 35 ms. Both targets met."
+      },
+      {
+        "k": "eth",
+        "name": "Slow link",
+        "expect": "Same split over 25 Gb Ethernet: each KV transfer takes 1.26 s, so TTFT rises to 3.51 s and misses its target."
+      },
+      {
+        "k": "light",
+        "name": "Light load",
+        "expect": "4 uploads a minute on shared GPUs: TTFT 2.00 s and TPOT 37 ms. Both targets met without splitting."
+      }
+    ],
+    "missions": [
+      {
+        "k": "both",
+        "text": "Meet both targets with at least 20 long prompts per minute.",
+        "hint": "Separate the pools and keep enough GPUs on each side."
+      },
+      {
+        "k": "starve",
+        "text": "With split pools, break the TTFT target while TPOT stays within target.",
+        "hint": "Give the prefill pool too few GPUs for the upload rate."
+      },
+      {
+        "k": "notneeded",
+        "text": "Find a load of at least 8 uploads a minute where shared GPUs meet both targets.",
+        "hint": "Stay on shared GPUs and lower the upload rate until TPOT drops under 50 ms."
+      }
+    ],
+    "tools": [
+      {
+        "n": "NVIDIA Dynamo",
+        "type": "Open source · NVIDIA",
+        "start": 1,
+        "prod": 3,
+        "best": "Disaggregated prefill and decode across a fleet, with KV-aware routing and fast KV transfer.",
+        "ex": "Split 16 GPUs into 4 prefill and 12 decode workers for a document-heavy chat product.",
+        "pros": [
+          "Built for large multi-node serving",
+          "Works with vLLM, SGLang and TensorRT-LLM engines"
+        ],
+        "cons": [
+          "A platform to learn and operate",
+          "Benefits appear only at scale"
+        ],
+        "url": "https://github.com/ai-dynamo/dynamo"
+      },
+      {
+        "n": "vLLM disaggregated prefill",
+        "type": "Open source · experimental feature",
+        "start": 2,
+        "prod": 2,
+        "best": "Trying disaggregation with separate vLLM prefill and decode instances joined by a KV connector.",
+        "ex": "Run one prefill and one decode instance on a node and compare TTFT and TPOT with a single instance.",
+        "pros": [
+          "Uses the familiar vLLM stack",
+          "Good for experiments"
+        ],
+        "cons": [
+          "Marked experimental",
+          "You still manage routing and scaling"
+        ],
+        "url": "https://docs.vllm.ai/en/latest/features/disagg_prefill/"
+      },
+      {
+        "n": "llm-d",
+        "type": "Open source · Kubernetes",
+        "start": 1,
+        "prod": 3,
+        "best": "Kubernetes-native distributed inference on vLLM, including prefill–decode disaggregation.",
+        "ex": "Deploy separate prefill and decode deployments that autoscale on their own latency metrics.",
+        "pros": [
+          "Fits Kubernetes operations",
+          "Backed by several major vendors"
+        ],
+        "cons": [
+          "Requires a Kubernetes platform team",
+          "Young project"
+        ],
+        "url": "https://github.com/llm-d/llm-d"
+      },
+      {
+        "n": "SGLang PD disaggregation",
+        "type": "Open source · inference server",
+        "start": 2,
+        "prod": 2,
+        "best": "A prefill–decode disaggregation mode inside the SGLang runtime.",
+        "ex": "Serve a large model with dedicated prefill nodes and RDMA-based KV transfer.",
+        "pros": [
+          "Integrated in the server",
+          "Performance-focused"
+        ],
+        "cons": [
+          "Needs fast interconnects to pay off",
+          "Fewer operational guides"
+        ],
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "n": "Mooncake",
+        "type": "Open source",
+        "start": 1,
+        "prod": 2,
+        "best": "A KV-cache-centric disaggregated architecture and transfer engine from a large chat service.",
+        "ex": "Use its transfer engine to move KV caches between prefill and decode nodes over RDMA.",
+        "pros": [
+          "Proven in production at scale",
+          "Transfer engine usable with other servers"
+        ],
+        "cons": [
+          "Complex to deploy",
+          "Designed for large fleets"
+        ],
+        "url": "https://github.com/kvcache-ai/Mooncake"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Experiment on one node",
+        "tool": "vLLM disaggregated prefill"
+      },
+      {
+        "need": "Production fleet",
+        "tool": "NVIDIA Dynamo"
+      },
+      {
+        "need": "Kubernetes platform",
+        "tool": "llm-d"
+      }
+    ],
+    "goals": [
+      "Explain why prefill is compute-bound and decode is memory-bandwidth-bound",
+      "Calculate token stalls and KV transfer times",
+      "Decide when disaggregation is worth its operational cost"
+    ]
+  },
+  "practice": {
+    "scenario": "A large chat service receives long document uploads (30,000-token prompts) alongside thousands of ongoing chats. Moving prefill to its own GPU pool keeps everyone else's replies streaming smoothly while the documents are processed.",
+    "industries": [
+      {
+        "industry": "Large AI platforms",
+        "use": "Serve long prompts and many streams on the same fleet"
+      },
+      {
+        "industry": "Document AI",
+        "use": "Ingest long files without slowing live chat"
+      },
+      {
+        "industry": "Cloud providers",
+        "use": "Scale prompt-heavy and generation-heavy traffic separately"
+      }
+    ],
+    "analogy": "A restaurant with a prep kitchen. The big catering order is prepped in the back without stopping the plates going out front.",
+    "library": {
+      "name": "NVIDIA Dynamo",
+      "what": "Open-source serving framework for disaggregated prefill and decode, KV-aware routing and cache transfer, on top of engines such as vLLM.",
+      "install": "pip install \"ai-dynamo[all]\""
+    },
+    "note": "Conceptual sketch of what disaggregated serving frameworks do. Their APIs change quickly, so follow the framework’s own examples to deploy.",
+    "samples": [
+      {
+        "file": "flow.py",
+        "language": "python",
+        "code": "# Conceptual flow implemented by NVIDIA Dynamo, llm-d or vLLM's disaggregated mode\n\nasync def handle(request):\n    prefill = least_loaded(PREFILL_POOL)            # compute-heavy GPUs\n    kv, first_token = await prefill.run(request.prompt)\n\n    decode = least_loaded(DECODE_POOL)              # memory-bandwidth-heavy GPUs\n    await decode.receive_kv(kv)                     # transfer over NVLink / RDMA\n    yield first_token\n    async for token in decode.generate(max_tokens=request.max_tokens):\n        yield token\n\n# Scale each pool from its own metric:\n#   time to first token too high   -> add prefill workers\n#   time per output token too high -> add decode workers"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Prefill of a 30k-token prompt takes 1.5 s. Decode produces a token every 30 ms. On a shared GPU, how many tokens could each waiting stream have produced during one prefill?",
+    "answer": "1.5 s ÷ 0.03 s = 50 tokens of stall per stream, which users see as a stutter. Separate pools remove it.",
+    "expected": {
+      "value": 50,
+      "tolerance": 0.5,
+      "label": "tokens ="
+    },
+    "interview": [
+      {
+        "question": "Why are prefill and decode bottlenecked differently?",
+        "answer": "Prefill processes all prompt tokens in parallel, so it's limited by compute. Decode produces one token per step and must read the model weights and KV cache each time, so it's limited by memory bandwidth."
+      },
+      {
+        "question": "What does disaggregation cost you?",
+        "answer": "Moving the KV cache between GPUs adds network traffic and latency, needs fast interconnects, and adds components to deploy, route and monitor. It pays off at high traffic with long prompts."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Tracking only average latency",
+        "fix": "Track time to first token and time per output token separately, at p95"
+      },
+      {
+        "mistake": "Disaggregating a small, lightly loaded service",
+        "fix": "Use it when long prompts and many streams compete"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dg01",
+      "kind": "single",
+      "industry": "Cloud",
+      "question": "What mainly limits the prefill phase?",
+      "options": [
+        "Compute",
+        "Memory bandwidth",
+        "Network latency",
+        "Disk speed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "All prompt tokens are processed in parallel, so prefill is compute-bound."
+    },
+    {
+      "id": "dg02",
+      "kind": "single",
+      "industry": "Cloud",
+      "question": "What mainly limits the decode phase?",
+      "options": [
+        "Compute",
+        "Memory bandwidth",
+        "Tokenizer speed",
+        "CPU cores"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each new token requires reading the weights and KV cache, so decode is memory-bandwidth-bound."
+    },
+    {
+      "id": "dg03",
+      "kind": "single",
+      "industry": "Document AI",
+      "question": "A 20,000-token prompt takes 1.2 s to prefill on a GPU where streams decode at 40 ms per token. How many tokens could each waiting stream have produced during that prefill?",
+      "options": [
+        "30",
+        "48",
+        "20",
+        "12"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1.2 s ÷ 0.04 s = 30 tokens of stall."
+    },
+    {
+      "id": "dg04",
+      "kind": "single",
+      "industry": "Chat platforms",
+      "question": "Which symptom most suggests disaggregated prefill would help?",
+      "options": [
+        "p95 time per output token spikes whenever long documents are uploaded, while TTFT is fine",
+        "All requests are slow at night",
+        "The model gives wrong answers",
+        "GPU utilization is 5%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Long prefills interfering with decode is exactly the problem it solves."
+    },
+    {
+      "id": "dg05",
+      "kind": "multi",
+      "industry": "Cloud",
+      "question": "What does a disaggregated deployment need? Select all that apply.",
+      "options": [
+        "A fast interconnect between prefill and decode GPUs",
+        "A way to transfer KV caches",
+        "A router that picks a prefill and a decode worker",
+        "A larger model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Splitting phases adds transfer and routing; model size is unrelated."
+    },
+    {
+      "id": "dg06",
+      "kind": "single",
+      "industry": "Cloud",
+      "question": "A model has 32 layers, 8 KV heads and head dimension 128, stored in 16-bit precision. How much KV cache does one token need?",
+      "options": [
+        "128 KiB",
+        "64 KiB",
+        "256 KiB",
+        "32 KiB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2 (K and V) × 32 × 8 × 128 × 2 bytes = 131,072 bytes = 128 KiB."
+    },
+    {
+      "id": "dg07",
+      "kind": "single",
+      "industry": "Cloud",
+      "question": "At 128 KiB per token, a 10,000-token prompt’s KV cache is about 1.31 GB. How long does it take to move over a 50 GB/s link?",
+      "options": [
+        "About 26 ms",
+        "About 2.6 ms",
+        "About 262 ms",
+        "About 1.3 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1.31 GB ÷ 50 GB/s ≈ 0.026 s."
+    },
+    {
+      "id": "dg08",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In a split deployment, p95 TTFT misses its target while p95 TPOT has plenty of room. What do you change?",
+      "options": [
+        "Add prefill capacity, for example by moving a GPU from decode",
+        "Add decode capacity",
+        "Lower max_tokens",
+        "Turn off the KV transfer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "TTFT is set by the prefill pool."
+    },
+    {
+      "id": "dg09",
+      "kind": "multi",
+      "industry": "Startups",
+      "question": "Which are signs you do not need disaggregation yet? Select all that apply.",
+      "options": [
+        "Light traffic",
+        "Mostly short prompts",
+        "A small model on a single GPU",
+        "p95 TPOT spikes whenever long prompts arrive"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Spikes caused by long prompts are the reason to consider it."
+    },
+    {
+      "id": "dg10",
+      "kind": "single",
+      "industry": "Research",
+      "question": "What is the core idea of DistServe?",
+      "options": [
+        "Run prefill and decode on different GPUs and tune each for its own latency target",
+        "Cache prompts across users",
+        "Use a draft model",
+        "Compress the KV cache"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It optimizes goodput under separate TTFT and TPOT targets."
+    },
+    {
+      "id": "dg11",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which metrics should you track for a disaggregated service? Select all that apply.",
+      "options": [
+        "p95 TTFT",
+        "p95 TPOT",
+        "KV transfer time",
+        "Only average end-to-end latency"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Averages hide the per-phase behaviour you are tuning."
+    },
+    {
+      "id": "dg12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which technique reduces decode stalls on a shared GPU without separate pools?",
+      "options": [
+        "Chunked prefill: long prompts are processed in pieces interleaved with decode steps",
+        "Speculative decoding",
+        "A larger batch size",
+        "Procedural memory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Chunking bounds how long any decode step waits, at some cost to TTFT."
+    },
+    {
+      "id": "dg13",
+      "kind": "single",
+      "industry": "Cloud",
+      "question": "8 GPUs serve 200 streams with 2 prefill and 6 decode GPUs. If you move to 3 prefill GPUs, how many streams does each decode GPU serve?",
+      "options": [
+        "40",
+        "33",
+        "25",
+        "67"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "200 ÷ 5 = 40 streams per decode GPU, so TPOT will rise a little."
+    },
+    {
+      "id": "dg14",
+      "kind": "single",
+      "industry": "Research",
+      "question": "What did Splitwise propose beyond splitting the phases?",
+      "options": [
+        "Running each phase on hardware suited to it, such as different GPU types",
+        "Removing the KV cache",
+        "Training a new model per phase",
+        "Serving only prefill"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Decode needs less compute, so older or cheaper GPUs can serve it efficiently."
+    },
+    {
+      "id": "dg15",
+      "kind": "single",
+      "industry": "Chat platforms",
+      "question": "Mooncake, a KV-cache-centric disaggregated architecture, was built to serve which product?",
+      "options": [
+        "Moonshot AI’s Kimi",
+        "A search engine",
+        "A database",
+        "An operating system"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its paper describes serving Kimi with a disaggregated, KV-cache-centric design."
+    },
+    {
+      "id": "dg16",
+      "kind": "multi",
+      "industry": "Cloud",
+      "question": "What are the downsides of disaggregated serving? Select all that apply.",
+      "options": [
+        "KV transfer adds network overhead",
+        "More components to deploy and monitor",
+        "The prefill-to-decode ratio needs ongoing tuning",
+        "It changes the model’s outputs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Outputs are identical; the costs are operational."
+    },
+    {
+      "id": "dg17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A response has 401 output tokens. The first token arrives at 2.0 s and the last at 14.0 s. What is its TPOT?",
+      "options": [
+        "30 ms",
+        "35 ms",
+        "29.9 ms",
+        "34.9 ms"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(14.0 − 2.0) ÷ (401 − 1) = 12.0 ÷ 400 = 0.030 s."
+    },
+    {
+      "id": "dg18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why not simply add more GPUs to the shared pool instead of splitting it?",
+      "options": [
+        "Each long prefill still interrupts every stream on the GPU it lands on; more GPUs only make it less frequent",
+        "More GPUs are always cheaper",
+        "Shared pools cannot scale",
+        "Splitting needs fewer GPUs in every case"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Interference is structural in a shared pool; splitting removes it."
+    },
+    {
+      "id": "dg19",
+      "kind": "multi",
+      "industry": "Cloud",
+      "question": "Which projects support prefill–decode disaggregation? Select all that apply.",
+      "options": [
+        "NVIDIA Dynamo",
+        "llm-d",
+        "vLLM (experimental)",
+        "tree-sitter"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "tree-sitter is a code parser."
+    },
+    {
+      "id": "dg20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Prefill and decode nodes are joined by 10 Gb Ethernet, about 1.25 GB/s. A 3.9 GB KV cache must move for each long prompt. What should you conclude?",
+      "options": [
+        "Transfer takes about 3.1 s, adding directly to TTFT: keep phases together or get a faster link",
+        "Transfer is negligible",
+        "TPOT will rise by 3.1 s",
+        "Disaggregation will halve TTFT"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "3.9 ÷ 1.25 ≈ 3.1 s of extra TTFT per long prompt outweighs the benefit."
+    }
+  ]
+}

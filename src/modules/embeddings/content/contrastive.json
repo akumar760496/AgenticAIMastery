@@ -1,0 +1,852 @@
+{
+  "id": "contrastive",
+  "moduleSlug": "embeddings",
+  "name": "Contrastive Embeddings",
+  "shortName": "Contrastive training",
+  "question": "How do I make vectors fit my domain?",
+  "summary": "Contrastive learning is how most embedding models are trained, and how you fine-tune one on your own data. The model sees an anchor, a positive (a true match) and negatives, and learns to pull positives closer while pushing negatives apart. Hard negatives, which look similar but are wrong, teach the most.",
+  "useCases": [
+    "Specialised jargon: legal, medical, internal product names",
+    "Off-the-shelf models that rank near-misses above true matches",
+    "You have real signals: clicks, tickets, Q&A pairs"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Anchor–positive pairs",
+        "detail": "question ↔ correct passage, query ↔ clicked result"
+      },
+      {
+        "term": "Hard negatives",
+        "detail": "similar-looking but wrong passages"
+      },
+      {
+        "term": "In-batch negatives",
+        "detail": "other examples in the batch act as negatives"
+      },
+      {
+        "term": "Loss",
+        "detail": "InfoNCE or MultipleNegativesRankingLoss"
+      },
+      {
+        "term": "Temperature",
+        "detail": "controls how sharply scores separate"
+      }
+    ]
+  },
+  "steps": [
+    "Collect pairs from real signals: search clicks, support tickets, Q&A logs",
+    "Mine hard negatives with your current retriever",
+    "Fine-tune a strong base model with a contrastive loss",
+    "Compare recall@k with the base model on a held-out set"
+  ],
+  "pitfalls": [
+    "False negatives (actually relevant passages) confuse training",
+    "Overfitting to a small dataset hurts general queries",
+    "A fine-tuned model means re-embedding the whole corpus"
+  ],
+  "tools": [
+    "sentence-transformers",
+    "FlagEmbedding",
+    "PyTorch",
+    "Hugging Face Datasets"
+  ],
+  "remember": "Pull matches in, push look-alikes out.",
+  "caption": "The dashed ring is “close enough to retrieve”. Training moves the right points inside it.",
+  "comparison": {
+    "scope": "Your domain’s notion of similarity",
+    "cost": 4,
+    "needs": "Specialised domains and jargon",
+    "best": "Needs labelled pairs; re-embedding"
+  },
+  "diagram": {
+    "file": "diagrams/contrastive.svg"
+  },
+  "lesson": {
+    "file": "finetune_embeddings.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from datasets import Dataset",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers import (SentenceTransformer, SentenceTransformerTrainer,",
+        "steps": []
+      },
+      {
+        "text": "                                   SentenceTransformerTrainingArguments)",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers.losses import MultipleNegativesRankingLoss",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers.training_args import BatchSamplers",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers.util import mine_hard_negatives",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = SentenceTransformer(\"BAAI/bge-small-en-v1.5\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "pairs = Dataset.from_dict({\"anchor\": queries_from_search_logs,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                           \"positive\": clicked_articles})",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "train = mine_hard_negatives(pairs, model, range_min=10, range_max=50,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                            num_negatives=1)   # skip the top 10: likely true matches",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "loss = MultipleNegativesRankingLoss(model, scale=20.0)   # scale = 1 / temperature 0.05",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "args = SentenceTransformerTrainingArguments(",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    output_dir=\"bge-small-broking\", num_train_epochs=1,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    per_device_train_batch_size=32,     # 31 in-batch negatives per query",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    batch_sampler=BatchSamplers.NO_DUPLICATES)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "SentenceTransformerTrainer(model=model, args=args,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                           train_dataset=train, loss=loss).train()",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "print(ir_evaluator(model))       # recall@10 on held-out real queries",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "print(ir_evaluator(SentenceTransformer(\"BAAI/bge-small-en-v1.5\")))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "new_vecs = model.encode(all_chunks, normalize_embeddings=True)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "index.replace_all(new_vecs)      # old vectors are not comparable",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Collect anchor–positive pairs",
+        "text": "Take real signals: a search query and the article the user clicked, or a ticket and the answer that resolved it. “what is MTF” pairs with the MTF article."
+      },
+      {
+        "title": "Mine hard negatives",
+        "text": "Search with the current model and pick a look-alike that is wrong, such as the mutual-fund article. Skip the very top hits: they are often true matches."
+      },
+      {
+        "title": "Use in-batch negatives and a temperature",
+        "text": "With a batch of 32, each query also treats the other 31 positives as negatives. The loss is a softmax over similarities divided by the temperature τ = 0.05."
+      },
+      {
+        "title": "Train: pull in, push out",
+        "text": "Each step raises the query’s similarity to its positive and lowers it for the hard negative, until the true match ranks first."
+      },
+      {
+        "title": "Evaluate on held-out queries",
+        "text": "Compare recall@10 of the tuned and the base model on real queries the model never saw. Here it rises from 0.71 to 0.86."
+      },
+      {
+        "title": "Re-embed the corpus",
+        "text": "A new model means a new vector space. Every stored chunk must be embedded again before the new model serves queries."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"164\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"90\" y=\"24\" text-anchor=\"middle\">anchor: “what is MTF”</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"8\" y=\"38\" width=\"164\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"90\" y=\"54\" text-anchor=\"middle\">positive: MTF explained</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"68\" width=\"164\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"90\" y=\"84\" text-anchor=\"middle\">hard negative: MF basics</text></g><text class=\"tl l a\" x=\"8\" y=\"108\" style=\"--d:0.2s\">mined with the current model</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"119\" width=\"14\" height=\"14\" rx=\"3\"/><rect class=\"bx soft\" x=\"26\" y=\"119\" width=\"14\" height=\"14\" rx=\"3\"/><rect class=\"bx soft\" x=\"44\" y=\"119\" width=\"14\" height=\"14\" rx=\"3\"/><rect class=\"bx soft\" x=\"62\" y=\"119\" width=\"14\" height=\"14\" rx=\"3\"/><rect class=\"bx soft\" x=\"80\" y=\"119\" width=\"14\" height=\"14\" rx=\"3\"/></g><text class=\"tl l a\" x=\"100\" y=\"130\" style=\"--d:0.1s\">+ 31 in batch</text><text class=\"mono a\" x=\"8\" y=\"158\" style=\"--d:0.25s\">loss = −log softmax(s ÷ τ)</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"182\" y=\"8\" width=\"170\" height=\"176\" rx=\"8\"/><circle cx=\"262\" cy=\"96\" r=\"34\" style=\"fill:none;stroke:var(--pass);stroke-dasharray:3 3\"/><circle cx=\"262\" cy=\"96\" r=\"8\" style=\"fill:var(--accent)\"/><text class=\"sb\" x=\"262\" y=\"118\">anchor</text></g><g class=\"mv\" style=\"--dx:-46px;--dy:40px;--d:0.6s\"><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"328\" cy=\"38\" r=\"7\" style=\"fill:var(--pass)\"/><text class=\"sb\" x=\"328\" y=\"27\">positive</text></g></g><g class=\"mv\" style=\"--dx:44px;--dy:70px;--d:0.7s\"><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"286\" cy=\"78\" r=\"7\" style=\"fill:var(--warn)\"/><text class=\"sb\" x=\"286\" y=\"67\">hard neg</text></g></g><g class=\"mv\" style=\"--dx:0px;--dy:0px;--d:0.8s\"><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"206\" cy=\"160\" r=\"7\" style=\"fill:var(--rule-strong)\"/><text class=\"sb\" x=\"206\" y=\"149\"></text></g></g><g class=\"mv\" style=\"--dx:0px;--dy:0px;--d:0.8s\"><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"212\" cy=\"34\" r=\"7\" style=\"fill:var(--rule-strong)\"/><text class=\"sb\" x=\"212\" y=\"23\"></text></g></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"196\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"211\" text-anchor=\"middle\">held-out recall@10: 0.71 → 0.86</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"226\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"241\" text-anchor=\"middle\">new model → re-embed all 2.4M chunks</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Teaches the model your domain’s distinctions and jargon",
+      "Uses signals you already have: clicks, tickets, Q&A logs",
+      "Small open models tuned on your data can beat larger general ones",
+      "Hard negatives fix the exact confusions users complain about"
+    ],
+    "cons": [
+      "Needs thousands of good pairs and a held-out test set",
+      "False negatives in the data teach the wrong lesson",
+      "Can overfit and hurt general queries",
+      "Every new model version means re-embedding the corpus"
+    ],
+    "avoidWhen": [
+      "You have no real query–answer signals yet",
+      "The problem is exact codes or IDs (BM25 fixes that without training)"
+    ],
+    "tools": [
+      {
+        "name": "sentence-transformers",
+        "type": "Open source",
+        "what": "Contrastive losses, hard-negative mining and a trainer",
+        "url": "https://sbert.net/docs/sentence_transformer/training_overview.html"
+      },
+      {
+        "name": "FlagEmbedding",
+        "type": "Open source",
+        "what": "Fine-tuning BGE models and re-rankers",
+        "url": "https://github.com/FlagOpen/FlagEmbedding"
+      },
+      {
+        "name": "Hugging Face Datasets",
+        "type": "Open source",
+        "what": "Storing and versioning training pairs",
+        "url": "https://huggingface.co/docs/datasets"
+      },
+      {
+        "name": "PyTorch",
+        "type": "Open source",
+        "what": "Custom training loops and losses",
+        "url": "https://pytorch.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A broker’s search confuses “MTF” (margin trading facility) with “MF” (mutual funds). You are fine-tuning the embedding model on one query: the right article is the positive and the mutual-fund article is the hard negative. Train step by step and watch the similarities, the softmax and the ranking.",
+    "controls": [
+      "Include or exclude the hard negative from the training loss.",
+      "Choose the temperature τ and the batch size, which sets how many easy in-batch negatives each query sees.",
+      "Train one or five steps, or reset the model."
+    ],
+    "outputs": [
+      {
+        "name": "Similarity to positive / hard negative",
+        "meaning": "Cosine similarity of the query to each article. The higher one is ranked first by search."
+      },
+      {
+        "name": "P(positive)",
+        "meaning": "The softmax probability the loss assigns to the right article among all candidates."
+      },
+      {
+        "name": "Loss",
+        "meaning": "−ln P(positive): InfoNCE, the quantity training reduces."
+      },
+      {
+        "name": "Training steps",
+        "meaning": "How many gradient steps have been applied."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Before training",
+        "expect": "0.62 to the right article, 0.71 to the look-alike: search is wrong. P(positive) 14%, loss 1.953."
+      },
+      {
+        "k": "warm",
+        "name": "Temperature 1.0",
+        "expect": "Same vectors, but τ = 1 flattens the softmax: P(positive) 5%, loss 3.022."
+      },
+      {
+        "k": "big",
+        "name": "τ 0.5, batch 128",
+        "expect": "127 easy negatives take 95% of the probability: P(positive) 2%, loss 3.852."
+      }
+    ],
+    "missions": [
+      {
+        "k": "rank",
+        "text": "Train until search ranks the right article above the look-alike.",
+        "hint": "From the start, two training steps with the hard negative included are enough."
+      },
+      {
+        "k": "sharp",
+        "text": "With the hard negative in training, get the loss below 0.1 while search ranks correctly.",
+        "hint": "Keep τ at 0.05 and train about five steps."
+      },
+      {
+        "k": "fooled",
+        "text": "Make the training loss look nearly perfect while search still ranks the wrong article first.",
+        "hint": "Exclude the hard negative. Easy negatives are already far away, so the loss is tiny but nothing is learned."
+      }
+    ],
+    "tools": [
+      {
+        "n": "sentence-transformers",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 3,
+        "best": "Fine-tuning embedding models with contrastive losses, hard-negative mining and evaluators.",
+        "ex": "Fine-tune bge-small on 20,000 query–click pairs from a broker’s search logs with MultipleNegativesRankingLoss.",
+        "pros": [
+          "Losses, mining and IR evaluator built in",
+          "Works with any Hugging Face model"
+        ],
+        "cons": [
+          "You need a GPU for reasonable training times",
+          "Data quality is still your problem"
+        ],
+        "url": "https://sbert.net/docs/sentence_transformer/training_overview.html"
+      },
+      {
+        "n": "FlagEmbedding",
+        "type": "Open source · BAAI",
+        "start": 2,
+        "prod": 3,
+        "best": "Fine-tuning BGE embedding models and re-rankers with the recipes used to train them.",
+        "ex": "Fine-tune bge-m3 on multilingual insurance FAQs, then fine-tune a matching re-ranker.",
+        "pros": [
+          "Official recipes for BGE models",
+          "Covers embedders and re-rankers"
+        ],
+        "cons": [
+          "Focused on the BGE family",
+          "Documentation assumes some ML experience"
+        ],
+        "url": "https://github.com/FlagOpen/FlagEmbedding"
+      },
+      {
+        "n": "Hugging Face Datasets",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Storing, versioning and streaming training pairs and triplets.",
+        "ex": "Keep anchor, positive and negative columns for each monthly training run.",
+        "pros": [
+          "Plugs straight into the trainer",
+          "Handles datasets larger than memory"
+        ],
+        "cons": [
+          "Not a labelling tool",
+          "Governance of private data is up to you"
+        ],
+        "url": "https://huggingface.co/docs/datasets"
+      },
+      {
+        "n": "PyTorch",
+        "type": "Open source",
+        "start": 1,
+        "prod": 3,
+        "best": "Custom losses and training loops when the libraries do not fit.",
+        "ex": "Write an InfoNCE loss with a learnable temperature for a research prototype.",
+        "pros": [
+          "Complete control",
+          "Industry standard"
+        ],
+        "cons": [
+          "Much more code to write and test",
+          "Easy to get subtle details wrong"
+        ],
+        "url": "https://pytorch.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "First fine-tune",
+        "tool": "sentence-transformers"
+      },
+      {
+        "need": "Tuning BGE models",
+        "tool": "FlagEmbedding"
+      },
+      {
+        "need": "Custom losses or research",
+        "tool": "PyTorch"
+      }
+    ],
+    "goals": [
+      "Explain anchors, positives, hard negatives and in-batch negatives",
+      "Explain the InfoNCE loss and what the temperature does",
+      "Explain why a low training loss does not prove better retrieval"
+    ]
+  },
+  "practice": {
+    "scenario": "A broker's search confuses “MTF” (margin trading facility) with “MF” (mutual funds). Fine-tuning an embedding model on a few thousand real query-to-article pairs from search logs, each with a look-alike wrong article as a hard negative, teaches it that these are different things.",
+    "industries": [
+      {
+        "industry": "Finance",
+        "use": "Domain acronyms: MTF vs MF, F&O, SIP"
+      },
+      {
+        "industry": "Legal & pharma",
+        "use": "Specialist terms that general models blur together"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Learn from click logs which products truly match a query"
+      }
+    ],
+    "analogy": "Learning to tell identical twins apart. Seeing them side by side and being told “not the same person” teaches more than meeting strangers.",
+    "library": {
+      "name": "sentence-transformers",
+      "what": "Built-in contrastive losses (MultipleNegativesRankingLoss) and a short training loop for any base model.",
+      "install": "pip install sentence-transformers"
+    },
+    "samples": [
+      {
+        "file": "finetune.py",
+        "language": "python",
+        "code": "from sentence_transformers import SentenceTransformer, InputExample, losses\nfrom torch.utils.data import DataLoader\n\nmodel = SentenceTransformer(\"BAAI/bge-small-en-v1.5\")\n\ntrain = [\n    # (anchor, positive, hard negative)\n    InputExample(texts=[\"what is MTF\",\n                        \"Margin Trading Facility: buy with partial payment\",\n                        \"Mutual fund basics for beginners\"]),\n    # ... thousands more mined from search logs\n]\nloader = DataLoader(train, shuffle=True, batch_size=32)\nloss = losses.MultipleNegativesRankingLoss(model)    # also uses in-batch negatives\n\nmodel.fit(train_objectives=[(loader, loss)], epochs=1, warmup_steps=100)\nmodel.save(\"bge-small-broking\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A training batch holds 32 (query, positive) pairs. With in-batch negatives, how many negatives does each query see?",
+    "answer": "31: every other positive in the batch acts as a negative, which is why larger batches often train better.",
+    "expected": {
+      "value": 31,
+      "tolerance": 0.1,
+      "label": "negatives ="
+    },
+    "interview": [
+      {
+        "question": "What are hard negatives, and why do they matter?",
+        "answer": "Passages that look relevant but are wrong, such as a mutual-fund article for an MTF query. Easy negatives teach little; hard negatives force the model to learn your domain's fine distinctions."
+      },
+      {
+        "question": "How do you know fine-tuning helped?",
+        "answer": "Hold out a labelled set of real queries and compare recall@k and MRR against the base model, and check that general queries didn't get worse."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Mining “negatives” that are actually relevant",
+        "fix": "Filter false negatives, for example with a cross-encoder"
+      },
+      {
+        "mistake": "Evaluating on the training pairs",
+        "fix": "Use a held-out set of real queries"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "co01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Your embeddings treat “MTF” and “MF” as nearly identical. What is the best long-term fix?",
+      "options": [
+        "A synonym list",
+        "Contrastive fine-tuning with hard negatives",
+        "Truncating to fewer dimensions",
+        "Lower chunk overlap"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Training on real query–article pairs with look-alike wrong answers teaches the distinction."
+    },
+    {
+      "id": "co02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A batch holds 64 (query, positive) pairs. With in-batch negatives, how many negatives does each query see?",
+      "options": [
+        "63",
+        "64",
+        "32",
+        "128"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Every other positive in the batch acts as a negative: 64 − 1 = 63."
+    },
+    {
+      "id": "co03",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are good sources of positive training pairs? Select all that apply.",
+      "options": [
+        "Search query → clicked article the user stayed on",
+        "Support ticket → the knowledge-base article that resolved it",
+        "FAQ question → its answer",
+        "Two articles picked at random"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Real signals of relevance make good positives. Random pairs are not matches."
+    },
+    {
+      "id": "co04",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Mined “negatives” often turn out to be clauses that also answer the query. What does this do, and what is the fix?",
+      "options": [
+        "It teaches the model to push true matches away; filter candidates or skip the top ranks",
+        "Nothing: more negatives are always better",
+        "It speeds up training; keep them",
+        "It only affects the temperature"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "False negatives confuse training. Remove likely positives, for example with a cross-encoder."
+    },
+    {
+      "id": "co05",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which make a sound evaluation of a fine-tuned embedding model? Select all that apply.",
+      "options": [
+        "Held-out real queries never used in training",
+        "A comparison with the base model on the same set",
+        "A check that general queries did not get worse",
+        "Evaluating on the training pairs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Training pairs reward memorization. Held-out data and a baseline show real gains."
+    },
+    {
+      "id": "co06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "MultipleNegativesRankingLoss uses scale = 20. Which temperature does that correspond to?",
+      "options": [
+        "0.05",
+        "20",
+        "0.2",
+        "2.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scale is 1 ÷ temperature: 1 ÷ 20 = 0.05."
+    },
+    {
+      "id": "co07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A query has similarity 0.8 to its positive and 0.6 to one negative, with τ = 0.1. What probability does the softmax give the positive?",
+      "options": [
+        "0.88",
+        "0.57",
+        "0.67",
+        "0.98"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "e^8 ÷ (e^8 + e^6) = 1 ÷ (1 + e^−2) ≈ 0.88."
+    },
+    {
+      "id": "co08",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are warning signs of overfitting during fine-tuning? Select all that apply.",
+      "options": [
+        "In-domain recall rises but general queries degrade",
+        "Training loss is near zero while held-out recall is flat",
+        "300 pairs trained for 20 epochs",
+        "Held-out recall and general queries both improve"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Memorizing a small set shows up as a gap between training and held-out results."
+    },
+    {
+      "id": "co09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "The fine-tuned model beats the base model. What must happen before it serves queries?",
+      "options": [
+        "Re-embed every document with the new model",
+        "Nothing: swap the query model only",
+        "Lower the similarity threshold",
+        "Retrain BM25"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A new model means a new vector space; old document vectors are not comparable."
+    },
+    {
+      "id": "co10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why use a batch sampler that avoids duplicate texts within a batch?",
+      "options": [
+        "A duplicate would act as a negative for its own match",
+        "It makes batches larger",
+        "It removes the need for positives",
+        "It sets the temperature automatically"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "If the same text appears twice, in-batch negatives include a true match, creating a false negative."
+    },
+    {
+      "id": "co11",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Training uses only random easy negatives. The loss is near zero, but look-alike articles still outrank the right ones. Why?",
+      "options": [
+        "Easy negatives are already far away, so there is almost nothing to learn",
+        "The learning rate is too high",
+        "The batch is too small to compute a loss",
+        "The model has too many dimensions"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Without hard negatives, the loss never sees the confusions that matter."
+    },
+    {
+      "id": "co12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Training with temperature 1.0 separates matches from non-matches only weakly. Why?",
+      "options": [
+        "Dividing similarities by a large temperature flattens the softmax",
+        "A temperature of 1 disables the loss",
+        "High temperature adds hard negatives",
+        "Temperature only affects inference"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Low temperatures such as 0.05 turn small similarity gaps into large probability gaps."
+    },
+    {
+      "id": "co13",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which are good practices for mining hard negatives? Select all that apply.",
+      "options": [
+        "Mine them with the current retriever",
+        "Skip the top few ranks",
+        "Filter candidates with a cross-encoder to remove true matches",
+        "Use the positive itself as a negative"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Look-alikes come from your retriever; filtering removes false negatives."
+    },
+    {
+      "id": "co14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which of these is trained with a contrastive objective?",
+      "options": [
+        "CLIP",
+        "BM25",
+        "PCA",
+        "int8 quantization"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "CLIP aligns image–caption pairs contrastively. The others involve no such training."
+    },
+    {
+      "id": "co15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A team has 150 query–article pairs and wants to fine-tune. What is the best advice?",
+      "options": [
+        "Collect thousands of real pairs first; 150 invites overfitting",
+        "Train for 50 epochs to make up for it",
+        "Use a temperature of 10",
+        "Skip evaluation because the data is small"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Small datasets overfit easily. Gather more signal and keep a held-out set."
+    },
+    {
+      "id": "co16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You only have (anchor, positive) pairs, with no labelled negatives. Which loss suits this?",
+      "options": [
+        "MultipleNegativesRankingLoss, which uses in-batch negatives",
+        "A triplet loss that needs an explicit negative",
+        "Mean squared error on raw text",
+        "No loss can be used"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It treats the other positives in the batch as negatives."
+    },
+    {
+      "id": "co17",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "On 200 held-out queries, the base model finds the answer in the top 10 for 142 and the tuned model for 172. What changed?",
+      "options": [
+        "Recall@10 rose from 0.71 to 0.86 (+0.15)",
+        "Recall@10 rose by 0.30",
+        "Recall@10 rose by 0.086",
+        "Recall@10 rose by 0.21"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "142 ÷ 200 = 0.71 and 172 ÷ 200 = 0.86."
+    },
+    {
+      "id": "co18",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which click signals are noisy and need filtering before training? Select all that apply.",
+      "options": [
+        "Clicks followed by a 1-second visit",
+        "Clicks on rank 1 driven by position",
+        "Purchases after a click",
+        "Bot traffic"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Short visits, position bias and bots are not relevance. Purchases are strong positives."
+    },
+    {
+      "id": "co19",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Re-embedding 12 million chunks runs at 2,000 chunks per second. How long does it take?",
+      "options": [
+        "100 minutes",
+        "10 minutes",
+        "1,000 minutes",
+        "6 minutes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "12,000,000 ÷ 2,000 = 6,000 s = 100 minutes."
+    },
+    {
+      "id": "co20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "You want to fine-tune a BGE model with the recipes used to train it. Which tool fits?",
+      "options": [
+        "FlagEmbedding",
+        "Qdrant quantization",
+        "Postgres full-text search",
+        "Cohere Rerank"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "FlagEmbedding is BAAI’s library for training and fine-tuning BGE models."
+    }
+  ]
+}

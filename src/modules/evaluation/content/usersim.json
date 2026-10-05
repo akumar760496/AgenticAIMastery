@@ -1,0 +1,832 @@
+{
+  "id": "usersim",
+  "moduleSlug": "evaluation",
+  "name": "User Simulation for Multi-Turn Agents",
+  "shortName": "User simulation",
+  "question": "Does the agent still work when the user talks back?",
+  "summary": "A single-turn test gives the agent everything at once. Real users reveal details slowly, change their mind, write in Hinglish, get impatient and make mistakes. User simulation has an LLM play the user from a scenario card: a persona, a goal, details it knows but reveals only when asked, and rules for when to stop. The simulated user and the agent talk for many turns, and the conversation is scored on the end state (was the refund raised, with the right amount) plus a rubric. Because both sides are stochastic, each scenario runs k times and reliability is reported as pass^k, the chance that all k runs succeed. Building the scenario set is covered by Eval Datasets; this technique is the multi-turn harness.",
+  "useCases": [
+    "Customer support and booking agents that gather details over several turns",
+    "Checking behaviour with difficult personas before real users meet them",
+    "Regression tests for multi-turn policies such as refunds and KYC"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Scenario card",
+        "detail": "persona, goal, hidden details, stop rule and the expected end state"
+      },
+      {
+        "term": "Simulator rules",
+        "detail": "reveal details only when asked, stay in character, never solve the task for the agent"
+      },
+      {
+        "term": "End-state check",
+        "detail": "compare database or tool state with the expected one, not the transcript wording"
+      },
+      {
+        "term": "pass^k",
+        "detail": "probability all k runs of a scenario succeed; falls fast when agents are inconsistent"
+      },
+      {
+        "term": "Persona mix",
+        "detail": "language, patience, expertise, mistakes; weighted like the real user base"
+      },
+      {
+        "term": "Simulator drift",
+        "detail": "the LLM user breaking character or leaking hidden details; audit a sample"
+      }
+    ]
+  },
+  "steps": [
+    "Write scenario cards from real conversations, with hidden details and expected end state",
+    "Prompt a simulator model to play the user, with rules against leaking or solving",
+    "Run each scenario k times and check end states in the backend",
+    "Report pass^1 and pass^k by persona, and read failed transcripts"
+  ],
+  "pitfalls": [
+    "Scripted user turns that never react to the agent, so every test passes",
+    "A simulator that reveals every detail in its first message, making the task easy",
+    "Only polite English personas when real users write in Hinglish and in a hurry"
+  ],
+  "tools": [
+    "τ-bench / τ²-bench",
+    "LangSmith and openevals multi-turn simulation",
+    "DeepEval conversation simulator",
+    "Inspect AI",
+    "Promptfoo"
+  ],
+  "remember": "An LLM plays the user; check the end state; repeat and report pass^k.",
+  "caption": "Illustrative: Paisa Setu, a fictional UPI app, tests its refund agent on 200 simulated conversations.",
+  "comparison": {
+    "scope": "Whole multi-turn conversations",
+    "cost": 3,
+    "needs": "Scenario cards + end-state checks",
+    "best": "Support and transaction agents"
+  },
+  "diagram": {
+    "file": "diagrams/usersim.svg"
+  },
+  "lesson": {
+    "file": "simulate_users.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "CARD = dict(persona=\"impatient, writes Hinglish, not tech-savvy\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            goal=\"refund for a failed ₹2,450 UPI payment\",",
+        "steps": []
+      },
+      {
+        "text": "            hidden={\"utr\": \"417803921556\", \"bank\": \"State Bank\"},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            expected={\"refund_ticket\": True, \"amount\": 2450})",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "SIM_RULES = \"\"\"You are the customer. Stay in character. Reveal hidden details",
+        "steps": []
+      },
+      {
+        "text": "only when the agent asks for them. Never solve the task yourself.",
+        "steps": []
+      },
+      {
+        "text": "Say DONE when your goal is met or you give up.\"\"\"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run(card, agent, sim, max_turns=12):",
+        "steps": []
+      },
+      {
+        "text": "    msg = sim.first_message(card, SIM_RULES)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    for _ in range(max_turns):",
+        "steps": []
+      },
+      {
+        "text": "        reply = agent.respond(msg)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        msg = sim.respond(reply)",
+        "steps": []
+      },
+      {
+        "text": "        if \"DONE\" in msg:",
+        "steps": []
+      },
+      {
+        "text": "            break",
+        "steps": []
+      },
+      {
+        "text": "    return backend.state_matches(card[\"expected\"])     # check the end state",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "k = 4",
+        "steps": []
+      },
+      {
+        "text": "results = [[run(c, agent, sim) for _ in range(k)] for c in cards]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "pass1 = sum(sum(r) for r in results) / (k * len(results))",
+        "steps": []
+      },
+      {
+        "text": "passk = sum(all(r) for r in results) / len(results)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "print(f\"pass^1 {pass1:.0%}  pass^{k} {passk:.0%}\")   # 71% and 25%",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Write a scenario card",
+        "text": "Paisa Setu, a fictional UPI app, writes cards from real chats: a persona, a goal, hidden details such as the UTR number, and the expected end state in the backend."
+      },
+      {
+        "title": "Give the simulator rules",
+        "text": "The simulated user must stay in character, reveal details only when asked and never solve the task. Without these rules it pastes everything in the first message and the test is too easy."
+      },
+      {
+        "title": "Let them talk",
+        "text": "The simulator and the agent exchange turns until the simulator says DONE or 12 turns pass. The agent has to ask for the UTR number, confirm the amount and raise the ticket."
+      },
+      {
+        "title": "Check the end state",
+        "text": "Success is a refund ticket for ₹2,450 in the backend, not polite wording in the transcript."
+      },
+      {
+        "title": "Repeat each scenario",
+        "text": "Each of 200 scenarios runs 4 times. pass^1 is the average success; pass^4 counts scenarios where all 4 runs succeed."
+      },
+      {
+        "title": "Read the numbers",
+        "text": "With a realistic mix of personas, pass^1 is 71% (scripted tests said 95%) and pass^4 is only 25%: the agent is right most of the time but not reliably."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"24\" text-anchor=\"middle\">persona + goal</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"24\" text-anchor=\"middle\">hidden: UTR</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"56\" text-anchor=\"middle\">reveal only when asked · never solve</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"87\" text-anchor=\"middle\">sim ↔ agent</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"72\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"87\" text-anchor=\"middle\">≤ 12 turns</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"118\" text-anchor=\"middle\">backend: refund ticket ₹2,450?</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"134\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"149\" text-anchor=\"middle\">200 scenarios × 4 runs = 800 conversations</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"164\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"180\" text-anchor=\"middle\">scripted 95%</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"124\" y=\"164\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"180\" text-anchor=\"middle\">pass^1 71%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"240\" y=\"164\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"180\" text-anchor=\"middle\">pass^4 25%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Tests the multi-turn behaviour real users trigger",
+      "Cheap to run hundreds of conversations before launch",
+      "Personas expose failures with language, patience and mistakes",
+      "pass^k shows reliability, not just average success"
+    ],
+    "cons": [
+      "The simulator can break character or leak details",
+      "Costs two models per conversation",
+      "Scenario cards take effort to write well",
+      "Simulated users are still not real users"
+    ],
+    "avoidWhen": [
+      "Single-turn tools where one request carries everything",
+      "As the only evidence: also sample real conversations after launch"
+    ],
+    "tools": [
+      {
+        "name": "τ-bench / τ²-bench",
+        "type": "Open source · Sierra",
+        "what": "Simulated users with policies and end-state checks; pass^k",
+        "url": "https://github.com/sierra-research/tau2-bench"
+      },
+      {
+        "name": "openevals",
+        "type": "Open source · LangChain",
+        "what": "Multi-turn simulation helpers, with LangSmith tracing",
+        "url": "https://github.com/langchain-ai/openevals"
+      },
+      {
+        "name": "DeepEval",
+        "type": "Open source",
+        "what": "Conversation simulator and multi-turn metrics",
+        "url": "https://deepeval.com"
+      },
+      {
+        "name": "Inspect AI",
+        "type": "Open source · UK AISI",
+        "what": "Agent eval framework where a solver can play the user",
+        "url": "https://inspect.aisi.org.uk"
+      },
+      {
+        "name": "Promptfoo",
+        "type": "Open source",
+        "what": "Multi-turn test configs and red-team conversations",
+        "url": "https://www.promptfoo.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Paisa Setu, a fictional UPI app, tests its refund agent on 200 scenarios about failed payments. About 71% of real conversations succeed; 20 known failure types are seeded in the suite.",
+    "controls": [
+      "Choose the user side: scripted turns or an LLM-simulated user with a scenario card.",
+      "Add difficult personas: Hinglish, impatient, holding back details.",
+      "Set how many times each scenario runs: 1, 4 or 8."
+    ],
+    "outputs": [
+      {
+        "name": "Reported pass rate",
+        "meaning": "Average success across runs (pass^1)."
+      },
+      {
+        "name": "pass^k",
+        "meaning": "Share of scenarios where all k runs succeed."
+      },
+      {
+        "name": "Failure types found",
+        "meaning": "Out of 20 seeded ones."
+      },
+      {
+        "name": "Gap to real users",
+        "meaning": "Reported rate minus the 71% real users see."
+      },
+      {
+        "name": "Suite cost",
+        "meaning": "₹ for all conversations."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Scripted turns",
+        "expect": "Reported 95%, 5 of 20 failures found, gap +24 points, ₹100."
+      },
+      {
+        "k": "llm",
+        "name": "LLM user, polite personas",
+        "expect": "Reported 80%, 11 of 20, gap +9 points, ₹800."
+      },
+      {
+        "k": "mixed",
+        "name": "LLM user, realistic personas",
+        "expect": "Reported 71%, 16 of 20, no gap, ₹800."
+      },
+      {
+        "k": "repeat",
+        "name": "Realistic personas, 4 runs each",
+        "expect": "pass^4 25%, 18 of 20, ₹3,200."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Find at least 18 of the 20 failure types for ₹4,000 or less.",
+        "hint": "Realistic personas and repeated runs."
+      },
+      {
+        "k": "honest",
+        "text": "Make the reported pass rate match what real users see (gap of 2 points or less).",
+        "hint": "Simulate the users you actually have."
+      },
+      {
+        "k": "reliab",
+        "text": "Show that the agent is unreliable: pass^k below 30%.",
+        "hint": "Repeat each scenario several times."
+      }
+    ],
+    "tools": [
+      {
+        "n": "τ-bench / τ²-bench",
+        "type": "Open source · Sierra",
+        "start": 2,
+        "prod": 2,
+        "best": "Reference design: simulated users, policies, end-state checks.",
+        "ex": "Adapt its airline domain to a refund policy.",
+        "pros": [
+          "pass^k built in",
+          "Well-studied design"
+        ],
+        "cons": [
+          "Adapting domains takes work"
+        ],
+        "url": "https://github.com/sierra-research/tau2-bench"
+      },
+      {
+        "n": "openevals",
+        "type": "Open source · LangChain",
+        "start": 3,
+        "prod": 2,
+        "best": "Quick multi-turn simulation with LangSmith traces.",
+        "ex": "Simulated Hinglish users against a LangGraph agent.",
+        "pros": [
+          "Few lines to start",
+          "Traces for review"
+        ],
+        "cons": [
+          "Tied to the LangChain ecosystem"
+        ],
+        "url": "https://github.com/langchain-ai/openevals"
+      },
+      {
+        "n": "DeepEval",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Conversation simulator plus multi-turn metrics.",
+        "ex": "Generate varied user turns from a scenario.",
+        "pros": [
+          "Many metrics",
+          "pytest style"
+        ],
+        "cons": [
+          "Metrics need calibration"
+        ],
+        "url": "https://deepeval.com"
+      },
+      {
+        "n": "Inspect AI",
+        "type": "Open source · UK AISI",
+        "start": 2,
+        "prod": 3,
+        "best": "Rigorous agent evals where a solver plays the user.",
+        "ex": "Run 800 conversations in sandboxes with logs.",
+        "pros": [
+          "Reproducible",
+          "Good logs viewer"
+        ],
+        "cons": [
+          "More setup"
+        ],
+        "url": "https://inspect.aisi.org.uk"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Reference harness",
+        "tool": "τ²-bench"
+      },
+      {
+        "need": "Fast start with traces",
+        "tool": "openevals + LangSmith"
+      },
+      {
+        "need": "Custom, reproducible runs",
+        "tool": "Inspect AI"
+      }
+    ],
+    "goals": [
+      "Write scenario cards with hidden details and end states",
+      "Run an LLM user against the agent and report pass^k",
+      "Match simulated personas to real users"
+    ]
+  },
+  "practice": {
+    "scenario": "Paisa Setu, a fictional UPI app, has a refund agent that passed 95% of its scripted tests yet struggled with real customers. It writes 200 scenario cards from real chats, each with a persona, a goal, hidden details such as the UTR number and the expected backend end state. An LLM plays each user, some in Hinglish and in a hurry, and every scenario runs 4 times. pass^1 is 71%, matching what real users see, pass^4 is 25%, and 18 of 20 known failure types surface before release.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Refund and dispute agents that must collect UTRs, amounts and dates"
+      },
+      {
+        "industry": "Airlines",
+        "use": "Rebooking agents where users change their minds mid-conversation"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Plan-change agents talking to users who are unsure what they want"
+      }
+    ],
+    "analogy": "A mock customer at a training desk who has a secret receipt in their pocket and hands it over only if the trainee asks for it.",
+    "library": {
+      "name": "anthropic",
+      "what": "Any chat model API can play the user; this example uses the Anthropic SDK for both the simulated user and a stub agent.",
+      "install": "pip install anthropic"
+    },
+    "note": "The model name is an example; use one available on your account. my_agent.respond and backend.refund_raised stand for your own agent and backend check.",
+    "samples": [
+      {
+        "file": "sim_user.py",
+        "language": "python",
+        "code": "import anthropic\nfrom my_agent import respond, backend        # your agent and backend check\n\nclient = anthropic.Anthropic()\nCARD = (\"You are a Paisa Setu customer. Persona: impatient, writes Hinglish. \"\n        \"Goal: refund for a failed Rs 2,450 UPI payment. Hidden: UTR 417803921556; \"\n        \"give it only if asked. Never solve the task yourself. Say DONE when finished.\")\n\ndef sim_turn(history):\n    r = client.messages.create(model=\"claude-sonnet-5\", max_tokens=200, system=CARD,\n                               messages=history)\n    return r.content[0].text\n\nhistory = [{\"role\": \"user\", \"content\": \"Start the chat.\"}]\nuser_msg = sim_turn(history)\nfor _ in range(12):\n    agent_msg = respond(user_msg)\n    history += [{\"role\": \"assistant\", \"content\": user_msg}, {\"role\": \"user\", \"content\": agent_msg}]\n    user_msg = sim_turn(history)\n    if \"DONE\" in user_msg:\n        break\nprint(\"passed:\", backend.refund_raised(amount=2450))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent succeeds on a scenario 71% of the time, independently per run. What is pass^4, the chance that all 4 runs succeed, as a percentage?",
+    "answer": "0.71^4 = 0.71 × 0.71 × 0.71 × 0.71 ≈ 0.254, about 25%.",
+    "expected": {
+      "value": 25.4,
+      "tolerance": 1,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "Why simulate users with an LLM instead of scripting turns?",
+        "answer": "Scripted turns do not react to what the agent says, so an agent that forgets to ask for a detail still passes. An LLM user with a goal and hidden details behaves like a real customer and exposes those gaps."
+      },
+      {
+        "question": "What is pass^k and why report it?",
+        "answer": "The probability that all k independent runs of a scenario succeed. Users meet the agent many times; an agent right 71% of the time succeeds on all four tries only about 25% of the time."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Letting the simulator reveal every detail at once",
+        "fix": "Instruct it to reveal hidden details only when asked"
+      },
+      {
+        "mistake": "Judging by transcript wording",
+        "fix": "Check the end state in the backend"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "us01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What does a user simulator do?",
+      "options": [
+        "Grades the agent’s code",
+        "Plays the user in a multi-turn conversation",
+        "Trains the agent",
+        "Generates embeddings"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An LLM plays the user."
+    },
+    {
+      "id": "us02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Why do scripted user turns overstate quality?",
+      "options": [
+        "They are too long",
+        "They never react to what the agent says",
+        "They use too many tokens",
+        "They are in English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An agent that skips a question still passes."
+    },
+    {
+      "id": "us03",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "What belongs on a scenario card? Select all that apply.",
+      "options": [
+        "Persona",
+        "Goal",
+        "Hidden details and when to reveal them",
+        "The agent’s system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus the expected end state."
+    },
+    {
+      "id": "us04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How should success be judged?",
+      "options": [
+        "By polite wording",
+        "By the backend end state",
+        "By conversation length",
+        "By the simulator’s opinion alone"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "State, not words."
+    },
+    {
+      "id": "us05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An agent succeeds 80% of the time per run. pass^2?",
+      "options": [
+        "80%",
+        "64%",
+        "40%",
+        "96%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.8 × 0.8."
+    },
+    {
+      "id": "us06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "pass^1 is 71%. pass^4 is about?",
+      "options": [
+        "71%",
+        "50%",
+        "25%",
+        "4%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.71^4 ≈ 0.254."
+    },
+    {
+      "id": "us07",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "200 scenarios × 4 runs × ₹4 per conversation costs?",
+      "options": [
+        "₹800",
+        "₹3,200",
+        "₹32,000",
+        "₹1,600"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "800 × ₹4."
+    },
+    {
+      "id": "us08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The simulator pastes the account number in its first message. Problem?",
+      "options": [
+        "None",
+        "The agent never has to ask, so the test is too easy",
+        "It costs more",
+        "It breaks the backend"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hidden details test information gathering."
+    },
+    {
+      "id": "us09",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which personas make simulation realistic for Indian users? Select all that apply.",
+      "options": [
+        "Hinglish writers",
+        "Impatient users",
+        "Users who hold back details",
+        "Only formal English writers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Match the real user base."
+    },
+    {
+      "id": "us10",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "What is simulator drift?",
+      "options": [
+        "The agent slowing down",
+        "The LLM user breaking character or leaking hidden details",
+        "Embedding drift",
+        "Price changes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Audit a sample of transcripts."
+    },
+    {
+      "id": "us11",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Scripted tests report 95%; real users 71%. Gap?",
+      "options": [
+        "14 points",
+        "24 points",
+        "34 points",
+        "71 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "95 − 71."
+    },
+    {
+      "id": "us12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why run each scenario more than once?",
+      "options": [
+        "Both agent and simulator are stochastic, so reliability needs repeats",
+        "To use more tokens",
+        "Required by RBI",
+        "To test the network"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "pass^k needs k runs."
+    },
+    {
+      "id": "us13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which benchmark popularised pass^k for tool-agent-user tasks?",
+      "options": [
+        "MMLU",
+        "τ-bench",
+        "ImageNet",
+        "SQuAD"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "τ-bench (Sierra)."
+    },
+    {
+      "id": "us14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What stops a conversation in the harness?",
+      "options": [
+        "The simulator says DONE or a turn limit is reached",
+        "The agent apologises",
+        "A timer of 1 second",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Both are needed."
+    },
+    {
+      "id": "us15",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are limits of user simulation? Select all that apply.",
+      "options": [
+        "Simulated users are not real users",
+        "Costs two models per conversation",
+        "Cards take effort to write",
+        "It can never find bugs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "It finds many bugs."
+    },
+    {
+      "id": "us16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The agent says “refund initiated” but raises no ticket. Result?",
+      "options": [
+        "Pass",
+        "Fail",
+        "Partial pass",
+        "Skip"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The end state is missing."
+    },
+    {
+      "id": "us17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Where do good scenario cards come from?",
+      "options": [
+        "Real conversations and support logs",
+        "Random words",
+        "The agent’s own outputs",
+        "Competitor ads"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Grounded in real users."
+    },
+    {
+      "id": "us18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique covers building the scenario set itself?",
+      "options": [
+        "Eval Datasets",
+        "Guardrails",
+        "Caching",
+        "Vector compression"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This technique is the harness."
+    },
+    {
+      "id": "us19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An agent at 90% per run. pass^3?",
+      "options": [
+        "90%",
+        "81%",
+        "about 73%",
+        "27%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.9^3 = 0.729."
+    },
+    {
+      "id": "us20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "After launch, simulation should be complemented by?",
+      "options": [
+        "Sampling and reviewing real conversations",
+        "Turning off logging",
+        "Deleting the tests",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keep real users in the loop."
+    }
+  ]
+}

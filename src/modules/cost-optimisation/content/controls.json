@@ -1,0 +1,866 @@
+{
+  "id": "controls",
+  "moduleSlug": "cost-optimisation",
+  "name": "Prompt & Tool Controls",
+  "shortName": "Prompt & tool controls",
+  "question": "Is the agent using more tokens and calls than it needs?",
+  "summary": "Put limits and lean defaults on what each request can consume: concise system prompts, capped output length, fewer and tighter tool definitions, compact tool results, and a cap on how many steps an agent loop can take. Agents are expensive mostly because they loop and carry bulky tool output from step to step.",
+  "useCases": [
+    "Agent loops with many tool calls per task",
+    "Tools that return large payloads: search results, logs, full records",
+    "Prompts that grew over time with duplicated instructions"
+  ],
+  "keyFacts": {
+    "label": "Controls",
+    "items": [
+      {
+        "term": "Output cap",
+        "detail": "max_tokens set per task type"
+      },
+      {
+        "term": "Step budget",
+        "detail": "maximum iterations or tool calls per task"
+      },
+      {
+        "term": "Tool pruning",
+        "detail": "expose only the tools relevant to this task"
+      },
+      {
+        "term": "Compact tool output",
+        "detail": "return IDs and summaries, not full payloads"
+      },
+      {
+        "term": "Concise prompts",
+        "detail": "remove duplicated rules and unused examples"
+      },
+      {
+        "term": "Structured output",
+        "detail": "a JSON schema instead of verbose prose"
+      }
+    ]
+  },
+  "steps": [
+    "Measure tokens per step and find the biggest contributors",
+    "Set max_tokens and a step budget per task type, with a graceful stop",
+    "Load tool definitions dynamically so each call carries only what it needs",
+    "Trim tool responses at the source: paginate, filter fields, summarize"
+  ],
+  "pitfalls": [
+    "Caps set too low truncate answers or stop tasks halfway",
+    "Cutting examples can quietly lower quality, so re-run your evals",
+    "Dynamic tool loading adds a selection step that can choose wrong"
+  ],
+  "tools": [
+    "Langfuse",
+    "LangSmith",
+    "Helicone",
+    "LiteLLM budgets",
+    "tiktoken"
+  ],
+  "remember": "Budget every loop. Trim every payload.",
+  "caption": "Each block is one step, sized by its tokens. Controls cut both the number of steps and their size.",
+  "comparison": {
+    "scope": "Requests and tokens",
+    "cost": 3,
+    "needs": "Low to medium",
+    "best": "Tight caps truncate work"
+  },
+  "diagram": {
+    "file": "diagrams/controls.svg"
+  },
+  "lesson": {
+    "file": "bounded_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json, anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "MAX_STEPS = 6",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "TOOLS_BY_TASK = {\"kyc\": [\"read_page\", \"extract_fields\", \"flag_mismatch\"]}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def trim(result: dict) -> str:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    keep = {k: result[k] for k in (\"pan\", \"name\", \"dob\", \"page\") if k in result}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return json.dumps(keep)                  # fields, not the raw OCR text",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run(task_type: str, messages: list):",
+        "steps": []
+      },
+      {
+        "text": "    tools = [ALL_TOOLS[n] for n in TOOLS_BY_TASK[task_type]]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    for step in range(MAX_STEPS):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        resp = client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "            model=MODEL, max_tokens=400,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            system=SYSTEM + \" Reply with the JSON fields only.\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            tools=tools, messages=messages)",
+        "steps": []
+      },
+      {
+        "text": "        log_usage(task_type, step, resp.usage)   # tokens per step",
+        "steps": [
+          1,
+          6
+        ]
+      },
+      {
+        "text": "        if resp.stop_reason != \"tool_use\":",
+        "steps": []
+      },
+      {
+        "text": "            return resp                          # finished within budget",
+        "steps": []
+      },
+      {
+        "text": "        messages += [{\"role\": \"assistant\", \"content\": resp.content},",
+        "steps": []
+      },
+      {
+        "text": "                     {\"role\": \"user\", \"content\": run_tools(resp, post=trim)}]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return stop_gracefully(messages, reason=\"step budget reached\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Nightly: rerun the KYC eval set, compare tokens per task and pass rate",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Measure tokens per step",
+        "text": "Log usage on every step. This KYC task takes 8 steps and 52k tokens, and each step is bigger than the last because context accumulates."
+      },
+      {
+        "title": "Load only the tools the task needs",
+        "text": "All 14 tool definitions ride along on every call. KYC needs 3, so load those and drop the rest."
+      },
+      {
+        "title": "Cap and shape the output",
+        "text": "Set max_tokens per task type and ask for JSON fields instead of prose. Replies fall from about 900 tokens to 250."
+      },
+      {
+        "title": "Trim tool results at the source",
+        "text": "The page reader returned 3,000 tokens of raw OCR text. Return only the fields the next step needs: about 600 tokens."
+      },
+      {
+        "title": "Set a step budget with a graceful stop",
+        "text": "Cap the loop at 6 steps. If the budget runs out, return a partial result for review instead of looping on."
+      },
+      {
+        "title": "Re-run the evals",
+        "text": "Tokens per task fall from 52k to 11k. The KYC eval pass rate holds at 94%, so the controls cost no quality."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Before: 8 steps · 52k tokens</text><rect class=\"a\" x=\"8\" y=\"22\" width=\"11.200000000000001\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><rect class=\"a\" x=\"21.200000000000003\" y=\"22\" width=\"15.600000000000001\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.16s\"/><rect class=\"a\" x=\"38.800000000000004\" y=\"22\" width=\"20\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.22s\"/><rect class=\"a\" x=\"60.800000000000004\" y=\"22\" width=\"24.400000000000002\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.28s\"/><rect class=\"a\" x=\"87.2\" y=\"22\" width=\"28.800000000000004\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.33999999999999997s\"/><rect class=\"a\" x=\"118\" y=\"22\" width=\"33.2\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.4s\"/><rect class=\"a\" x=\"153.2\" y=\"22\" width=\"37.6\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.45999999999999996s\"/><rect class=\"a\" x=\"192.79999999999998\" y=\"22\" width=\"42\" height=\"24\" rx=\"3\" style=\"fill:var(--accent);--d:0.52s\"/><g class=\"a\" style=\"--d:0.7s\"><text class=\"tag-t\" x=\"240.79999999999998\" y=\"39\" style=\"text-anchor:start;fill:var(--ink-2)\">52k</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"68\" style=\"--d:0s\">Tool definitions loaded: 3 of 14</text><rect class=\"bx acc a\" x=\"8\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.1s\"/><rect class=\"bx acc a\" x=\"32\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.13s\"/><rect class=\"bx acc a\" x=\"56\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.16s\"/><rect class=\"bx soft a\" x=\"80\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.19s\"/><rect class=\"bx soft a\" x=\"104\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.22s\"/><rect class=\"bx soft a\" x=\"128\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.25s\"/><rect class=\"bx soft a\" x=\"152\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.28s\"/><rect class=\"bx soft a\" x=\"176\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.31s\"/><rect class=\"bx soft a\" x=\"200\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.33999999999999997s\"/><rect class=\"bx soft a\" x=\"224\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.37s\"/><rect class=\"bx soft a\" x=\"248\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.4s\"/><rect class=\"bx soft a\" x=\"272\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.42999999999999994s\"/><rect class=\"bx soft a\" x=\"296\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.45999999999999996s\"/><rect class=\"bx soft a\" x=\"320\" y=\"76\" width=\"20\" height=\"18\" rx=\"3\" style=\"--d:0.49s\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"106\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"123\" text-anchor=\"middle\">max_tokens 400 · JSON</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"182\" y=\"106\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"123\" text-anchor=\"middle\">reply 900 → 250 tok</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"140\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"157\" text-anchor=\"middle\">raw OCR text 3,000 tok</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"182\" y=\"140\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"157\" text-anchor=\"middle\">fields only 600 tok</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"184\" style=\"--d:0s\">After: 4 steps · 11k tokens</text><rect class=\"a\" x=\"8\" y=\"192\" width=\"6.800000000000001\" height=\"22\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><rect class=\"a\" x=\"16.8\" y=\"192\" width=\"9\" height=\"22\" rx=\"3\" style=\"fill:var(--pass);--d:0.18s\"/><rect class=\"a\" x=\"27.8\" y=\"192\" width=\"11.200000000000001\" height=\"22\" rx=\"3\" style=\"fill:var(--pass);--d:0.26s\"/><rect class=\"a\" x=\"41\" y=\"192\" width=\"13.400000000000002\" height=\"22\" rx=\"3\" style=\"fill:var(--pass);--d:0.33999999999999997s\"/><g class=\"a\" style=\"--d:0.5s\"><line x1=\"160\" x2=\"160\" y1=\"176\" y2=\"216\" class=\"ln dash\" style=\"stroke:var(--ink-2)\"/><text class=\"sb\" x=\"166\" y=\"208\" style=\"text-anchor:start\">step budget: 6</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"224\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"240\" text-anchor=\"middle\">tokens per task −79%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"182\" y=\"224\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"240\" text-anchor=\"middle\">eval pass rate held: 94%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Caps the worst case: runaway loops can no longer run up the bill",
+      "Fewer tokens per step also means faster steps",
+      "Mostly code in your own agent loop, no new vendor",
+      "Makes cost per task predictable enough to budget"
+    ],
+    "cons": [
+      "Caps set too low stop tasks halfway",
+      "Trimming can remove information a later step needed",
+      "Dynamic tool loading adds a selection step that can pick wrong",
+      "Every change needs an eval re-run to confirm quality"
+    ],
+    "avoidWhen": [
+      "Single-call features with short prompts (little to control)",
+      "You can’t yet measure tokens per step (instrument first)"
+    ],
+    "tools": [
+      {
+        "name": "Langfuse",
+        "type": "Open source, self-hostable",
+        "what": "Token and cost tracking per trace and step",
+        "url": "https://langfuse.com"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial (LangChain)",
+        "what": "Trace-level token usage and cost dashboards",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Helicone",
+        "type": "Open source, hosted option",
+        "what": "Proxy-based cost logging and per-user limits",
+        "url": "https://www.helicone.ai"
+      },
+      {
+        "name": "LiteLLM budgets",
+        "type": "Open source",
+        "what": "Spend limits per key, user or team",
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "name": "tiktoken",
+        "type": "Open source (OpenAI)",
+        "what": "Counting tokens before you send them",
+        "url": "https://github.com/openai/tiktoken"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A KYC document agent checks identity documents. A clean run needs 5 steps, but some runs get stuck re-reading pages and loop until something stops them. You decide the step budget and which controls are on: loading only the tools the task needs, trimming tool results, and capping output.",
+    "controls": [
+      "Drag the slider to set the step budget (15 means no budget: the platform stops runs at 15).",
+      "Tick the controls to switch on tool pruning, trimmed tool results and concise output.",
+      "Or load a scenario to compare common setups."
+    ],
+    "outputs": [
+      {
+        "name": "Cost per task vs no controls",
+        "meaning": "Average cost per task, across normal and looping runs, as a share of the uncontrolled agent."
+      },
+      {
+        "name": "Tasks completed",
+        "meaning": "Share of runs that finish the 5 steps the task needs."
+      },
+      {
+        "name": "Tokens per step",
+        "meaning": "Each chip is one step, sized in tokens. Red chips are wasted or unfinished steps."
+      },
+      {
+        "name": "Tokens per typical task",
+        "meaning": "All input and output tokens for a normal 5-step run."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No controls",
+        "expect": "30% of runs loop to 15 steps. Average cost $0.729 per task, 70% of tasks completed."
+      },
+      {
+        "k": "budget",
+        "name": "Budget of 10 only",
+        "expect": "Loops stop at 10 steps: cost falls 36% to $0.466, completion stays at 70%."
+      },
+      {
+        "k": "all",
+        "name": "All controls, budget 6",
+        "expect": "Loops drop to 5% of runs and every step is smaller: $0.086 per task, 88% cheaper, 95% completed."
+      },
+      {
+        "k": "tight",
+        "name": "Budget too tight",
+        "expect": "A budget of 4 stops every run before step 5: $0.063 per task, but 0% completed."
+      }
+    ],
+    "missions": [
+      {
+        "k": "budgetonly",
+        "text": "Using only the step budget, cut cost by at least 40% without losing completed tasks.",
+        "hint": "Turn off the other controls and lower the budget to 8 or below, but not under 5."
+      },
+      {
+        "k": "tightest",
+        "text": "Find the tightest step budget that still completes at least 90% of tasks.",
+        "hint": "The task needs 5 steps, and trimmed tool results cut loops to 5% of runs."
+      },
+      {
+        "k": "toolsonly",
+        "text": "With no budget, show that loading 3 tools instead of 14 saves more than 10% on its own.",
+        "hint": "Set the budget to 15, turn on only the tool control."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Langfuse",
+        "type": "Open source (MIT) · self-host or cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Tracing every step with token counts and cost, so you can see which step and which tool output is expensive.",
+        "ex": "Sort a week of KYC traces by cost and find that 30% of spend comes from runs stuck re-reading page 3.",
+        "pros": [
+          "Per-step token and cost breakdown",
+          "Self-hostable for data residency"
+        ],
+        "cons": [
+          "You wire in the SDK or OpenTelemetry",
+          "Budgets and caps still live in your code"
+        ],
+        "url": "https://langfuse.com"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial · by LangChain · free tier",
+        "start": 2,
+        "prod": 3,
+        "best": "Trace-level token usage and cost dashboards with alerts.",
+        "ex": "Alert when the p95 tokens per task for the KYC agent rises above 30,000 after a prompt change.",
+        "pros": [
+          "Polished trace UI with cost views",
+          "Works with any framework through its SDK"
+        ],
+        "cons": [
+          "Paid at higher volumes",
+          "Deepest integration is with LangChain and LangGraph"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Helicone",
+        "type": "Open source · hosted option",
+        "start": 3,
+        "prod": 2,
+        "best": "A proxy that logs every request with cost, plus per-user rate limits and caching.",
+        "ex": "Change the base URL, then see cost per user and per feature within minutes.",
+        "pros": [
+          "Setup is a base-URL change",
+          "Cost per user and per property"
+        ],
+        "cons": [
+          "A proxy adds a hop on every call",
+          "Deeper agent-step views need extra tagging"
+        ],
+        "url": "https://www.helicone.ai"
+      },
+      {
+        "n": "LiteLLM budgets",
+        "type": "Open source · proxy feature",
+        "start": 2,
+        "prod": 3,
+        "best": "Hard spend limits per key, user or team, as a safety net under your own step budgets.",
+        "ex": "Give each tenant a monthly budget so one runaway agent cannot exceed INR 50,000.",
+        "pros": [
+          "Enforced centrally for every app behind the proxy",
+          "Works across providers"
+        ],
+        "cons": [
+          "A spend cap stops work abruptly; it is not a step budget",
+          "Another service to run"
+        ],
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "n": "tiktoken",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Counting tokens locally before sending, to size prompts, tool outputs and caps.",
+        "ex": "Measure that a raw OCR page is 3,000 tokens and the extracted fields are 150, before changing the tool.",
+        "pros": [
+          "Fast and exact for OpenAI tokenizers",
+          "No network call"
+        ],
+        "cons": [
+          "Other providers tokenize differently",
+          "Counts tokens, does not enforce anything"
+        ],
+        "url": "https://github.com/openai/tiktoken"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "See where tokens go",
+        "tool": "Langfuse or Helicone"
+      },
+      {
+        "need": "Enforce spend limits per tenant",
+        "tool": "LiteLLM budgets"
+      },
+      {
+        "need": "Size prompts and tool outputs",
+        "tool": "tiktoken"
+      }
+    ],
+    "goals": [
+      "Explain why agent loops compound token cost from step to step",
+      "Choose a step budget and output cap from measured data",
+      "Name three controls and the part of the bill each one shrinks"
+    ]
+  },
+  "practice": {
+    "scenario": "A KYC document agent sometimes looped 15 times, re-reading the same PDF pages with all 14 tools loaded. The fix: cap it at 6 steps, load only the 3 tools KYC needs, trim each tool result to a short summary, and set max_tokens per step. The team then re-runs the KYC eval set to confirm the pass rate holds.",
+    "industries": [
+      {
+        "industry": "Banking KYC",
+        "use": "Bound document-review loops and trim OCR payloads"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Cap reply length per channel, such as SMS versus email"
+      },
+      {
+        "industry": "Coding agents",
+        "use": "Return only failing test lines instead of full logs"
+      }
+    ],
+    "analogy": "A taxi with a fixed-fare cap and a planned route. The driver can't circle the block to run up the meter.",
+    "library": {
+      "name": "Your model SDK + LiteLLM budgets",
+      "what": "Step budgets and trimming live in your agent loop; LiteLLM adds per-key spend limits as a safety net.",
+      "install": "pip install anthropic litellm"
+    },
+    "note": "Sketch of an agent loop. ALL_TOOLS, tool_round and stop_gracefully stand for your own helpers.",
+    "samples": [
+      {
+        "file": "bounded_agent.py",
+        "language": "python",
+        "code": "MAX_STEPS = 6\nTOOLS_BY_TASK = {\"kyc\": [\"read_page\", \"extract_fields\", \"flag_mismatch\"]}\n\ndef trim(result: str, limit: int = 1500) -> str:\n    return result if len(result) <= limit else result[:limit] + \" …[truncated]\"\n\ndef run(task_type: str, messages: list):\n    tools = [ALL_TOOLS[name] for name in TOOLS_BY_TASK[task_type]]   # 3 of 14\n    for step in range(MAX_STEPS):\n        resp = client.messages.create(model=MODEL, max_tokens=800,\n                                      tools=tools, messages=messages)\n        if resp.stop_reason != \"tool_use\":\n            return resp                                  # finished within budget\n        messages += tool_round(resp, post=trim)          # run tools, trim outputs\n    return stop_gracefully(messages, reason=\"step budget reached\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Steps use 4k, 5k, 6k, 7k, 8k, 9k, 10k and 11k tokens. You set a step budget of 5 and trim tool output so each step is 30% smaller. Total tokens after, in thousands?",
+    "answer": "Before: 60k. After: the first five steps (4+5+6+7+8 = 30k) × 0.7 = 21k, about a third of the original.",
+    "expected": {
+      "value": 21,
+      "tolerance": 0.2,
+      "label": "k tokens ="
+    },
+    "interview": [
+      {
+        "question": "Why are agents so much more expensive than single LLM calls?",
+        "answer": "Each step resends the growing context, tool definitions and earlier tool outputs, so tokens compound across steps, and loops can run long. Step budgets, trimmed tool output and fewer loaded tools attack the compounding."
+      },
+      {
+        "question": "How do you choose max_tokens?",
+        "answer": "Measure the output-length distribution per task type on real traffic, set the cap a little above the 95th–99th percentile, and handle truncation gracefully."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "One global max_tokens for every task",
+        "fix": "Set caps per task type from measured lengths"
+      },
+      {
+        "mistake": "Returning raw API payloads to the model",
+        "fix": "Return only the fields the next step needs"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tc01",
+      "kind": "single",
+      "industry": "Banking KYC",
+      "question": "A KYC agent sometimes loops 15 times re-reading the same PDF pages. What is the most direct control?",
+      "options": [
+        "A larger model",
+        "A higher max_tokens",
+        "A step budget with a graceful stop",
+        "The batch API"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A step budget caps the loop, and a graceful stop returns a useful partial result instead of failing."
+    },
+    {
+      "id": "tc02",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A coding agent’s 8 steps use 2k, 4k, 6k … 16k tokens. You set a budget of 5 steps and trim tool output so each step is 40% smaller. Total tokens now?",
+      "options": [
+        "30k",
+        "18k",
+        "43.2k",
+        "12k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The first five steps are 2 + 4 + 6 + 8 + 10 = 30k; 40% smaller gives 30k × 0.6 = 18k, down from 72k."
+    },
+    {
+      "id": "tc03",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which changes reduce the tokens carried by each step of an agent? Select all that apply.",
+      "options": [
+        "Loading only the relevant tools",
+        "Returning only the needed fields from tools",
+        "Concise JSON output",
+        "Raising the step budget"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Fewer tool definitions, compact results and short outputs all shrink a step. The budget limits the number of steps, not their size."
+    },
+    {
+      "id": "tc04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Measured replies for order-status questions have a 99th-percentile length of 320 tokens. How should you set max_tokens?",
+      "options": [
+        "32 tokens",
+        "4,096 tokens for safety",
+        "No cap at all",
+        "A little above 320, and handle truncated replies gracefully"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Set the cap from measured lengths with a small margin, and handle the rare truncation."
+    },
+    {
+      "id": "tc05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Twenty tool definitions of 450 tokens each ride along on each of 12 calls in a task. Loading only 4 tools saves how many input tokens per task?",
+      "options": [
+        "108,000",
+        "21,600",
+        "86,400",
+        "9,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "16 unneeded tools × 450 tokens × 12 calls = 86,400 tokens per task."
+    },
+    {
+      "id": "tc06",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Removing examples from a clause-extraction prompt cut cost 20%, but accuracy fell from 95% to 88%. What is the lesson?",
+      "options": [
+        "Trimming never affects quality",
+        "Re-run evals after trimming, and restore the examples that mattered",
+        "Raise the step budget",
+        "Switch to the batch API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Prompt cuts can quietly lower quality. Evals show which cuts were free and which were not."
+    },
+    {
+      "id": "tc07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A triage agent loads tools dynamically, and 3% of requests get billing tools instead of scheduling tools. What should you add?",
+      "options": [
+        "Load all 40 tools on every call",
+        "Remove tool descriptions to save tokens",
+        "A larger max_tokens",
+        "Evals for the tool-selection step and a way to request more tools"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Dynamic loading adds a selection step that can be wrong. Test it and give the agent a fallback."
+    },
+    {
+      "id": "tc08",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are real cost drivers in agent loops? Select all that apply.",
+      "options": [
+        "Tool outputs accumulate in the context",
+        "Tool definitions are resent on every step",
+        "Each extra step resends the whole history",
+        "Output tokens are free"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Agents compound cost because every step resends a growing context. Output tokens are usually the most expensive kind."
+    },
+    {
+      "id": "tc09",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Output costs $15 per million tokens. Replies shrink from 900 to 250 tokens on 10,000 replies a day. What is the daily saving?",
+      "options": [
+        "$19.50",
+        "$135.00",
+        "$37.50",
+        "$97.50"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "650 fewer tokens × 10,000 = 6.5M tokens × $15/M = $97.50 a day."
+    },
+    {
+      "id": "tc10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A market-data tool returns 500 rows of ticks, but the agent only needs the latest price. What should the tool return?",
+      "options": [
+        "All 500 rows as CSV",
+        "A summary of the ticks from another LLM call every time",
+        "The latest price and timestamp, with a way to fetch more",
+        "Nothing: the agent should guess"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Compact tool results keep every later step small; an option to fetch more covers rare needs."
+    },
+    {
+      "id": "tc11",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "You need a per-step breakdown of tokens and cost for every agent trace, self-hosted for data residency. Which tool fits?",
+      "options": [
+        "Langfuse",
+        "Celery",
+        "OpenAI Batch API",
+        "RouteLLM"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Langfuse traces each step with token counts and cost and can be self-hosted."
+    },
+    {
+      "id": "tc12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "You want to count tokens locally for OpenAI models before sending a prompt. What do you use?",
+      "options": [
+        "LLMLingua",
+        "tiktoken",
+        "Temporal",
+        "Mem0"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "tiktoken is OpenAI’s tokenizer library and counts tokens without a network call."
+    },
+    {
+      "id": "tc13",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "What should happen when an agent reaches its step budget? Select all that apply.",
+      "options": [
+        "Return a partial result with what was done",
+        "Log the reason for later review",
+        "Silently keep going",
+        "Flag the task for a person or a retry"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "A graceful stop keeps the work useful and visible. Ignoring the budget defeats it."
+    },
+    {
+      "id": "tc14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Normal runs take 5 steps; 20% of runs loop to 20 steps. Each step costs $0.02. What is the average cost per run with a budget of 8 steps?",
+      "options": [
+        "$0.160",
+        "$0.128",
+        "$0.100",
+        "$0.112"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Normal: 0.8 × 5 × $0.02 = $0.08. Looping, capped at 8: 0.2 × 8 × $0.02 = $0.032. Total $0.112, against $0.16 with no budget."
+    },
+    {
+      "id": "tc15",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A tutor bot has max_tokens 150, and some answers stop mid-sentence. What is the fix?",
+      "options": [
+        "Lower max_tokens to 100",
+        "Set the cap a little above the measured length of complete answers and handle max_tokens stops",
+        "Remove max_tokens entirely",
+        "Use the batch API"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Caps set below real answer lengths truncate work. Measure, add a margin and handle the stop reason."
+    },
+    {
+      "id": "tc16",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking agent writes 400-token prose confirmations that a program then parses. What is the lean fix?",
+      "options": [
+        "Ask for JSON with only the needed fields",
+        "Raise max_tokens",
+        "Use a larger model for better prose",
+        "Cache the output"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Structured output removes verbose prose and makes parsing reliable."
+    },
+    {
+      "id": "tc17",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which are signs that an agent is missing prompt and tool controls? Select all that apply.",
+      "options": [
+        "The 99th-percentile steps per task are six times the median",
+        "Tool results over 5,000 tokens that are used once",
+        "Each task loads 30 tool definitions but uses 2",
+        "The prompt-cache hit rate is 90%"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Long-tail loops, bulky one-use tool output and unused tool definitions are the classic waste. A high hit rate is good news."
+    },
+    {
+      "id": "tc18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A tenant’s key has a monthly spend limit of $500 and has spent $480. A runaway agent would spend $60 more. With a hard limit, how much more can it spend?",
+      "options": [
+        "$20",
+        "$60",
+        "$0",
+        "$500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The limit stops spend at $500, so at most $20 more. It is a safety net under your own step budgets."
+    },
+    {
+      "id": "tc19",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which limits bound the cost of a single agent task? Select all that apply.",
+      "options": [
+        "A step budget",
+        "max_tokens per step",
+        "A per-key spend limit as a safety net",
+        "A higher temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Steps, output per step and a spend ceiling each cap part of the cost. Temperature does not."
+    },
+    {
+      "id": "tc20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims task needs 5 steps, but the step budget is 3, and no task completes. What is wrong?",
+      "options": [
+        "Budgets never work for agents",
+        "The model is too small",
+        "The budget is below what the task needs; set it from the steps successful runs take",
+        "The prompt cache broke"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Caps set too low stop tasks halfway. Base the budget on measured successful runs, with a margin."
+    }
+  ]
+}

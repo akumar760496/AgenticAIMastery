@@ -1,0 +1,846 @@
+{
+  "id": "llmjudge",
+  "moduleSlug": "evaluation",
+  "name": "LLM-as-a-Judge",
+  "shortName": "LLM-as-a-Judge",
+  "question": "Is this output actually good?",
+  "summary": "A strong model grades outputs against a written rubric. It scales human-like judgment to thousands of cases for qualities code can’t check: helpfulness, tone, soundness of reasoning and policy compliance.",
+  "useCases": [
+    "Open-ended outputs with no single right answer",
+    "Fast prompt iteration where human review would be the bottleneck",
+    "Continuous monitoring of sampled production traffic"
+  ],
+  "keyFacts": {
+    "label": "Scoring modes",
+    "items": [
+      {
+        "term": "Pointwise",
+        "detail": "score one output on pass/fail or a 1–5 scale"
+      },
+      {
+        "term": "Pairwise",
+        "detail": "pick the better of outputs A and B"
+      },
+      {
+        "term": "Reference-based",
+        "detail": "compare against a gold answer"
+      },
+      {
+        "term": "Judge–human agreement",
+        "detail": "% agreement or Cohen’s κ on a labelled sample"
+      }
+    ]
+  },
+  "steps": [
+    "Write a rubric with concrete criteria and an example for each score",
+    "Ask the judge to reason first, then give the score",
+    "Prefer binary or 3-point scales, which are more consistent than 1–10",
+    "Label 50–100 cases by hand and check agreement before trusting the judge"
+  ],
+  "pitfalls": [
+    "Position bias: in pairwise mode, run both orders",
+    "Verbosity bias: longer answers score higher unless the rubric says otherwise",
+    "Self-preference: judge with a different model family where possible"
+  ],
+  "tools": [
+    "DeepEval (G-Eval)",
+    "promptfoo",
+    "OpenAI Evals",
+    "Ragas",
+    "Braintrust autoevals"
+  ],
+  "remember": "Rubric first, reasoning before score, calibrate against humans.",
+  "caption": "The judge sees the output and the rubric, writes its reasoning, then scores.",
+  "comparison": {
+    "scope": "A single output or pair",
+    "cost": 2,
+    "needs": "Rubric + a human-labelled sample",
+    "best": "Open-ended quality at scale"
+  },
+  "diagram": {
+    "file": "diagrams/llmjudge.svg"
+  },
+  "lesson": {
+    "file": "judge.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "RUBRIC = \"\"\"Score 1 (pass) or 0 (fail).",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Pass only if the summary states the correct payout amount,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "names the damage, and invents nothing.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Pass example: \"Kitchen water damage approved; INR 42,000.\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "Fail example: \"Approved.\" (no amount)\"\"\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def judge(case) -> int:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    prompt = (RUBRIC + f\"\\nInput: {case.input}\\nOutput: {case.output}\\n\"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "              \"Explain your reasoning, then end with SCORE: 0 or 1.\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    reply = llm(prompt, model=JUDGE_MODEL, temperature=0)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return int(reply.strip()[-1])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def pairwise(a, b) -> str:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    ab = judge_pair(first=a, second=b)    # \"first\" or \"second\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    ba = judge_pair(first=b, second=a)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if ab == \"first\" and ba == \"second\": return \"a\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if ab == \"second\" and ba == \"first\": return \"b\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return \"tie\"                          # order changed the verdict",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "from sklearn.metrics import cohen_kappa_score",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "human = [labels[c.id] for c in sample]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "model = [judge(c) for c in sample]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "print(cohen_kappa_score(human, model))",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Write the rubric",
+        "text": "Concrete criteria plus an example for each score. Binary pass/fail is more consistent than a 1–10 scale."
+      },
+      {
+        "title": "Send output and rubric to the judge",
+        "text": "Use a strong model, ideally from a different family than the one being judged, at temperature 0."
+      },
+      {
+        "title": "Reason first, then score",
+        "text": "Ask for reasoning before the verdict and parse only the final score. Keep the reasoning for audits."
+      },
+      {
+        "title": "Guard against position bias",
+        "text": "For pairwise comparisons, judge both orders. Count a win only if both agree; otherwise call it a tie."
+      },
+      {
+        "title": "Calibrate against people",
+        "text": "Hand-label a sample and measure agreement and Cohen's κ. Here the judge agrees with people on 8 of 10."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"10\" width=\"150\" height=\"92\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"30\">Rubric</text><text class=\"tl l\" x=\"18\" y=\"52\">1 pass: amount + damage</text><text class=\"tl l\" x=\"18\" y=\"70\">0 fail: missing or invented</text><text class=\"tl l\" x=\"18\" y=\"88\">an example for each</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx\" x=\"8\" y=\"114\" width=\"150\" height=\"56\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"134\">Agent output</text><rect class=\"skel\" x=\"20\" y=\"146\" width=\"120\" height=\"5\" rx=\"2\"/><rect class=\"skel\" x=\"20\" y=\"156\" width=\"96\" height=\"5\" rx=\"2\"/></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M160 56L190 80\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M160 142L190 106\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.45s\"><circle cx=\"222\" cy=\"92\" r=\"32\" class=\"bx acc\"/><text class=\"lb\" x=\"222\" y=\"89\">Judge</text><text class=\"sb\" x=\"222\" y=\"103\">LLM · temp 0</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln acc\" d=\"M256 92L272 92\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"274\" y=\"52\" width=\"78\" height=\"80\" rx=\"7\"/><text class=\"sb\" x=\"313\" y=\"70\">reasons first</text><text class=\"big\" x=\"313\" y=\"104\" style=\"font-size:22px\">PASS</text><text class=\"sb\" x=\"313\" y=\"122\">SCORE: 1</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"184\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"200\" text-anchor=\"middle\">A then B → A wins</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"182\" y=\"184\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"200\" text-anchor=\"middle\">B then A → A wins</text></g><g class=\"a\" style=\"--d:0.4s\"><text class=\"tag-t pass\" x=\"180\" y=\"220\">both orders agree → count the win</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"246\" style=\"--d:0s\">human vs judge</text><circle class=\"a\" cx=\"110\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.1s\"/><circle class=\"a\" cx=\"132\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.16s\"/><circle class=\"a\" cx=\"154\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.22s\"/><circle class=\"a\" cx=\"176\" cy=\"242\" r=\"7\" style=\"fill:var(--fail);--d:0.28s\"/><circle class=\"a\" cx=\"198\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.33999999999999997s\"/><circle class=\"a\" cx=\"220\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.4s\"/><circle class=\"a\" cx=\"242\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.45999999999999996s\"/><circle class=\"a\" cx=\"264\" cy=\"242\" r=\"7\" style=\"fill:var(--fail);--d:0.52s\"/><circle class=\"a\" cx=\"286\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.58s\"/><circle class=\"a\" cx=\"308\" cy=\"242\" r=\"7\" style=\"fill:var(--pass);--d:0.64s\"/><text class=\"mono a\" x=\"352\" y=\"246\" text-anchor=\"end\" style=\"text-anchor:end;--d:0.8s\">8/10</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Scales human-like judgment to thousands of outputs",
+      "Handles open-ended qualities code can’t check",
+      "Far cheaper and faster than human review",
+      "Easy to start: a rubric and a prompt"
+    ],
+    "cons": [
+      "Position, verbosity and self-preference biases",
+      "Must be calibrated against human labels",
+      "Verdicts drift when the judge model changes",
+      "Adds a model call per evaluated item"
+    ],
+    "avoidWhen": [
+      "An exact check exists in code (use that instead)",
+      "High-stakes decisions with no human review"
+    ],
+    "tools": [
+      {
+        "name": "DeepEval (G-Eval)",
+        "type": "Open source",
+        "what": "Plain-language criteria turned into judge metrics",
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "name": "promptfoo (llm-rubric)",
+        "type": "Open source",
+        "what": "Rubric assertions inside test suites",
+        "url": "https://github.com/promptfoo/promptfoo"
+      },
+      {
+        "name": "autoevals",
+        "type": "Open source (Braintrust)",
+        "what": "Ready-made judge scorers such as factuality",
+        "url": "https://github.com/braintrustdata/autoevals"
+      },
+      {
+        "name": "OpenAI Evals",
+        "type": "Open source",
+        "what": "Model-graded eval templates",
+        "url": "https://github.com/openai/evals"
+      },
+      {
+        "name": "scikit-learn",
+        "type": "Open source",
+        "what": "cohen_kappa_score for judge–human agreement",
+        "url": "https://scikit-learn.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A judge model is grading two summaries of the same insurance claim. A is short and correct. B is long and polite, but states the wrong payout. A human reviewer prefers A. Configure the judge so it agrees with the human, for the right reasons.",
+    "controls": [
+      "Show B first: which answer the judge reads first.",
+      "Position bias: the judge favours whichever answer it sees first (+0.3).",
+      "Rubric rule: the rubric says length earns nothing, which removes the +0.5 verbosity bonus.",
+      "Run both orders: judge A-then-B and B-then-A, and accept a winner only if both agree."
+    ],
+    "outputs": [
+      {
+        "name": "Judge scores",
+        "meaning": "Simulated score for each answer: quality plus any bias bonuses."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Which answer the judge picks, and whether that matches the human."
+      }
+    ],
+    "presets": [
+      {
+        "k": "naive",
+        "name": "Naive judge",
+        "expect": "B shown first, biased, no rubric rule. Expect the judge to pick B, the wrong answer."
+      },
+      {
+        "k": "rubric",
+        "name": "Add a rubric rule",
+        "expect": "Removing the verbosity bonus lets A win, but only narrowly while B is shown first."
+      },
+      {
+        "k": "prod",
+        "name": "Production setup",
+        "expect": "Rubric rule plus both orders. A wins consistently, whatever the order."
+      },
+      {
+        "k": "tie",
+        "name": "Inconsistent judge",
+        "expect": "No rubric rule but both orders checked. The verdict flips with the order, so it’s reported as a tie for a person to review."
+      }
+    ],
+    "missions": [
+      {
+        "k": "keepbias",
+        "text": "Make the judge pick A without switching off position bias.",
+        "hint": "Turn on the rubric rule, or show A first."
+      },
+      {
+        "k": "tie",
+        "text": "Make the judge report a tie.",
+        "hint": "Keep the verbosity bonus and run both orders."
+      },
+      {
+        "k": "margin",
+        "text": "Make A win by a clear margin of 0.5 or more.",
+        "hint": "Rubric rule on, and A shown first so position bias helps it."
+      }
+    ],
+    "tools": [
+      {
+        "n": "DeepEval G-Eval",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Write a criterion in plain English and get a scored metric with a pass threshold and the judge’s reasoning.",
+        "ex": "A “Correctness” metric that fails any claim summary with a wrong payout amount.",
+        "pros": [
+          "Criteria written in natural language",
+          "Reasoning returned with every score"
+        ],
+        "cons": [
+          "Scores shift when you change judge models",
+          "Needs calibration like any judge"
+        ],
+        "url": "https://github.com/confident-ai/deepeval"
+      },
+      {
+        "n": "promptfoo llm-rubric",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Rubric assertions inside YAML test suites, next to exact-match checks.",
+        "ex": "An assertion: “mentions the payout amount and invents nothing”, run on 100 summaries in CI.",
+        "pros": [
+          "Mix rubric and exact checks in one suite",
+          "Easy to run in CI"
+        ],
+        "cons": [
+          "Less control over the judge prompt",
+          "Long rubrics get awkward in YAML"
+        ],
+        "url": "https://github.com/promptfoo/promptfoo"
+      },
+      {
+        "n": "autoevals",
+        "type": "Open source · by Braintrust",
+        "start": 3,
+        "prod": 2,
+        "best": "Prebuilt judge scorers such as Factuality and ClosedQA that you call from code.",
+        "ex": "Factuality(output, expected) returns a score and rationale for each claim summary.",
+        "pros": [
+          "Tested judge prompts ready to use",
+          "Works on its own or with Braintrust"
+        ],
+        "cons": [
+          "Generic prompts may not fit your domain",
+          "Customizing means writing your own"
+        ],
+        "url": "https://github.com/braintrustdata/autoevals"
+      },
+      {
+        "n": "OpenAI Evals (model-graded)",
+        "type": "Open source",
+        "start": 2,
+        "prod": 1,
+        "best": "Templates that show how model-graded evals are structured.",
+        "ex": "Study a model-graded template before writing your own rubric prompt.",
+        "pros": [
+          "Good learning material",
+          "Simple templates"
+        ],
+        "cons": [
+          "Less actively developed",
+          "Oriented toward OpenAI models"
+        ],
+        "url": "https://github.com/openai/evals"
+      },
+      {
+        "n": "scikit-learn",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Measuring judge–human agreement with cohen_kappa_score and confusion matrices.",
+        "ex": "Each week, compare 100 human labels with judge labels and report κ on a dashboard.",
+        "pros": [
+          "Standard, trusted statistics",
+          "A few lines of code"
+        ],
+        "cons": [
+          "Measures agreement; it doesn’t judge anything",
+          "You still need human labels"
+        ],
+        "url": "https://scikit-learn.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype a judge today",
+        "tool": "DeepEval G-Eval or promptfoo"
+      },
+      {
+        "need": "Prebuilt judges from code",
+        "tool": "autoevals"
+      },
+      {
+        "need": "Prove the judge is trustworthy",
+        "tool": "scikit-learn (κ against human labels)"
+      }
+    ],
+    "goals": [
+      "Write a rubric with anchored examples for each score",
+      "Name three judge biases and how to counter each",
+      "Measure judge–human agreement and explain why κ matters"
+    ]
+  },
+  "practice": {
+    "scenario": "An insurer produces about 2,000 claim-summary emails a week. A judge model scores each one for accuracy, completeness and tone against a written rubric. Each week, 100 are also scored by people, to confirm the judge still agrees with them before its scores are trusted.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Grade claim summaries and customer letters for accuracy and tone"
+      },
+      {
+        "industry": "EdTech",
+        "use": "Score tutoring answers for correctness and clarity"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Monitor sampled live replies for policy compliance"
+      }
+    ],
+    "analogy": "A senior teacher marking essays against a published marking scheme, while the head of department re-marks a sample to keep the scores honest.",
+    "library": {
+      "name": "DeepEval",
+      "what": "Pytest-style LLM testing. G-Eval turns a plain-language criterion into a judge metric with a pass threshold.",
+      "install": "pip install deepeval"
+    },
+    "samples": [
+      {
+        "file": "judge.py",
+        "language": "python",
+        "code": "from deepeval import evaluate\nfrom deepeval.metrics import GEval\nfrom deepeval.test_case import LLMTestCase, LLMTestCaseParams\n\ncorrectness = GEval(\n    name=\"Correctness\",\n    criteria=\"Is the actual output factually consistent with the expected output? \"\n             \"Penalize missing amounts or invented details.\",\n    evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT,\n                       LLMTestCaseParams.EXPECTED_OUTPUT],\n    threshold=0.7,\n)\n\ncase = LLMTestCase(\n    input=\"Summarize claim CLM-004471 for the customer\",\n    actual_output=\"Water damage to your kitchen is covered. Payout: INR 42,000.\",\n    expected_output=\"Kitchen water damage approved. Payout INR 42,000.\",\n)\nevaluate(test_cases=[case], metrics=[correctness])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Your judge and a human labelled 10 answers pass/fail and agreed on 8. What is the percent agreement, and why can it overstate the judge's quality?",
+    "answer": "Agreement = 8 ÷ 10 = 80%. Percent agreement ignores agreement by chance: if most labels are “pass”, a judge that always says pass agrees often. Cohen's κ corrects for chance.",
+    "expected": {
+      "value": 80,
+      "tolerance": 0.5,
+      "label": "agreement % ="
+    },
+    "interview": [
+      {
+        "question": "Which biases affect LLM judges, and how do you reduce them?",
+        "answer": "Position bias (run both orders), verbosity bias (state in the rubric that length earns nothing), and self-preference (judge with a different model family). Always calibrate against a human-labelled sample."
+      },
+      {
+        "question": "Why prefer binary or 3-point scales over 1–10?",
+        "answer": "Models are inconsistent at fine-grained scores; the same answer drifts between 6 and 8. Coarse scales with anchored examples are more repeatable and easier to calibrate against people."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Asking for the score before the reasoning",
+        "fix": "Ask for reasoning first, then the score"
+      },
+      {
+        "mistake": "Trusting the judge without human spot checks",
+        "fix": "Hand-label 50–100 cases and re-check agreement regularly"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "lj01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "For weekly claim emails, which check should go to an LLM judge rather than code?",
+      "options": [
+        "The payout equals the ledger value",
+        "The tone is empathetic and the next steps are clear",
+        "The email contains the claim ID",
+        "It was sent within 24 hours"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Use code for exact facts and a judge for open-ended qualities like tone and clarity."
+    },
+    {
+      "id": "lj02",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "Which are well-documented LLM-judge biases? Select all that apply.",
+      "options": [
+        "Position bias",
+        "Verbosity bias",
+        "Self-preference",
+        "Timezone bias"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Position, verbosity and self-preference biases are well documented."
+    },
+    {
+      "id": "lj03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Comparing two product-description generators, the judge prefers whichever answer it reads first. What is the fix?",
+      "options": [
+        "Use a bigger judge",
+        "Judge both orders and count a win only if they agree",
+        "Shorten the prompt",
+        "Raise the temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "If the winner changes with the order, it is not a real preference."
+    },
+    {
+      "id": "lj04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which scoring scale gives the most consistent judge scores for complaint replies?",
+      "options": [
+        "1–100",
+        "1–10",
+        "Pass/fail or 3 points, with an example for each score",
+        "Letter grades without definitions"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Coarse scales anchored with examples are more repeatable."
+    },
+    {
+      "id": "lj05",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "The judge and teachers agree 80% of the time on a set where 80% of answers are good. What is the concern?",
+      "options": [
+        "None: 80% is great",
+        "A judge that always says “good” would also get 80%, so check Cohen’s κ",
+        "The teachers are wrong",
+        "Add more examples to the rubric"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Percent agreement ignores chance. κ corrects for it."
+    },
+    {
+      "id": "lj06",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are good rubric practices for grading claim summaries? Select all that apply.",
+      "options": [
+        "Concrete criteria",
+        "An example for each score",
+        "“Be fair” as the only instruction",
+        "Stating that length earns no credit"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Vague instructions produce vague, biased scores."
+    },
+    {
+      "id": "lj07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You are grading outputs from Model X. Which judge should you use?",
+      "options": [
+        "Model X itself",
+        "A strong model from a different family",
+        "The smallest available model",
+        "It does not matter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A different model family reduces self-preference bias."
+    },
+    {
+      "id": "lj08",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why ask the judge for its reasoning before the score?",
+      "options": [
+        "It makes scores more considered and gives a trail to audit",
+        "It is cheaper",
+        "It removes all bias",
+        "APIs require it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reasoning first improves scores and leaves something a person can review."
+    },
+    {
+      "id": "lj09",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "The judge model is upgraded and scores rise 6 points overnight. What should you do?",
+      "options": [
+        "Celebrate",
+        "Re-calibrate the new judge on the human-labelled set before comparing",
+        "Ignore it",
+        "Switch back permanently"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A new judge is a new ruler. Check it against people first."
+    },
+    {
+      "id": "lj10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "The judge gives long support replies higher scores even when the extra text adds nothing. What is happening, and what helps?",
+      "options": [
+        "Position bias; swap the order",
+        "Verbosity bias; say in the rubric that length earns nothing and compare against a reference",
+        "Self-preference; change the model",
+        "Nothing is wrong"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Judges tend to reward length. Tell the judge explicitly that length earns no credit."
+    },
+    {
+      "id": "lj11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "The judge rates confident but medically wrong answers highly. What is the best fix?",
+      "options": [
+        "Raise the temperature",
+        "Give the judge a vetted reference answer and route high-risk topics to clinician review",
+        "Use a 1–100 scale",
+        "Remove the rubric"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Judges can be fooled by fluent answers. Reference-guided grading plus expert review guards high-stakes content."
+    },
+    {
+      "id": "lj12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Which calibration set is best before trusting a judge on contract Q&A?",
+      "options": [
+        "About 200 real outputs labelled by two domain experts, including failures",
+        "20 outputs labelled by the prompt engineer",
+        "The judge’s own past labels",
+        "5,000 synthetic outputs with no labels"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Calibrate on real, expert-labelled data that includes the failures you care about."
+    },
+    {
+      "id": "lj13",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Agreement between the judge and human reviewers is κ = 0.25. Should you trust the judge?",
+      "options": [
+        "Yes: it is above zero",
+        "No: agreement is weak; tighten the rubric and add examples, then measure again",
+        "κ does not matter",
+        "Yes, if the judge is a large model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "κ around 0.2–0.4 is only fair agreement. Improve the rubric before relying on the judge."
+    },
+    {
+      "id": "lj14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What temperature should a judge run at?",
+      "options": [
+        "1.0 for creativity",
+        "0 or very low, for repeatable scores",
+        "It does not matter",
+        "As high as possible, to reduce bias"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "You want the same input to get the same score."
+    },
+    {
+      "id": "lj15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "The judge’s scores are stable week to week, but disagreement with the human spot-check has risen from 10% to 25%. What should you do?",
+      "options": [
+        "Trust the judge: it is stable",
+        "Re-calibrate: the product or the answer mix has drifted from what the rubric was tuned on",
+        "Stop the human spot-check",
+        "Switch to a 1–100 scale"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The weekly human sample exists to catch exactly this drift."
+    },
+    {
+      "id": "lj16",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "You must choose between two prompt versions for tutoring answers. Which judging set-up fits best?",
+      "options": [
+        "Pairwise comparison, judged in both orders",
+        "One absolute score from a single run",
+        "Counting words",
+        "Asking the tutor model which it prefers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pairwise judging is sensitive to small differences. Swapping the order controls position bias."
+    },
+    {
+      "id": "lj17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which rubric criteria are concrete enough for a judge? Select all that apply.",
+      "options": [
+        "States the payout amount exactly as in the claim record",
+        "States the next step and its date",
+        "Is good",
+        "Sounds nice"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Criteria must be checkable. “Good” and “nice” mean different things to different graders."
+    },
+    {
+      "id": "lj18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Each week, 2,000 emails are judged at $0.01 each, and 100 are also reviewed by people at $0.50 each. What is the weekly cost?",
+      "options": [
+        "$70",
+        "$1,000",
+        "$20",
+        "$1,050"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,000 × $0.01 = $20, plus 100 × $0.50 = $50, for $70 in total."
+    },
+    {
+      "id": "lj19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The judge must return JSON {score, reason}, but 3% of its replies cannot be parsed. What is the right handling?",
+      "options": [
+        "Count them as passes",
+        "Use structured output or validate and retry, and track parse failures separately",
+        "Count them as fails silently",
+        "Ignore them"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Parse failures are an eval-infrastructure bug. They should not quietly shift the scores."
+    },
+    {
+      "id": "lj20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Your judge and your generator are the same model, and judge scores run 8 points above human ratings. What is the likely cause?",
+      "options": [
+        "Self-preference; use a judge from a different family and re-calibrate",
+        "Position bias",
+        "Too few examples",
+        "Low temperature"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Models tend to rate their own style highly."
+    }
+  ]
+}

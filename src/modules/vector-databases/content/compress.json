@@ -1,0 +1,812 @@
+{
+  "id": "compress",
+  "moduleSlug": "vector-databases",
+  "name": "Vector Compression (Scalar, Product and Binary Quantisation)",
+  "shortName": "Vector compression",
+  "question": "Can the index fit in a fraction of the RAM?",
+  "summary": "Vector compression stores fewer bits per dimension so a large index fits in RAM. Scalar quantisation maps each float32 to an int8 (4× smaller); product quantisation (PQ) splits the vector into sub-vectors and stores a one-byte codebook id for each (often 32–64× smaller); binary quantisation keeps only the sign of each dimension (32× smaller). Each step down loses some recall, which is won back by oversampling candidates from the compressed codes and rescoring them with full-precision vectors kept on SSD. This technique is about bytes per dimension; reducing the number of dimensions is covered in module 4, and multi-stage pipelines in general by Layered Approximate Search.",
+  "useCases": [
+    "Corpora of crores of vectors where float32 would need hundreds of GB of RAM",
+    "Cutting the monthly bill of a managed vector database",
+    "Fast first-stage candidates before a precise rescore"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Scalar (int8)",
+        "detail": "4× smaller; each dimension clipped to a range and mapped to 256 levels; recall loss usually about 1–2 points"
+      },
+      {
+        "term": "Product quantisation",
+        "detail": "vector split into m sub-vectors, each stored as a codebook id; needs training; 16–64× smaller"
+      },
+      {
+        "term": "Binary",
+        "detail": "1 bit per dimension, 32× smaller, Hamming distance is very fast; works best on 1,000+ dims from models trained for it"
+      },
+      {
+        "term": "Oversampling",
+        "detail": "fetch k × factor candidates from the compressed index, e.g. 40 for a top 10"
+      },
+      {
+        "term": "Rescoring",
+        "detail": "re-rank candidates with original vectors, often read from SSD"
+      },
+      {
+        "term": "Measure",
+        "detail": "recall at k against exact float32 search on your own queries"
+      }
+    ]
+  },
+  "steps": [
+    "Measure RAM, latency and recall at 10 with float32 as the baseline",
+    "Pick the encoding: int8 first, binary or PQ when RAM is the binding limit",
+    "Keep original vectors on SSD and rescore an oversampled candidate set",
+    "Tune the oversampling factor until recall is back within a point of the baseline"
+  ],
+  "pitfalls": [
+    "Binary quantisation on a small or unsuited embedding model, where recall collapses",
+    "Compressing without keeping the original vectors, so rescoring is impossible",
+    "Reporting speed-ups without measuring recall against exact search"
+  ],
+  "tools": [
+    "Qdrant quantisation",
+    "FAISS (IndexPQ, IndexBinaryFlat)",
+    "pgvector halfvec and bit",
+    "Weaviate PQ / BQ",
+    "Sentence Transformers quantize_embeddings"
+  ],
+  "remember": "Fewer bits in RAM, full vectors on disk, oversample and rescore.",
+  "caption": "Illustrative: Bazaar Kart, a fictional marketplace, holds 2 crore product vectors of 1,024 dims.",
+  "comparison": {
+    "scope": "Index storage + search",
+    "cost": 2,
+    "needs": "Indexes too big or costly for RAM",
+    "best": "Recall loss without rescoring"
+  },
+  "diagram": {
+    "file": "diagrams/compress.svg"
+  },
+  "lesson": {
+    "file": "binary_rescore.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from qdrant_client import QdrantClient, models",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client = QdrantClient(url=\"http://localhost:6333\")",
+        "steps": []
+      },
+      {
+        "text": "# 2 crore product vectors × 1,024 dims × 4 bytes ≈ 82 GB as float32",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "client.create_collection(",
+        "steps": []
+      },
+      {
+        "text": "    \"products\",",
+        "steps": []
+      },
+      {
+        "text": "    vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE,",
+        "steps": []
+      },
+      {
+        "text": "                                       on_disk=True),        # originals on SSD",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    quantization_config=models.BinaryQuantization(",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        binary=models.BinaryQuantizationConfig(always_ram=True)),  # 128 B each",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": ")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "hits = client.query_points(",
+        "steps": []
+      },
+      {
+        "text": "    \"products\", query=query_vec, limit=10,",
+        "steps": []
+      },
+      {
+        "text": "    search_params=models.SearchParams(",
+        "steps": []
+      },
+      {
+        "text": "        quantization=models.QuantizationSearchParams(",
+        "steps": []
+      },
+      {
+        "text": "            rescore=True,            # re-rank with float32 from SSD",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            oversampling=4.0)),      # 40 binary candidates for a top 10",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": ").points",
+        "steps": []
+      },
+      {
+        "text": "# recall@10 vs exact search: binary 74%, binary + rescore ×4 96%",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Size the problem",
+        "text": "Bazaar Kart, a fictional marketplace, has 2 crore product vectors of 1,024 dims. As float32 that is 2 crore × 4,096 bytes = 81.9 GB of RAM, about ₹49,140 a month at ₹600 per GB-month."
+      },
+      {
+        "title": "Choose the encoding",
+        "text": "int8 cuts it 4× to 20.5 GB. Binary keeps one bit per dimension: 128 bytes a vector, 2.6 GB in RAM. PQ with 64 one-byte codes would be 1.3 GB but needs training."
+      },
+      {
+        "title": "Keep the originals on SSD",
+        "text": "The float32 vectors stay on disk. They are not searched; they are read only for the few candidates that need a precise score."
+      },
+      {
+        "title": "Rescore",
+        "text": "The compressed index finds candidates with fast Hamming distance, then each candidate is re-ranked with its float32 vector."
+      },
+      {
+        "title": "Oversample",
+        "text": "Fetching 4 × 10 = 40 candidates gives the rescoring step room to fix the order and recover near misses."
+      },
+      {
+        "title": "Measure recall",
+        "text": "Against exact search on 1,000 real queries, binary alone finds 74% of the true top 10; with rescoring at ×4 it finds 96%, in 13 ms instead of 40 ms."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">2 crore × 4,096 B ≈ 82 GB float32</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"56\" text-anchor=\"middle\">int8 20.5 GB</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"124\" y=\"40\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"56\" text-anchor=\"middle\">binary 2.6 GB</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"40\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"56\" text-anchor=\"middle\">PQ 1.3 GB</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"72\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"88\" text-anchor=\"middle\">RAM: binary codes</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"184\" y=\"72\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"88\" text-anchor=\"middle\">SSD: float32</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"104\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"119\" text-anchor=\"middle\">Hamming top 40</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 115L186 115\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"188\" y=\"104\" width=\"164\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"270\" y=\"119\" text-anchor=\"middle\">float32 rescore</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"134\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"149\" text-anchor=\"middle\">oversampling 4 × 10 = 40 candidates</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"180\" text-anchor=\"middle\">binary 74%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"180\" text-anchor=\"middle\">+ rescore 96%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "4× to 64× less RAM, often the largest cost of a vector database",
+      "Faster distance computation, especially Hamming on binary codes",
+      "Rescoring recovers most lost recall cheaply",
+      "Supported natively by most vector stores"
+    ],
+    "cons": [
+      "Recall drops without rescoring",
+      "PQ needs training and retraining when data drifts",
+      "Binary suits only some embedding models and high dimensions",
+      "Keeping originals for rescoring still needs disk"
+    ],
+    "avoidWhen": [
+      "Small indexes that already fit in RAM comfortably",
+      "Models with few dimensions (under about 512) for binary quantisation"
+    ],
+    "tools": [
+      {
+        "name": "Qdrant",
+        "type": "Open source · cloud",
+        "what": "Scalar, product and binary quantisation with oversampling and rescore",
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "name": "FAISS",
+        "type": "Open source · Meta",
+        "what": "IndexPQ, IndexScalarQuantizer, IndexBinaryFlat and IVF-PQ",
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "name": "pgvector",
+        "type": "Open source",
+        "what": "halfvec (16-bit) and bit types with binary_quantize",
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "name": "Weaviate",
+        "type": "Open source · cloud",
+        "what": "PQ, BQ and SQ compression per collection",
+        "url": "https://docs.weaviate.io/weaviate/configuration/compression"
+      },
+      {
+        "name": "Sentence Transformers",
+        "type": "Open source",
+        "what": "quantize_embeddings to int8 or binary before storage",
+        "url": "https://sbert.net"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Bazaar Kart, a fictional marketplace, stores 2 crore product vectors of 1,024 dims. RAM costs ₹600 per GB-month; keeping the original vectors on SSD for rescoring adds about ₹820 a month.",
+    "controls": [
+      "Choose the encoding kept in RAM: float32, int8, product quantisation or binary.",
+      "Switch on rescoring with float32 vectors read from SSD.",
+      "Set the oversampling factor: how many candidates per result are rescored."
+    ],
+    "outputs": [
+      {
+        "name": "Recall at 10",
+        "meaning": "Share of the exact top 10 that the search finds."
+      },
+      {
+        "name": "RAM",
+        "meaning": "Memory for the in-RAM index."
+      },
+      {
+        "name": "Query latency",
+        "meaning": "Time per search, including rescoring."
+      },
+      {
+        "name": "Monthly cost",
+        "meaning": "RAM plus SSD for the originals."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "float32 in RAM",
+        "expect": "Recall 98%, 81.9 GB, 40 ms, ₹49,140 a month."
+      },
+      {
+        "k": "int8",
+        "name": "int8 scalar",
+        "expect": "Recall 96%, 20.5 GB, 15 ms, ₹13,120."
+      },
+      {
+        "k": "binary",
+        "name": "Binary, no rescoring",
+        "expect": "Recall 74%, 2.6 GB, 5 ms, ₹2,380."
+      },
+      {
+        "k": "rescored",
+        "name": "Binary, rescore ×4",
+        "expect": "Recall 96%, 2.6 GB, 13 ms, ₹2,380."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 95% recall with 5 GB of RAM or less and latency of 20 ms or less.",
+        "hint": "A tiny encoding plus rescoring with oversampling."
+      },
+      {
+        "k": "int8",
+        "text": "Use int8 and reach 97% recall.",
+        "hint": "Rescore with some oversampling."
+      },
+      {
+        "k": "drop",
+        "text": "Show recall falling below 80%.",
+        "hint": "Binary codes with no rescoring."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Qdrant",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Scalar, PQ and binary with built-in rescoring.",
+        "ex": "Binary codes in RAM, originals on disk, oversampling 4.",
+        "pros": [
+          "One config block",
+          "Rescore built in"
+        ],
+        "cons": [
+          "Tuning per collection"
+        ],
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "n": "FAISS",
+        "type": "Open source · Meta",
+        "start": 2,
+        "prod": 2,
+        "best": "Research and custom pipelines with PQ and IVF-PQ.",
+        "ex": "Train a PQ codebook on 1 lakh sample vectors.",
+        "pros": [
+          "Every index type",
+          "GPU support"
+        ],
+        "cons": [
+          "A library, not a database"
+        ],
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "n": "pgvector",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "halfvec and bit types inside Postgres.",
+        "ex": "An expression index on binary_quantize with a float rerank.",
+        "pros": [
+          "Stays in Postgres",
+          "Simple SQL"
+        ],
+        "cons": [
+          "Fewer compression options"
+        ],
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "n": "Weaviate",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "PQ, BQ or SQ switched on per collection.",
+        "ex": "BQ on a multilingual product catalogue.",
+        "pros": [
+          "Managed option",
+          "Rescoring built in"
+        ],
+        "cons": [
+          "PQ needs training data"
+        ],
+        "url": "https://docs.weaviate.io/weaviate/configuration/compression"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Safe first step",
+        "tool": "int8 scalar quantisation"
+      },
+      {
+        "need": "RAM is the limit, 1,000+ dims",
+        "tool": "Binary plus rescoring"
+      },
+      {
+        "need": "Billions of vectors",
+        "tool": "IVF-PQ in FAISS or a managed store"
+      }
+    ],
+    "goals": [
+      "Compute RAM for float32, int8, PQ and binary",
+      "Recover recall with oversampling and rescoring",
+      "Choose an encoding for a model and budget"
+    ]
+  },
+  "practice": {
+    "scenario": "Bazaar Kart, a fictional marketplace, holds 2 crore product vectors of 1,024 dims. As float32 they need 81.9 GB of RAM, about ₹49,140 a month. It stores binary codes in RAM (2.6 GB), keeps the float32 vectors on SSD, fetches 40 candidates for each top 10 and rescores them. Recall at 10 against exact search is 96%, and the RAM bill falls by about 95%.",
+    "industries": [
+      {
+        "industry": "E-commerce",
+        "use": "Crores of product and image vectors for search and recommendations"
+      },
+      {
+        "industry": "Banking",
+        "use": "Transaction and document embeddings kept for years under retention rules"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Call-note and ticket embeddings across many regions and languages"
+      }
+    ],
+    "analogy": "Keeping a thumbnail of every photo in your pocket and fetching the full-size print only for the few that look right.",
+    "library": {
+      "name": "Sentence Transformers",
+      "what": "quantize_embeddings turns float32 embeddings into int8 or packed binary before you store them.",
+      "install": "pip install sentence-transformers faiss-cpu"
+    },
+    "note": "The model name is an example; binary works best with models of 1,000 or more dimensions. The recall check compares against exact float32 search on the same queries.",
+    "samples": [
+      {
+        "file": "quantise_and_check.py",
+        "language": "python",
+        "code": "import numpy as np, faiss\nfrom sentence_transformers import SentenceTransformer\nfrom sentence_transformers.quantization import quantize_embeddings\n\nmodel = SentenceTransformer(\"mixedbread-ai/mxbai-embed-large-v1\")\ndocs = [line.strip() for line in open(\"products.txt\", encoding=\"utf-8\")]\nqueries = [line.strip() for line in open(\"queries.txt\", encoding=\"utf-8\")]\nd = model.encode(docs, normalize_embeddings=True)\nq = model.encode(queries, normalize_embeddings=True)\n\nexact = faiss.IndexFlatIP(d.shape[1]); exact.add(d)\n_, truth = exact.search(q, 10)\n\nbits = quantize_embeddings(d, precision=\"ubinary\")\nbinary = faiss.IndexBinaryFlat(d.shape[1]); binary.add(bits)\n_, cand = binary.search(quantize_embeddings(q, precision=\"ubinary\"), 40)\n\nhits = 0\nfor i, c in enumerate(cand):\n    top = c[np.argsort(-(d[c] @ q[i]))[:10]]      # rescore with float32\n    hits += len(set(top) & set(truth[i]))\nprint(\"recall@10 after rescoring:\", hits / (10 * len(queries)))\nprint(\"bytes per vector:\", bits.shape[1], \"vs\", d.shape[1] * 4)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "2 crore vectors of 1,024 dims are stored as binary codes (1 bit per dimension). How many GB of RAM do the codes need?",
+    "answer": "1,024 bits = 128 bytes per vector. 2 crore × 128 bytes = 2,56,00,00,000 bytes ≈ 2.56 GB, against 81.9 GB for float32.",
+    "expected": {
+      "value": 2.56,
+      "tolerance": 0.1,
+      "label": "GB ="
+    },
+    "interview": [
+      {
+        "question": "How does product quantisation work?",
+        "answer": "The vector is split into m sub-vectors. For each sub-space a codebook of 256 centroids is trained, and each sub-vector is stored as the one-byte id of its nearest centroid. Distances are approximated from lookup tables."
+      },
+      {
+        "question": "How do you win back recall after binary quantisation?",
+        "answer": "Oversample, for example fetch 40 candidates for a top 10 from the binary index, then rescore them with the original float32 vectors, which can live on SSD."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Throwing away the original vectors",
+        "fix": "Keep them on SSD so candidates can be rescored"
+      },
+      {
+        "mistake": "Judging compression on speed alone",
+        "fix": "Measure recall at k against exact search on real queries"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "vc01",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "How many bytes does a 1,024-dim float32 vector take?",
+      "options": [
+        "1,024",
+        "4,096",
+        "128",
+        "512"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,024 × 4 bytes."
+    },
+    {
+      "id": "vc02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The same vector as int8 takes?",
+      "options": [
+        "1,024 bytes",
+        "4,096 bytes",
+        "128 bytes",
+        "64 bytes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One byte per dimension."
+    },
+    {
+      "id": "vc03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Binary quantisation of 1,024 dims takes?",
+      "options": [
+        "1,024 bytes",
+        "256 bytes",
+        "128 bytes",
+        "32 bytes"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1,024 bits ÷ 8 = 128 bytes."
+    },
+    {
+      "id": "vc04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "How are binary codes compared?",
+      "options": [
+        "Cosine on floats",
+        "Hamming distance",
+        "BM25",
+        "Edit distance"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Count differing bits."
+    },
+    {
+      "id": "vc05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What does product quantisation store per sub-vector?",
+      "options": [
+        "The float values",
+        "A codebook id of its nearest centroid",
+        "A hash of the text",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "One byte per sub-vector with 256 centroids."
+    },
+    {
+      "id": "vc06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which encoding needs a training step?",
+      "options": [
+        "int8 with a fixed range",
+        "Binary",
+        "Product quantisation",
+        "float16"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "PQ codebooks are learnt with k-means."
+    },
+    {
+      "id": "vc07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which help recover recall after binary quantisation? Select all that apply.",
+      "options": [
+        "Oversampling candidates",
+        "Rescoring with float32 vectors",
+        "Deleting the originals",
+        "Measuring against exact search to tune"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Deleting originals makes rescoring impossible."
+    },
+    {
+      "id": "vc08",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "For a top 10 with oversampling 4, how many candidates are rescored?",
+      "options": [
+        "10",
+        "14",
+        "40",
+        "400"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "4 × 10."
+    },
+    {
+      "id": "vc09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "2 crore vectors at 128 bytes each need about?",
+      "options": [
+        "2.56 GB",
+        "25.6 GB",
+        "256 MB",
+        "82 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,56,00,00,000 bytes."
+    },
+    {
+      "id": "vc10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Where can the original float32 vectors live when used only for rescoring?",
+      "options": [
+        "On SSD",
+        "Only in GPU memory",
+        "Nowhere",
+        "In the prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only a few dozen are read per query."
+    },
+    {
+      "id": "vc11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "RAM costs ₹600 per GB-month. How much does 20.5 GB cost a month?",
+      "options": [
+        "₹1,230",
+        "₹12,300",
+        "₹1,23,000",
+        "₹6,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "20.5 × 600 = ₹12,300."
+    },
+    {
+      "id": "vc12",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Binary quantisation works worst with?",
+      "options": [
+        "1,024-dim models trained for it",
+        "Small models with few dimensions",
+        "Normalised vectors",
+        "High-dimensional text models"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Few bits carry too little information."
+    },
+    {
+      "id": "vc13",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are true of int8 scalar quantisation? Select all that apply.",
+      "options": [
+        "About 4× smaller than float32",
+        "Usually loses a point or two of recall",
+        "Needs a codebook of 256 centroids per sub-space",
+        "Clips values to a range first"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Codebooks belong to PQ."
+    },
+    {
+      "id": "vc14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Recall at 10 is 74% on 1,000 queries. How many true top-10 results were missed in total?",
+      "options": [
+        "260",
+        "2,600",
+        "740",
+        "7,400"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "10,000 slots × 26% = 2,600."
+    },
+    {
+      "id": "vc15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the main thing this technique changes?",
+      "options": [
+        "Number of dimensions",
+        "Bytes per dimension",
+        "Chunk size",
+        "Number of documents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Dimension reduction is a separate technique."
+    },
+    {
+      "id": "vc16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Recall stays low even with rescoring ×4. Next check?",
+      "options": [
+        "Raise temperature",
+        "Whether the model suits binary, or switch to int8",
+        "Delete old products",
+        "Turn off rescoring"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Some models lose too much at one bit."
+    },
+    {
+      "id": "vc17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "PQ with 64 one-byte codes on 1,024 dims: compression versus float32?",
+      "options": [
+        "4×",
+        "16×",
+        "32×",
+        "64×"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "4,096 ÷ 64 = 64×."
+    },
+    {
+      "id": "vc18",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which vector stores offer built-in quantisation? Select all that apply.",
+      "options": [
+        "Qdrant",
+        "Weaviate",
+        "pgvector (halfvec, bit)",
+        "A CSV file"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "CSV files have no index."
+    },
+    {
+      "id": "vc19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Binary alone gives 74%; rescoring ×4 gives 96%. Gain in points?",
+      "options": [
+        "12",
+        "22",
+        "26",
+        "96"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "96 − 74 = 22."
+    },
+    {
+      "id": "vc20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should a compression rollout report?",
+      "options": [
+        "Only latency",
+        "Recall at k against exact search, RAM and latency",
+        "Only RAM",
+        "Number of GPUs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Speed without recall hides losses."
+    }
+  ]
+}

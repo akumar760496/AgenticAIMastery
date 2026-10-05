@@ -1,0 +1,851 @@
+{
+  "id": "templates",
+  "moduleSlug": "prompting",
+  "name": "Prompt Templates and Regression Tests",
+  "shortName": "Templates",
+  "question": "How do I change a prompt without breaking it?",
+  "summary": "Treat prompts as code. Build them from templates with named variables and shared blocks, fail loudly when a variable is missing, wrap untrusted variables in tags, and keep stable text before variable text. Every change runs a regression suite of golden cases in CI before it can ship, and versions are released through a registry, as Panel 11 describes.",
+  "useCases": [
+    "Prompts edited by several people or changed weekly",
+    "Many prompts sharing the same rules or policy text",
+    "Any prompt whose failures are costly"
+  ],
+  "keyFacts": {
+    "label": "Practices",
+    "items": [
+      {
+        "term": "Template engine",
+        "detail": "Jinja2 or similar, with includes for shared blocks"
+      },
+      {
+        "term": "Strict variables",
+        "detail": "StrictUndefined: a missing variable raises instead of rendering blank"
+      },
+      {
+        "term": "Escaping",
+        "detail": "untrusted variables are wrapped in tags and escaped"
+      },
+      {
+        "term": "Layout",
+        "detail": "stable text first for caching; variables and the question last"
+      },
+      {
+        "term": "Golden cases",
+        "detail": "real inputs with expected outputs or graded criteria"
+      },
+      {
+        "term": "CI gate",
+        "detail": "a change cannot merge unless the suite passes"
+      }
+    ]
+  },
+  "steps": [
+    "Move prompts into template files with named variables and shared includes",
+    "Render with strict undefined variables and wrap untrusted input",
+    "Build a golden set from real traffic, covering rare intents",
+    "Run it in CI on every prompt change, and block merges that regress"
+  ],
+  "pitfalls": [
+    "f-strings that silently render “None” when data is missing",
+    "A 20-case suite that misses rare intents",
+    "Editing prompts directly in production with no tests"
+  ],
+  "tools": [
+    "Jinja2",
+    "promptfoo",
+    "Langfuse prompt management",
+    "MLflow Prompt Registry",
+    "pytest"
+  ],
+  "remember": "Prompts are code: templates, strict variables, tests in CI.",
+  "caption": "Illustrative: the chance a change that breaks a 3% intent is caught, by suite size.",
+  "comparison": {
+    "scope": "Regressions from prompt edits",
+    "cost": 2,
+    "needs": "Templates, a golden set, CI",
+    "best": "Silent regressions on rare intents"
+  },
+  "diagram": {
+    "file": "diagrams/templates.svg"
+  },
+  "lesson": {
+    "file": "test_prompts.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import pytest, yaml",
+        "steps": []
+      },
+      {
+        "text": "from jinja2 import Environment, FileSystemLoader, StrictUndefined, UndefinedError",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "env = Environment(loader=FileSystemLoader(\"prompts\"),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                  undefined=StrictUndefined)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# prompts/support.j2",
+        "steps": []
+      },
+      {
+        "text": "#   {% include \"policy_rules.j2\" %}        stable and shared, first",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "#   Customer tier: {{ tier }}",
+        "steps": []
+      },
+      {
+        "text": "#   <ticket>{{ ticket | e }}</ticket>      untrusted, wrapped, last",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def render(**v) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    return env.get_template(\"support.j2\").render(**v)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def test_missing_variable_fails():",
+        "steps": []
+      },
+      {
+        "text": "    with pytest.raises(UndefinedError):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        render(tier=\"gold\")                     # ticket is missing",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CASES = yaml.safe_load(open(\"golden_cases.yaml\"))    # 300 real tickets",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "@pytest.mark.parametrize(\"case\", CASES, ids=lambda c: c[\"id\"])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "def test_golden(case):",
+        "steps": []
+      },
+      {
+        "text": "    reply = call_model(render(ticket=case[\"ticket\"], tier=case[\"tier\"]))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    assert grade(reply, case[\"criteria\"]), case[\"id\"]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# CI: run on every change under prompts/ and block the merge on failure",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Prompts live in template files",
+        "text": "Shared rules sit in one reviewed include used by every prompt, instead of being copied and drifting apart."
+      },
+      {
+        "title": "Missing variables fail loudly",
+        "text": "With StrictUndefined, forgetting the ticket raises an error in tests rather than sending a prompt with a blank where the customer’s text should be."
+      },
+      {
+        "title": "Wrap and escape untrusted text",
+        "text": "The ticket goes inside tags and is escaped, so it reads as data and cannot close the tag early."
+      },
+      {
+        "title": "Stable text first",
+        "text": "The shared rules come first and never change between calls, which keeps the prefix cacheable; the ticket comes last."
+      },
+      {
+        "title": "Test against a golden set",
+        "text": "300 real tickets with grading criteria. A change that breaks an intent seen in 3% of traffic is almost certainly covered."
+      },
+      {
+        "title": "Gate the merge in CI",
+        "text": "Any change under prompts/ runs the suite. A failing case blocks the merge, before a version is ever promoted."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">{% include \"policy_rules.j2\" %}</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"49\" text-anchor=\"middle\">{{ tier }} strict</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"184\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"49\" text-anchor=\"middle\">missing → error</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"62\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"77\" text-anchor=\"middle\">&lt;ticket&gt;{{ ticket | e }}&lt;/ticket&gt;</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"sb a\" x=\"8\" y=\"104\" style=\"text-anchor:start;--d:0s\">stable prefix first, variables last</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"128\" style=\"text-anchor:start;--d:0s\">Chance a 3% intent is covered</text><text class=\"tl a\" x=\"112\" y=\"147\" style=\"text-anchor:end;--d:0.1s\">20 cases</text><rect x=\"118\" y=\"137\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"137\" width=\"86.64\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"147\" style=\"text-anchor:start;--d:0.30000000000000004s\">46%</text><text class=\"tl a\" x=\"112\" y=\"169\" style=\"text-anchor:end;--d:0.2s\">300 cases</text><rect x=\"118\" y=\"159\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"159\" width=\"189.981\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"169\" style=\"text-anchor:start;--d:0.4s\">>99%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"190\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"206\" text-anchor=\"middle\">CI: prompts/ changed → suite → merge blocked</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Shared rules maintained in one place",
+      "Missing data fails in tests, not in production",
+      "Regression suites catch breakage before release",
+      "Reviews become normal code reviews"
+    ],
+    "cons": [
+      "Golden sets take effort to build and grade",
+      "Model-graded tests cost money per run",
+      "Suites must grow with new intents",
+      "Another build step to maintain"
+    ],
+    "avoidWhen": [
+      "Tiny suites of only common cases",
+      "Editing live prompts outside version control"
+    ],
+    "tools": [
+      {
+        "name": "Jinja2",
+        "type": "Open source",
+        "what": "Templates with includes and StrictUndefined",
+        "url": "https://jinja.palletsprojects.com"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Prompt regression tests and CI integration",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "pytest",
+        "type": "Open source",
+        "what": "Test runner for render and golden tests",
+        "url": "https://docs.pytest.org"
+      },
+      {
+        "name": "MLflow Prompt Registry",
+        "type": "Open source",
+        "what": "Versions and aliases for tested prompts",
+        "url": "https://mlflow.org/docs/latest/genai/prompt-registry/"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source, cloud",
+        "what": "Prompt versions, datasets and experiments",
+        "url": "https://langfuse.com/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A SaaS support team is about to ship a policy edit that, unknown to its author, breaks refunds for annual plans, an intent in 3% of traffic. Choose how prompts are built and tested, and see whether the regression is caught before customers see it.",
+    "controls": [
+      "Choose f-strings or Jinja2 with StrictUndefined, and whether variables go at the top or the end.",
+      "Pick the golden-suite size and tick whether it runs in CI and blocks merges.",
+      "Tick wrapping and escaping of untrusted ticket text, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Chance the regression is caught before release",
+        "meaning": "Chance the suite covers the broken intent and actually runs."
+      },
+      {
+        "name": "Edits that ship a blank variable",
+        "meaning": "Share of edits that silently render missing data."
+      },
+      {
+        "name": "Prompt cache hit",
+        "meaning": "Share of the prompt served from cache."
+      },
+      {
+        "name": "Ticket text can break out of its tags",
+        "meaning": "Whether untrusted text can escape its delimiters."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "f-strings, no tests",
+        "expect": "The regression ships; 4% of edits render blanks; no caching."
+      },
+      {
+        "k": "small",
+        "name": "Strict templates, 20 cases in CI",
+        "expect": "Only a 46% chance of catching the broken intent."
+      },
+      {
+        "k": "manual",
+        "name": "300 cases, run by hand",
+        "expect": "The suite would catch it, but running by hand gives a 30% chance."
+      },
+      {
+        "k": "full",
+        "name": "Strict templates, 300 cases in CI",
+        "expect": "Caught before release; 85% cache hit; untrusted text wrapped."
+      }
+    ],
+    "missions": [
+      {
+        "k": "catch",
+        "text": "Catch the regression with at least 95% probability.",
+        "hint": "A suite big enough to cover a 3% intent, run automatically."
+      },
+      {
+        "k": "cache",
+        "text": "Reach an 80% cache hit with strict templates.",
+        "hint": "Stable text first, variables last."
+      },
+      {
+        "k": "all",
+        "text": "Do everything: 95% catch, 80% cache, strict templates and wrapped input.",
+        "hint": "Combine all four practices."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Jinja2",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Templates with includes, filters and StrictUndefined.",
+        "ex": "support.j2 includes policy_rules.j2 and escapes the ticket.",
+        "pros": [
+          "Mature and familiar",
+          "Shared blocks via includes"
+        ],
+        "cons": [
+          "Template logic can sprawl",
+          "Escaping must be deliberate"
+        ],
+        "url": "https://jinja.palletsprojects.com"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Prompt regression tests with assertions and model-graded rubrics, in CI.",
+        "ex": "300 golden tickets checked on every pull request that touches prompts/.",
+        "pros": [
+          "Built for prompt testing",
+          "GitHub Actions support"
+        ],
+        "cons": [
+          "Rubric grading costs calls",
+          "Golden sets need upkeep"
+        ],
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "n": "pytest",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Render tests and golden tests in your existing test suite.",
+        "ex": "A test that a missing variable raises, plus parametrised golden cases.",
+        "pros": [
+          "Already in most Python projects",
+          "Flexible"
+        ],
+        "cons": [
+          "You build the grading",
+          "No prompt-specific reports"
+        ],
+        "url": "https://docs.pytest.org"
+      },
+      {
+        "n": "MLflow Prompt Registry",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Versioned prompts promoted by alias after tests pass.",
+        "ex": "Promote support v14 to production once CI is green.",
+        "pros": [
+          "Rollback by alias",
+          "Links to evaluations"
+        ],
+        "cons": [
+          "Runs a tracking server",
+          "Templates use {{ }} placeholders, not full Jinja2"
+        ],
+        "url": "https://mlflow.org/docs/latest/genai/prompt-registry/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want prompt tests in CI today",
+        "tool": "promptfoo"
+      },
+      {
+        "need": "My team lives in pytest",
+        "tool": "pytest with golden cases"
+      },
+      {
+        "need": "Prompts share lots of text",
+        "tool": "Jinja2 includes with StrictUndefined"
+      }
+    ],
+    "goals": [
+      "Treat prompts as tested code",
+      "Size a golden set for rare intents",
+      "Keep templates strict, cacheable and safe"
+    ]
+  },
+  "practice": {
+    "scenario": "A SaaS company’s support prompts were f-strings edited by three teams. A missing variable once rendered as “None” in thousands of replies, and a policy edit silently broke refunds for annual plans, a 3% intent. Prompts now live in Jinja2 templates with strict variables and shared includes, and a 300-case golden suite runs in CI on every change.",
+    "industries": [
+      {
+        "industry": "SaaS",
+        "use": "Shared policy blocks across dozens of support and sales prompts"
+      },
+      {
+        "industry": "Banking",
+        "use": "Regulated wording kept in one reviewed include used by every prompt"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Seasonal prompt changes tested against last season’s tricky cases"
+      }
+    ],
+    "analogy": "A legal contract built from approved clause templates. Nobody retypes a clause, and every new version is checked against the old cases before signing.",
+    "library": {
+      "name": "Jinja2 + promptfoo",
+      "what": "Jinja2 renders templates with includes and strict undefined variables; promptfoo runs golden test cases against each prompt version in CI.",
+      "install": "pip install jinja2 && npm install -g promptfoo"
+    },
+    "note": "Build the golden set from real traffic and include rare intents; a small suite misses exactly the regressions that hurt.",
+    "samples": [
+      {
+        "file": "render.py",
+        "language": "python",
+        "code": "from jinja2 import Environment, FileSystemLoader, StrictUndefined\n\nenv = Environment(loader=FileSystemLoader(\"prompts\"),\n                  undefined=StrictUndefined,       # missing variable -> error\n                  autoescape=False)\n\ndef render(ticket_text: str, tier: str) -> str:\n    return env.get_template(\"support.j2\").render(ticket=ticket_text, tier=tier)\n\n# prompts/support.j2\n# {% include \"policy_rules.j2\" %}          <- shared, reviewed once\n# Customer tier: {{ tier }}\n# <ticket>{{ ticket | e }}</ticket>         <- untrusted, wrapped and escaped"
+      },
+      {
+        "file": "promptfooconfig.yaml",
+        "language": "yaml",
+        "code": "prompts:\n  - file://render_prompt.py              # renders prompts/support.j2\nproviders:\n  - anthropic:messages:claude-sonnet-4-5-20250929\ntests: file://golden_cases.yaml          # 300 real tickets with assertions\ndefaultTest:\n  assert:\n    - type: llm-rubric\n      value: Follows the refund policy for the customer's plan"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A prompt change breaks an intent that makes up 3% of traffic. Your golden suite has 100 cases sampled from traffic. What is the chance that at least one case covers that intent, in percent?",
+    "answer": "1 − 0.97¹⁰⁰ ≈ 1 − 0.048 = 95.2%. With 20 cases it is only 45.6%; with 300 it is over 99.9%. Rare intents need bigger suites or deliberate coverage.",
+    "expected": {
+      "value": 95.2,
+      "tolerance": 0.2,
+      "label": "% chance ="
+    },
+    "interview": [
+      {
+        "question": "Why use StrictUndefined in Jinja2 prompt templates?",
+        "answer": "By default a missing variable renders as an empty string, so a prompt can silently lose the customer’s data or a policy block. StrictUndefined raises an error at render time, which tests and CI catch before release."
+      },
+      {
+        "question": "How do you build a good golden set for prompt regression tests?",
+        "answer": "Sample real inputs from production across intents, deliberately add rare but important cases and past failures, and write assertions or rubrics for each. Keep it versioned, grow it whenever an incident reveals a gap, and run it in CI on every prompt change."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Editing prompts with f-strings and no tests",
+        "fix": "Use templates with strict variables and a CI suite"
+      },
+      {
+        "mistake": "A golden set of only easy, common cases",
+        "fix": "Include rare intents and past failures"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tp01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why use StrictUndefined in Jinja2 prompt templates?",
+      "options": [
+        "It makes rendering faster",
+        "A missing variable raises an error instead of rendering blank",
+        "It escapes HTML",
+        "It caches templates"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Missing data should fail in tests."
+    },
+    {
+      "id": "tp02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A change breaks an intent in 3% of traffic. What is the chance a random 100-case golden set includes it?",
+      "options": [
+        "3%",
+        "about 45%",
+        "about 95%",
+        "100%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "1 − 0.97¹⁰⁰ ≈ 95%."
+    },
+    {
+      "id": "tp03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "With a 20-case random suite, what is that chance?",
+      "options": [
+        "about 20%",
+        "about 46%",
+        "about 80%",
+        "about 95%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1 − 0.97²⁰ ≈ 46%."
+    },
+    {
+      "id": "tp04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Regulated wording is copied into ten prompts and drifts apart. What fixes this?",
+      "options": [
+        "A shared include used by every template",
+        "Longer prompts",
+        "More examples",
+        "A larger model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One reviewed block, included everywhere."
+    },
+    {
+      "id": "tp05",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which belong in a prompt CI pipeline? Select all that apply.",
+      "options": [
+        "Render tests that fail on missing variables",
+        "A golden-case regression suite that blocks merges on failure",
+        "Deploying straight to production on every commit",
+        "Skipping tests for small edits"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Render tests and golden suites catch breakage before release."
+    },
+    {
+      "id": "tp06",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Why wrap ticket text in tags and escape it?",
+      "options": [
+        "To keep untrusted text marked as data and preserve the prompt structure",
+        "To make it shorter",
+        "To translate it",
+        "To cache it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Wrapping and escaping stop input from breaking the template."
+    },
+    {
+      "id": "tp07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where should variables go in a template to keep caching effective?",
+      "options": [
+        "At the top",
+        "At the end, after stable text",
+        "In the middle",
+        "Anywhere"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Stable prefix first, variables last."
+    },
+    {
+      "id": "tp08",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A golden set has only common, easy cases. What is the risk?",
+      "options": [
+        "Tests run too slowly",
+        "Regressions on rare intents pass unnoticed",
+        "Caching breaks",
+        "Prompts get longer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Include rare intents and past failures."
+    },
+    {
+      "id": "tp09",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which make a good golden set? Select all that apply.",
+      "options": [
+        "Real inputs sampled across intents",
+        "Past incidents added as cases",
+        "Only synthetic easy examples",
+        "Cases with no expected outcome or criteria"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Representative, incident-informed cases with clear criteria."
+    },
+    {
+      "id": "tp10",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "f-strings render a missing value as “None”. How often might that ship if 4% of edits drop a variable and nothing checks?",
+      "options": [
+        "Never",
+        "In about 4% of edits",
+        "In every edit",
+        "Only in production"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Silent failures ship at the rate they occur."
+    },
+    {
+      "id": "tp11",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which tool is built for prompt regression tests with assertions and CI support?",
+      "options": [
+        "promptfoo",
+        "Temporal",
+        "gVisor",
+        "Presidio"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "promptfoo tests prompts across cases and models."
+    },
+    {
+      "id": "tp12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Why version prompts in a registry after tests pass? Select all that apply.",
+      "options": [
+        "Rollback is a label move",
+        "Every trace can name the exact version",
+        "It removes the need for tests",
+        "It makes prompts shorter"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Registries make releases reversible and traceable (Panel 11)."
+    },
+    {
+      "id": "tp13",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "A 300-case suite exists but runs only when someone remembers. What is the main weakness?",
+      "options": [
+        "The suite is too big",
+        "It is not a gate, so regressions can ship when nobody runs it",
+        "It is too small",
+        "It slows the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Automate it in CI."
+    },
+    {
+      "id": "tp14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Model-graded rubric tests have a cost. What is a sensible balance?",
+      "options": [
+        "Never use model grading",
+        "Deterministic checks where possible, model-graded rubrics where judgement is needed",
+        "Model-grade everything with the largest model",
+        "Only manual review"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Use cheap checks first, rubrics where needed."
+    },
+    {
+      "id": "tp15",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which are signs prompts should become templates? Select all that apply.",
+      "options": [
+        "Several prompts share the same policy text",
+        "Prompts contain per-request variables",
+        "The prompt never changes and has no variables",
+        "Only one person has ever read it"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Shared blocks and variables benefit most from templates."
+    },
+    {
+      "id": "tp16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which random suite size gives over 99.95% coverage of a 3% intent?",
+      "options": [
+        "30",
+        "100",
+        "230",
+        "300"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "1 − 0.97³⁰⁰ ≈ 99.99%; 230 cases give only about 99.91%."
+    },
+    {
+      "id": "tp17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A seasonal prompt change is ready. What is the safest release path?",
+      "options": [
+        "Edit the live prompt",
+        "Change the template, pass CI, promote the version, then canary",
+        "Email it to the team",
+        "Deploy on Friday evening"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tests, versioning and canaries in sequence."
+    },
+    {
+      "id": "tp18",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which failures can render tests catch? Select all that apply.",
+      "options": [
+        "A missing variable",
+        "A syntax error in the template",
+        "A model giving a wrong refund answer",
+        "A slow provider"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Rendering problems are caught before any model call."
+    },
+    {
+      "id": "tp19",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Where do golden-case expected outcomes come from?",
+      "options": [
+        "Assertions or rubrics written by people who know the correct handling",
+        "The model’s own output, unreviewed",
+        "Random strings",
+        "The provider"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Criteria need human judgement."
+    },
+    {
+      "id": "tp20",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which practices make prompt changes auditable? Select all that apply.",
+      "options": [
+        "Changes reviewed in version control",
+        "Released versions recorded on traces",
+        "Edits made directly in production",
+        "Undocumented hotfixes"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Reviews and trace stamps give a clear history."
+    }
+  ]
+}

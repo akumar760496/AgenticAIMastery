@@ -1,0 +1,842 @@
+{
+  "id": "hnsw",
+  "moduleSlug": "vector-databases",
+  "name": "HNSW Index",
+  "shortName": "Graph index",
+  "question": "Can I hop through a graph to the nearest neighbours?",
+  "summary": "HNSW (Hierarchical Navigable Small World) builds a layered graph. Upper layers are sparse with long links for coarse navigation; the bottom layer holds every vector with short links. A search enters at the top, greedily moves toward the query, and drops one layer at a time. It gives high recall at low latency and is the default index in most vector databases.",
+  "useCases": [
+    "Low-latency, high-recall search where vectors fit in RAM",
+    "Data that grows continuously; no training step needed",
+    "General-purpose default when unsure"
+  ],
+  "keyFacts": {
+    "label": "Key parameters",
+    "items": [
+      {
+        "term": "m",
+        "detail": "links per node; more = better recall, more memory (pgvector default 16)"
+      },
+      {
+        "term": "ef_construction",
+        "detail": "candidate list while building; higher = better graph, slower build (default 64)"
+      },
+      {
+        "term": "ef_search",
+        "detail": "candidate list at query time; the main recall/latency dial (default 40)"
+      },
+      {
+        "term": "Layers",
+        "detail": "assigned randomly per node; roughly log N layers"
+      }
+    ]
+  },
+  "steps": [
+    "Start with the defaults and measure recall on real queries",
+    "Tune ef_search at query time to reach your recall target",
+    "Budget memory: the graph links sit on top of the raw vectors",
+    "Expect slower builds and inserts than IVF"
+  ],
+  "pitfalls": [
+    "Memory-hungry: vectors and graph should fit in RAM",
+    "Heavy deletes and updates degrade the graph over time",
+    "Strict metadata filters can cut graph paths and lower recall"
+  ],
+  "tools": [
+    "pgvector",
+    "FAISS IndexHNSWFlat",
+    "hnswlib",
+    "Qdrant",
+    "Weaviate",
+    "Milvus",
+    "Elasticsearch"
+  ],
+  "remember": "Long hops on top, short hops at the bottom.",
+  "caption": "Four hops and two layer drops reach the nearest vector without scanning the rest.",
+  "comparison": {
+    "scope": "RAM (vectors + graph)",
+    "cost": 2,
+    "needs": "Low-latency, high-recall default",
+    "best": "Memory cost; filtered search"
+  },
+  "diagram": {
+    "file": "diagrams/hnsw.svg"
+  },
+  "lesson": {
+    "file": "hnsw_index.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import hnswlib",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "index = hnswlib.Index(space=\"cosine\", dim=384)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "index.init_index(max_elements=5_000_000, M=16,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                 ef_construction=200, random_seed=42)",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "# Each added vector draws a random top layer: P(layer ≥ 1) = 1/M",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "index.add_items(vectors, ids, num_threads=8)",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "index.set_ef(80)                  # ef_search: candidate list at query time",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "labels, distances = index.knn_query(query_vec, k=10)",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Memory: vectors 5M × 384 × 4 B ≈ 7.7 GB; bottom-layer links 5M × 32 × 4 B ≈ 0.64 GB",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "for ef in (40, 80, 160):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    index.set_ef(ef)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    got, _ = index.knn_query(sample_queries, k=10)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(ef, recall_at_10(got, exact_ids))",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Set the graph parameters",
+        "text": "M = 16 links per node on the upper layers and 32 on the bottom. ef_construction = 200 sets how widely each insert searches for neighbours."
+      },
+      {
+        "title": "Give each node a layer",
+        "text": "Each insert draws a random top layer. With M = 16, about 1 node in 16 reaches layer 1 and 1 in 256 reaches layer 2, so upper layers are sparse."
+      },
+      {
+        "title": "Link each node to close neighbours",
+        "text": "On every layer it belongs to, a new node links to close nodes found by an ef_construction-wide search. The sparse top layer ends up with long links."
+      },
+      {
+        "title": "Search greedily from the top",
+        "text": "The query enters at the top layer's entry point and hops to whichever neighbour is closer, until none is, then drops a layer and repeats."
+      },
+      {
+        "title": "Widen the search on layer 0",
+        "text": "The bottom layer keeps a list of ef_search candidates instead of one, which recovers neighbours a purely greedy walk would miss. The best k are returned."
+      },
+      {
+        "title": "Tune ef_search and budget memory",
+        "text": "Recall rises with ef_search and needs no rebuild. For 5 million 384-dim vectors, links add about 0.64 GB on top of 7.7 GB of vectors."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect x=\"6\" y=\"41\" width=\"348\" height=\"34\" rx=\"6\" class=\"bx soft\"/><text class=\"sb\" x=\"10\" y=\"37\" style=\"text-anchor:start\">layer 2</text></g><g class=\"a\" style=\"--d:0.12s\"><rect x=\"6\" y=\"99\" width=\"348\" height=\"34\" rx=\"6\" class=\"bx soft\"/><text class=\"sb\" x=\"10\" y=\"95\" style=\"text-anchor:start\">layer 1</text></g><g class=\"a\" style=\"--d:0.24s\"><rect x=\"6\" y=\"157\" width=\"348\" height=\"34\" rx=\"6\" class=\"bx soft\"/><text class=\"sb\" x=\"10\" y=\"153\" style=\"text-anchor:start\">layer 0</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"6\" y=\"2\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"61\" y=\"17\" text-anchor=\"middle\">M = 16</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx acc\" x=\"122\" y=\"2\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"207\" y=\"17\" text-anchor=\"middle\">ef_construction = 200</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<circle cx=\"54\" cy=\"58\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0s\"/><circle cx=\"276\" cy=\"58\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0s\"/><text class=\"sb a\" x=\"56\" y=\"37\" style=\"text-anchor:start;--d:0.4s\">· ≈ 1 in 256 nodes</text><circle cx=\"54\" cy=\"116\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.15s\"/><circle cx=\"140\" cy=\"116\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.15s\"/><circle cx=\"222\" cy=\"116\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.15s\"/><circle cx=\"276\" cy=\"116\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.15s\"/><circle cx=\"334\" cy=\"116\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.15s\"/><text class=\"sb a\" x=\"56\" y=\"95\" style=\"text-anchor:start;--d:0.4s\">· ≈ 1 in 16 nodes</text><circle cx=\"24\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"54\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"84\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"112\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"140\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"168\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"196\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"222\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"248\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"276\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"304\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle cx=\"334\" cy=\"174\" r=\"5\" class=\"a\" style=\"fill:var(--rule-strong);--d:0.3s\"/><text class=\"sb a\" x=\"56\" y=\"153\" style=\"text-anchor:start;--d:0.4s\">· every node</text><path class=\"ln a\" d=\"M54 64V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M276 64V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M54 64V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M140 122V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M222 122V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M276 64V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/><path class=\"ln a\" d=\"M334 122V168\" style=\"stroke-dasharray:2 3;stroke-width:1;--d:0.5s\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<line x1=\"24\" x2=\"54\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"54\" x2=\"84\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"84\" x2=\"112\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"112\" x2=\"140\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"140\" x2=\"168\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"168\" x2=\"196\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"196\" x2=\"222\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"222\" x2=\"248\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"248\" x2=\"276\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"276\" x2=\"304\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"304\" x2=\"334\" y1=\"174\" y2=\"174\" class=\"ln a\" style=\"--d:0s;stroke:var(--rule-strong)\"/><line x1=\"54\" x2=\"140\" y1=\"116\" y2=\"116\" class=\"ln a\" style=\"--d:0.12s;stroke:var(--rule-strong)\"/><line x1=\"140\" x2=\"222\" y1=\"116\" y2=\"116\" class=\"ln a\" style=\"--d:0.12s;stroke:var(--rule-strong)\"/><line x1=\"222\" x2=\"276\" y1=\"116\" y2=\"116\" class=\"ln a\" style=\"--d:0.12s;stroke:var(--rule-strong)\"/><line x1=\"276\" x2=\"334\" y1=\"116\" y2=\"116\" class=\"ln a\" style=\"--d:0.12s;stroke:var(--rule-strong)\"/><line x1=\"54\" x2=\"276\" y1=\"58\" y2=\"58\" class=\"ln a\" style=\"--d:0.24s;stroke:var(--rule-strong)\"/><path class=\"ln a\" d=\"M54 174Q83 188 112 174\" style=\"--d:0.3s\"/><path class=\"ln a\" d=\"M140 174Q168 188 196 174\" style=\"--d:0.35s\"/><path class=\"ln a\" d=\"M222 174Q249 188 276 174\" style=\"--d:0.4s\"/><path class=\"ln a\" d=\"M276 174Q305 188 334 174\" style=\"--d:0.45s\"/>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path d=\"M256 138 l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z\" style=\"fill:var(--fail)\"/></g><text class=\"tag-t fail a\" x=\"236\" y=\"150\" style=\"--d:0s\">query</text><path class=\"ln draw acc\" pathLength=\"1\" d=\"M54 58 L276 58\" style=\"stroke-width:2.6;--d:0.2s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M276 58 L276 116\" style=\"stroke-width:2.6;--d:0.55s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M276 116 L276 174\" style=\"stroke-width:2.6;--d:0.85s\"/><circle cx=\"54\" cy=\"58\" r=\"6\" class=\"a\" style=\"fill:var(--accent);--d:0.1s\"/><text class=\"tag-t a\" x=\"54\" y=\"84\" style=\"--d:0.15s\">entry point</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<circle cx=\"222\" cy=\"174\" r=\"9\" class=\"a\" style=\"fill:none;stroke:var(--accent);stroke-width:1.4;--d:0s\"/><circle cx=\"248\" cy=\"174\" r=\"9\" class=\"a\" style=\"fill:none;stroke:var(--accent);stroke-width:1.4;--d:0.08s\"/><circle cx=\"276\" cy=\"174\" r=\"9\" class=\"a\" style=\"fill:none;stroke:var(--accent);stroke-width:1.4;--d:0.16s\"/><circle cx=\"304\" cy=\"174\" r=\"9\" class=\"a\" style=\"fill:none;stroke:var(--accent);stroke-width:1.4;--d:0.24s\"/><path class=\"ln draw acc\" pathLength=\"1\" d=\"M276 174 L248 174\" style=\"stroke-width:2.6;--d:0.3s\"/><circle cx=\"248\" cy=\"174\" r=\"6\" class=\"a\" style=\"fill:var(--pass);--d:0.5s\"/><g class=\"a\" style=\"--d:0.6s\"><rect class=\"bx acc\" x=\"6\" y=\"200\" width=\"348\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"214\" text-anchor=\"middle\">layer 0: 80 candidates (ef_search) → best 10</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"6\" y=\"226\" width=\"348\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"240\" text-anchor=\"middle\">ef 40 → 0.91 · ef 80 → 0.96 · ef 160 → 0.98 recall</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "High recall at low latency; the default in most vector databases",
+      "No training step, and it handles continuous inserts",
+      "ef_search tunes recall per query with no rebuild",
+      "Mature, widely benchmarked implementations"
+    ],
+    "cons": [
+      "Memory-hungry: vectors and links must sit in RAM",
+      "Slower builds and inserts than IVF",
+      "Deletes and heavy updates degrade the graph over time",
+      "Restrictive filters can cut paths and lower recall"
+    ],
+    "avoidWhen": [
+      "Vectors exceed the RAM you can afford (DiskANN or quantization)",
+      "Write-heavy workloads with constant deletes and no time to rebuild"
+    ],
+    "tools": [
+      {
+        "name": "hnswlib",
+        "type": "Open source",
+        "what": "Fast in-process HNSW for Python and C++",
+        "url": "https://github.com/nmslib/hnswlib"
+      },
+      {
+        "name": "pgvector",
+        "type": "Open source · Postgres extension",
+        "what": "HNSW indexes in Postgres with SQL filters",
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "name": "FAISS",
+        "type": "Open source · Meta",
+        "what": "IndexHNSWFlat and HNSW over quantized vectors",
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "name": "Qdrant",
+        "type": "Open source · managed cloud",
+        "what": "HNSW with filter-aware graph traversal",
+        "url": "https://qdrant.tech"
+      },
+      {
+        "name": "Weaviate",
+        "type": "Open source · managed cloud",
+        "what": "HNSW by default, with compression options",
+        "url": "https://weaviate.io"
+      },
+      {
+        "name": "Elasticsearch",
+        "type": "Source-available · managed cloud",
+        "what": "HNSW dense_vector fields next to BM25",
+        "url": "https://www.elastic.co/elasticsearch"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A stockbroking app offers search-as-you-type over research notes and must answer in milliseconds. Below is a real HNSW index built over 1,000 clustered vectors, tested with 40 queries against exact search. You set the build parameters and the query-time candidate list, and can add a tenant filter.",
+    "controls": [
+      "Choose M and ef_construction; changing either rebuilds the graph.",
+      "Drag ef_search, the query-time candidate list; no rebuild needed.",
+      "Tick the filter to keep only one tenant's vectors (10%) after the graph search."
+    ],
+    "outputs": [
+      {
+        "name": "Recall@10",
+        "meaning": "Share of the true 10 nearest neighbours returned (among filtered vectors when the filter is on)."
+      },
+      {
+        "name": "Distance computations",
+        "meaning": "Vectors compared per query ÷ 1,000. Tiny at millions of vectors; noticeable at this size."
+      },
+      {
+        "name": "Results returned",
+        "meaning": "How many of the 10 requested results survive the filter."
+      },
+      {
+        "name": "Nodes per layer",
+        "meaning": "How many nodes reach each layer; about 1 in M per step up."
+      },
+      {
+        "name": "Link memory at 5M vectors",
+        "meaning": "The extra RAM for bottom-layer links at production scale."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Defaults, low ef",
+        "expect": "M 16, ef_search 10: 94% recall, comparing 16% of vectors. Layers hold 1,000, 72 and 4 nodes."
+      },
+      {
+        "k": "tuned",
+        "name": "Tuned ef_search",
+        "expect": "Same graph, ef_search 40: 99% recall, comparing 34% of vectors."
+      },
+      {
+        "k": "lowm",
+        "name": "M = 4",
+        "expect": "A sparsely linked graph: 92% recall at ef_search 40, and 6 layers instead of 3."
+      },
+      {
+        "k": "filter",
+        "name": "Restrictive filter",
+        "expect": "Filtering after the search at ef_search 40: only 4.4 of 10 results come back, and recall is 44%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "efonly",
+        "text": "Keep M = 16 and ef_construction = 64, and reach at least 99% recall.",
+        "hint": "Only ef_search needs to change. Try 40."
+      },
+      {
+        "k": "lowm",
+        "text": "With M = 4, reach at least 95% recall.",
+        "hint": "A poorly linked graph needs a bigger candidate list: try ef_search 80."
+      },
+      {
+        "k": "filter",
+        "text": "With the tenant filter on, get 10 results back and at least 99% recall.",
+        "hint": "Only 1 in 10 candidates survives, so oversample: ef_search 160 or more."
+      }
+    ],
+    "tools": [
+      {
+        "n": "hnswlib",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "A small, fast in-process HNSW library for Python and C++.",
+        "ex": "Build an index of 2 million product vectors in a batch job and load it into each API worker.",
+        "pros": [
+          "Very fast and simple API",
+          "Supports incremental adds and marked deletes"
+        ],
+        "cons": [
+          "No persistence layer, filtering or replication",
+          "Everything must fit in RAM"
+        ],
+        "url": "https://github.com/nmslib/hnswlib"
+      },
+      {
+        "n": "pgvector",
+        "type": "Open source · Postgres extension",
+        "start": 3,
+        "prod": 3,
+        "best": "HNSW indexes in Postgres, with iterative index scans (0.8+) that help filtered queries.",
+        "ex": "SET hnsw.ef_search = 100; SELECT … ORDER BY embedding <=> $1 LIMIT 10 inside the app’s existing database.",
+        "pros": [
+          "SQL filters and joins",
+          "One database to back up and secure"
+        ],
+        "cons": [
+          "Index builds are memory-intensive",
+          "Large collections need a big Postgres instance"
+        ],
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "n": "Qdrant",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "A vector database with HNSW and filter-aware graph traversal over payload indexes.",
+        "ex": "Per-customer filters on 20 million support vectors without losing recall.",
+        "pros": [
+          "Strong filtered-search design",
+          "Quantization and on-disk options"
+        ],
+        "cons": [
+          "Another service to operate",
+          "Payload indexes must be planned"
+        ],
+        "url": "https://qdrant.tech"
+      },
+      {
+        "n": "Weaviate",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "HNSW by default, with hybrid search, modules for embedding and several compression options.",
+        "ex": "A multi-tenant knowledge base with one HNSW index per tenant.",
+        "pros": [
+          "Batteries included: hybrid, multi-tenancy",
+          "Good developer experience"
+        ],
+        "cons": [
+          "Memory planning needed at scale",
+          "Some features are cloud-first"
+        ],
+        "url": "https://weaviate.io"
+      },
+      {
+        "n": "Elasticsearch",
+        "type": "Source-available · managed cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "HNSW on dense_vector fields, next to BM25 and aggregations.",
+        "ex": "Add kNN search to an existing product search cluster and fuse it with BM25.",
+        "pros": [
+          "Keyword and vector in one engine",
+          "Mature operations and security"
+        ],
+        "cons": [
+          "Heavier to run than a single-purpose store",
+          "Tuning across shards and segments"
+        ],
+        "url": "https://www.elastic.co/elasticsearch"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "In-process prototype",
+        "tool": "hnswlib"
+      },
+      {
+        "need": "On Postgres already",
+        "tool": "pgvector HNSW"
+      },
+      {
+        "need": "Filtered, multi-tenant production",
+        "tool": "Qdrant or Weaviate"
+      }
+    ],
+    "goals": [
+      "Explain how HNSW descends layers and why ef_search matters",
+      "Tune ef_search to a recall target before touching M",
+      "Estimate HNSW memory from vector count, dimensions and M"
+    ]
+  },
+  "practice": {
+    "scenario": "A trading app's search-as-you-type must answer in under 50 ms. An HNSW index over 5 million vectors held in RAM, with ef_search raised from 40 to 80, meets both the latency and the recall target.",
+    "industries": [
+      {
+        "industry": "Consumer apps",
+        "use": "Search-as-you-type and recommendations"
+      },
+      {
+        "industry": "Fraud & security",
+        "use": "Find similar transactions or logins in real time"
+      },
+      {
+        "industry": "RAG platforms",
+        "use": "The default index in most vector databases"
+      }
+    ],
+    "analogy": "Travelling by flight, then train, then auto-rickshaw: long hops to the right city, then shorter hops to the exact street.",
+    "library": {
+      "name": "pgvector (HNSW) or hnswlib",
+      "what": "Same algorithm in SQL or in-process Python. Qdrant, Weaviate and Milvus use HNSW by default too.",
+      "install": "pip install hnswlib"
+    },
+    "samples": [
+      {
+        "file": "hnsw.sql",
+        "language": "sql",
+        "code": "CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops)\n  WITH (m = 16, ef_construction = 64);   -- pgvector defaults\n\nSET hnsw.ef_search = 80;                 -- default 40; higher = better recall\n\nSELECT id, body\nFROM chunks\nORDER BY embedding <=> $1\nLIMIT 10;"
+      },
+      {
+        "file": "hnswlib.py",
+        "language": "python",
+        "code": "import hnswlib\n\nindex = hnswlib.Index(space=\"cosine\", dim=384)\nindex.init_index(max_elements=5_000_000, M=16, ef_construction=200)\nindex.add_items(vectors, ids)            # vectors: (n, 384) float32\n\nindex.set_ef(80)                         # query-time recall / latency dial\nlabels, distances = index.knn_query(query_vec, k=10)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "1 million vectors with M = 16. The bottom layer keeps up to 2 × M = 32 links per node at 4 bytes each. Estimate the extra memory for those links, in MB.",
+    "answer": "32 links × 4 B × 1,000,000 nodes = 128 MB, on top of the raw vectors (1.5 GB at 384 float32 dims). Raising M raises this directly.",
+    "expected": {
+      "value": 128,
+      "tolerance": 1,
+      "label": "MB ="
+    },
+    "interview": [
+      {
+        "question": "Explain how HNSW search works.",
+        "answer": "Start at an entry point on the sparse top layer, greedily move to neighbours closer to the query, and when none is closer, drop a layer and repeat. The bottom layer holds every vector and is searched with a candidate list of size ef_search."
+      },
+      {
+        "question": "What do M, ef_construction and ef_search trade off?",
+        "answer": "M sets links per node (recall and memory), ef_construction sets the build-time candidate list (graph quality versus build time), and ef_search sets the query-time list (recall versus latency). Only ef_search changes without a rebuild."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Raising M to fix recall at query time",
+        "fix": "Tune ef_search first; M needs a rebuild"
+      },
+      {
+        "mistake": "Testing recall without your real filters",
+        "fix": "Benchmark with the filters production uses"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "hn01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "An HNSW index gives recall@10 of 0.89 against a 0.95 target, and latency has headroom. What do you change first?",
+      "options": [
+        "Raise M and rebuild",
+        "Raise ef_search",
+        "Lower ef_construction",
+        "Switch to IVFFlat"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "ef_search is the query-time dial and needs no rebuild."
+    },
+    {
+      "id": "hn02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank indexes 10 million 768-dimension float32 vectors with HNSW. How much RAM do the raw vectors need?",
+      "options": [
+        "About 7.7 GB",
+        "About 3.1 GB",
+        "About 30.7 GB",
+        "About 61 GB"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "768 × 4 B = 3,072 B per vector, and 3,072 B × 10 million ≈ 30.7 GB."
+    },
+    {
+      "id": "hn03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The same 10 million vectors use M = 16, so the bottom layer keeps up to 32 links per node at 4 bytes each. How much memory do those links add?",
+      "options": [
+        "About 1.28 GB",
+        "About 0.64 GB",
+        "About 12.8 GB",
+        "About 5.1 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "32 × 4 B = 128 B per node, and 128 B × 10 million = 1.28 GB."
+    },
+    {
+      "id": "hn04",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which of these changes require rebuilding a pgvector HNSW index? Select all that apply.",
+      "options": [
+        "Changing m",
+        "Changing ef_construction",
+        "Changing hnsw.ef_search",
+        "Switching from vector_l2_ops to vector_cosine_ops"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "m, ef_construction and the operator class are fixed at build time. ef_search is set per query or session."
+    },
+    {
+      "id": "hn05",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "With M = 16, about what share of nodes reaches layer 2?",
+      "options": [
+        "About 1 in 32",
+        "About 1 in 256",
+        "About 1 in 16",
+        "About 1 in 4,096"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each layer up keeps about 1 in M nodes, so layer 2 has about 1 in 16 × 16 = 256."
+    },
+    {
+      "id": "hn06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What are pgvector’s default HNSW settings?",
+      "options": [
+        "m 32, ef_construction 200, ef_search 100",
+        "m 8, ef_construction 40, ef_search 10",
+        "m 16, ef_construction 64, ef_search 40",
+        "m 16, ef_construction 100, ef_search 64"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "pgvector defaults to m = 16, ef_construction = 64 and hnsw.ef_search = 40."
+    },
+    {
+      "id": "hn07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Call-transcript embeddings arrive all day, and the topics shift from month to month. Why does HNSW suit this better than IVF?",
+      "options": [
+        "It uses less memory",
+        "It builds faster",
+        "It needs no training step; new vectors are linked in as they arrive",
+        "It keeps vectors on SSD"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "IVF depends on centroids learned at build time. HNSW inserts need no training, so drift does not stale the index."
+    },
+    {
+      "id": "hn08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims search filters to one branch (0.5% of rows) after the HNSW search, and returns 2 results instead of 10. What is the best fix?",
+      "options": [
+        "Filter-aware search or iterative scans, or partitioning by branch",
+        "Lower ef_search",
+        "Lower M",
+        "Switch to Euclidean distance"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Post-filtering throws away almost every candidate. Filter during the search, scan iteratively, or partition by the filter."
+    },
+    {
+      "id": "hn09",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which of these increase the memory an HNSW index needs? Select all that apply.",
+      "options": [
+        "Raising M",
+        "Adding more vectors",
+        "Raising ef_search",
+        "Using higher-dimension embeddings"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Links grow with M and node count, and vectors grow with dimensions. ef_search only affects per-query work."
+    },
+    {
+      "id": "hn10",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which of these are known weaknesses of HNSW? Select all that apply.",
+      "options": [
+        "Vectors and links must sit in RAM",
+        "Heavy deletes and updates degrade the graph",
+        "Restrictive filters can lower recall",
+        "It needs k-means training before use"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Memory, graph decay under churn and filtered search are the classic problems. HNSW has no training step."
+    },
+    {
+      "id": "hn11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An HNSW search over 5 million fare-rule vectors compares about 3,000 vectors per query. What share of the index is that?",
+      "options": [
+        "0.6%",
+        "0.06%",
+        "6%",
+        "0.006%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 ÷ 5,000,000 = 0.0006, or 0.06%."
+    },
+    {
+      "id": "hn12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Measurements: ef_search 40 gives recall 0.91 at 2.1 ms; 80 gives 0.96 at 3.4 ms; 160 gives 0.98 at 6.2 ms. The target is recall ≥ 0.95 with p95 under 5 ms. Which setting?",
+      "options": [
+        "40",
+        "160",
+        "Rebuild with M = 64",
+        "80"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Only ef_search = 80 meets both the recall and the latency target."
+    },
+    {
+      "id": "hn13",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which practices make an HNSW benchmark trustworthy before launch? Select all that apply.",
+      "options": [
+        "Measure recall against exact search on real queries",
+        "Include the filters production uses",
+        "Measure p95 latency under concurrent load",
+        "Test on random vectors from a different dataset"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Real queries, real filters and realistic load reflect production. Random vectors hide how your data clusters."
+    },
+    {
+      "id": "hn14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What happens when ef_construction is raised from 64 to 200?",
+      "options": [
+        "A better-connected graph and a slower build",
+        "Faster queries at the same ef_search, with no other cost",
+        "Less memory per node",
+        "Lower recall"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A wider build-time search finds better neighbours for each insert, at the cost of build time."
+    },
+    {
+      "id": "hn15",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A legal archive holds 2 million 1,536-dimension float32 vectors in HNSW with M = 16 (32 bottom-layer links of 4 B each). About how much RAM do vectors plus links need?",
+      "options": [
+        "About 3.1 GB",
+        "About 12.5 GB",
+        "About 25 GB",
+        "About 6.4 GB"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Vectors: 2 million × 6,144 B ≈ 12.29 GB. Links: 2 million × 128 B ≈ 0.26 GB. Total ≈ 12.5 GB."
+    },
+    {
+      "id": "hn16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which pgvector pairing lets an HNSW index serve a cosine-distance query?",
+      "options": [
+        "vector_l2_ops with <=>",
+        "vector_cosine_ops with <=>",
+        "vector_ip_ops with <->",
+        "Any operator class works with any operator"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The index operator class must match the ORDER BY operator: <=> is cosine distance and needs vector_cosine_ops."
+    },
+    {
+      "id": "hn17",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A fraud team studies how an HNSW query runs. Which statements are correct? Select all that apply.",
+      "options": [
+        "The search enters at the top layer",
+        "It moves greedily to closer neighbours",
+        "It drops a layer when no neighbour is closer",
+        "It scans every vector on layer 0"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The bottom layer is explored with an ef_search-sized candidate list, not scanned in full."
+    },
+    {
+      "id": "hn18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer has 400 million 768-dimension vectors (about 1.23 TB) and a server with 512 GB of RAM. What approach fits?",
+      "options": [
+        "HNSW with M = 64",
+        "Raise ef_search",
+        "DiskANN, or heavy quantization, rather than full vectors in RAM",
+        "IVFFlat with all vectors in RAM"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "400 million × 3,072 B ≈ 1.23 TB will not fit in 512 GB, so the full vectors must leave RAM or be compressed."
+    },
+    {
+      "id": "hn19",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "With M = 4, a graph needs a much larger ef_search to reach the same recall. Why?",
+      "options": [
+        "Each node has few links, so greedy walks get stuck more easily",
+        "Vectors are stored at lower precision",
+        "ef_search is ignored when M is small",
+        "The graph uses a different distance metric"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A poorly connected graph offers fewer routes to the query, so the search has to explore more candidates."
+    },
+    {
+      "id": "hn20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A Python service holds 2 million vectors in process and needs HNSW without a database. Which tool fits?",
+      "options": [
+        "pgvectorscale",
+        "Elasticsearch",
+        "hnswlib",
+        "Weaviate Query Agent"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "hnswlib is a fast in-process HNSW library for Python and C++."
+    }
+  ]
+}

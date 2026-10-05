@@ -1,0 +1,273 @@
+{
+  "slug": "embeddings",
+  "number": 4,
+  "techniqueOrder": [
+    "semantic",
+    "bm25",
+    "multimodal",
+    "contrastive",
+    "dimred",
+    "multiling",
+    "lateint"
+  ],
+  "glossary": [
+    {
+      "term": "embedding",
+      "definition": "A list of numbers representing text or an image so that similar meanings get nearby vectors."
+    },
+    {
+      "term": "cosine similarity",
+      "definition": "The cosine of the angle between two vectors: 1 means same direction, 0 unrelated."
+    },
+    {
+      "term": "chunk",
+      "definition": "A passage a document is split into before embedding."
+    },
+    {
+      "term": "bi-encoder",
+      "definition": "A model that embeds query and document separately; fast because document vectors are precomputed."
+    },
+    {
+      "term": "cross-encoder",
+      "definition": "A model that reads query and document together to score relevance; accurate but slow."
+    },
+    {
+      "term": "IDF",
+      "definition": "Inverse document frequency: rarer terms get more weight in keyword ranking."
+    },
+    {
+      "term": "BM25",
+      "definition": "A keyword ranking function using term frequency, IDF and document length."
+    },
+    {
+      "term": "HyDE",
+      "definition": "Hypothetical Document Embeddings: embed an LLM-written sample answer instead of the question."
+    },
+    {
+      "term": "CLIP",
+      "definition": "A model trained on image–caption pairs so text and images share one vector space."
+    },
+    {
+      "term": "hard negative",
+      "definition": "A wrong result that looks very like the right one; valuable for training."
+    },
+    {
+      "term": "Matryoshka",
+      "definition": "Embeddings trained so the first dimensions hold the most information, allowing truncation."
+    },
+    {
+      "term": "quantization",
+      "definition": "Storing numbers in fewer bits, such as float32 → int8 or 1 bit, to save memory."
+    },
+    {
+      "term": "recall@k",
+      "definition": "Share of relevant items that appear in the top k results."
+    },
+    {
+      "term": "MRR",
+      "definition": "Mean reciprocal rank: the average of 1 ÷ rank of the first relevant result."
+    },
+    {
+      "term": "transliteration",
+      "definition": "Rewriting text from one script to another without translating it, such as “paisa” to “पैसा”."
+    },
+    {
+      "term": "cross-lingual retrieval",
+      "definition": "Search where the query and the document are in different languages, such as a Hindi question finding an English article."
+    },
+    {
+      "term": "tokenizer fertility",
+      "definition": "The average number of tokens a tokenizer produces per word; it is usually higher for Devanagari than for English."
+    },
+    {
+      "term": "language slice",
+      "definition": "The part of a test set in one language, evaluated and reported on its own."
+    },
+    {
+      "term": "late interaction",
+      "definition": "Retrieval that keeps one vector per token and compares query and document tokens at search time."
+    },
+    {
+      "term": "MaxSim",
+      "definition": "The late-interaction score: for each query token take its highest similarity to any document token, then sum."
+    },
+    {
+      "term": "ColPali",
+      "definition": "A late-interaction model that embeds patches of page images, so documents can be searched without OCR."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Sentence-BERT (Reimers and Gurevych, 2019)",
+      "url": "https://arxiv.org/abs/1908.10084"
+    },
+    {
+      "id": "S2",
+      "title": "Dense Passage Retrieval (Karpukhin et al., 2020)",
+      "url": "https://arxiv.org/abs/2004.04906"
+    },
+    {
+      "id": "S3",
+      "title": "MTEB: Massive Text Embedding Benchmark (Muennighoff et al., 2022)",
+      "url": "https://arxiv.org/abs/2210.07316"
+    },
+    {
+      "id": "S4",
+      "title": "Elastic: Practical BM25, the algorithm and its variables",
+      "url": "https://www.elastic.co/blog/practical-bm25-part-2-the-bm25-algorithm-and-its-variables"
+    },
+    {
+      "id": "S5",
+      "title": "Reciprocal rank fusion (Cormack, Clarke and Büttcher, 2009)",
+      "url": "https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf"
+    },
+    {
+      "id": "S6",
+      "title": "HyDE: Precise zero-shot dense retrieval (Gao et al., 2022)",
+      "url": "https://arxiv.org/abs/2212.10496"
+    },
+    {
+      "id": "S7",
+      "title": "Query rewriting for retrieval-augmented LLMs (Ma et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.14283"
+    },
+    {
+      "id": "S8",
+      "title": "Anthropic: Introducing Contextual Retrieval",
+      "url": "https://www.anthropic.com/news/contextual-retrieval"
+    },
+    {
+      "id": "S9",
+      "title": "CLIP: Learning transferable visual models from natural language supervision (Radford et al., 2021)",
+      "url": "https://arxiv.org/abs/2103.00020"
+    },
+    {
+      "id": "S10",
+      "title": "ColPali: Efficient document retrieval with vision language models (Faysse et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.01449"
+    },
+    {
+      "id": "S11",
+      "title": "Representation learning with contrastive predictive coding, InfoNCE (van den Oord et al., 2018)",
+      "url": "https://arxiv.org/abs/1807.03748"
+    },
+    {
+      "id": "S12",
+      "title": "E5: Text embeddings by weakly-supervised contrastive pre-training (Wang et al., 2022)",
+      "url": "https://arxiv.org/abs/2212.03533"
+    },
+    {
+      "id": "S13",
+      "title": "Sentence Transformers: training overview",
+      "url": "https://sbert.net/docs/sentence_transformer/training_overview.html"
+    },
+    {
+      "id": "S14",
+      "title": "Matryoshka representation learning (Kusupati et al., 2022)",
+      "url": "https://arxiv.org/abs/2205.13147"
+    },
+    {
+      "id": "S15",
+      "title": "Hugging Face: Binary and scalar embedding quantization",
+      "url": "https://huggingface.co/blog/embedding-quantization"
+    },
+    {
+      "id": "S16",
+      "title": "Qdrant: Quantization guide",
+      "url": "https://qdrant.tech/documentation/guides/quantization/"
+    },
+    {
+      "id": "S17",
+      "title": "SPLADE: Sparse lexical and expansion model (Formal et al., 2021)",
+      "url": "https://arxiv.org/abs/2107.05720"
+    },
+    {
+      "id": "S18",
+      "title": "Cohere: Rerank overview",
+      "url": "https://docs.cohere.com/docs/rerank-overview"
+    },
+    {
+      "id": "S19",
+      "title": "BGE M3-Embedding: multi-lingual, multi-functionality, multi-granularity text embeddings (Chen et al., 2024)",
+      "url": "https://arxiv.org/abs/2402.03216"
+    },
+    {
+      "id": "S20",
+      "title": "Multilingual E5 text embeddings: a technical report (Wang et al., 2024)",
+      "url": "https://arxiv.org/abs/2402.05672"
+    },
+    {
+      "id": "S21",
+      "title": "MIRACL: a multilingual retrieval dataset covering 18 diverse languages (Zhang et al., 2022)",
+      "url": "https://arxiv.org/abs/2210.09984"
+    },
+    {
+      "id": "S22",
+      "title": "OpenAI: New embedding models and API updates",
+      "url": "https://openai.com/index/new-embedding-models-and-api-updates/"
+    },
+    {
+      "id": "S23",
+      "title": "Aksharantar: open Indic-language transliteration datasets and models (Madhani et al., 2022)",
+      "url": "https://arxiv.org/abs/2205.03018"
+    },
+    {
+      "id": "S24",
+      "title": "Unicode Standard Annex #15: Unicode normalization forms",
+      "url": "https://unicode.org/reports/tr15/"
+    },
+    {
+      "id": "S25",
+      "title": "ColBERT: Efficient and effective passage search via late interaction (Khattab and Zaharia, 2020)",
+      "url": "https://arxiv.org/abs/2004.12832"
+    },
+    {
+      "id": "S26",
+      "title": "ColPali: Efficient document retrieval with vision language models (Faysse et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.01449"
+    },
+    {
+      "id": "S27",
+      "title": "RAGatouille on GitHub",
+      "url": "https://github.com/AnswerDotAI/RAGatouille"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Users ask in their own words, not our terminology",
+      "techniqueId": "semantic",
+      "advice": "Embed chunks and queries with a dense model and search by similarity."
+    },
+    {
+      "symptom": "Queries include error codes, SKUs or names",
+      "techniqueId": "bm25",
+      "advice": "Keep a BM25 index so exact rare terms rank first, ideally fused with vectors."
+    },
+    {
+      "symptom": "We need to search images, slides or scans",
+      "techniqueId": "multimodal",
+      "advice": "Use a multimodal model so text and images share one vector space."
+    },
+    {
+      "symptom": "Off-the-shelf embeddings miss our domain’s jargon",
+      "techniqueId": "contrastive",
+      "advice": "Fine-tune with contrastive pairs and hard negatives from your own data."
+    },
+    {
+      "symptom": "The vector index is too big or too slow",
+      "techniqueId": "dimred",
+      "advice": "Truncate or quantize vectors, then re-rank with full precision."
+    },
+    {
+      "symptom": "Customers write in Hindi or Hinglish and search misses them",
+      "techniqueId": "multiling",
+      "advice": "Use a multilingual embedding model, transliterate Roman Hindi, and measure recall for each language separately."
+    },
+    {
+      "symptom": "Scanned forms and tables are hard to search, or single vectors miss details",
+      "techniqueId": "lateint",
+      "advice": "Late interaction: ColBERT for text, ColPali for page images, with a compressed index."
+    }
+  ]
+}

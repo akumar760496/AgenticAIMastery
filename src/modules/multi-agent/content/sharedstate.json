@@ -1,0 +1,937 @@
+{
+  "id": "sharedstate",
+  "moduleSlug": "multi-agent",
+  "name": "Shared State vs Message Passing",
+  "shortName": "Shared state",
+  "question": "How do agents know what the others found?",
+  "summary": "Agents coordinate in one of two ways. They write to a common store, such as a blackboard, scratchpad or typed graph state, or they send each other structured messages. The design choices are who writes which fields, how concurrent writes merge, how much each agent reads, and whether every entry records who wrote it and from which source.",
+  "useCases": [
+    "Several agents contributing findings to one decision",
+    "Parallel writers that must not overwrite each other",
+    "Audited work where every claim needs a source"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Shared state",
+        "detail": "one typed store every agent can read (blackboard)"
+      },
+      {
+        "term": "Reducer",
+        "detail": "how updates merge; with none, a key is overwritten"
+      },
+      {
+        "term": "Message passing",
+        "detail": "typed messages sent to named recipients"
+      },
+      {
+        "term": "Read scope",
+        "detail": "each agent reads only the fields it needs"
+      },
+      {
+        "term": "Provenance",
+        "detail": "who wrote each entry and from which source"
+      },
+      {
+        "term": "A2A",
+        "detail": "an open protocol for messages between separate agent systems"
+      }
+    ]
+  },
+  "steps": [
+    "Type the state: findings, open questions, decisions",
+    "Give every multi-writer field a reducer such as operator.add",
+    "Scope reads so each agent loads only what it needs",
+    "Record the author and source on every entry"
+  ],
+  "pitfalls": [
+    "A key with no reducer loses parallel writes",
+    "Everyone reading everything multiplies tokens",
+    "Free-text chat buries findings and drops sources"
+  ],
+  "tools": [
+    "LangGraph",
+    "MetaGPT",
+    "A2A",
+    "Magentic-One",
+    "CrewAI task context"
+  ],
+  "remember": "Type it, reduce it, scope it, source it.",
+  "caption": "Illustrative: writers produce 4, 3 and 5 findings of about 0.75k tokens each.",
+  "comparison": {
+    "scope": "How findings are shared",
+    "cost": 2,
+    "needs": "A typed schema and reducers",
+    "best": "Lost writes or bloated reads"
+  },
+  "diagram": {
+    "file": "diagrams/sharedstate.svg"
+  },
+  "lesson": {
+    "file": "shipment_board.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import operator",
+        "steps": []
+      },
+      {
+        "text": "from dataclasses import dataclass",
+        "steps": []
+      },
+      {
+        "text": "from typing import Annotated, TypedDict",
+        "steps": []
+      },
+      {
+        "text": "from langgraph.graph import StateGraph, START, END",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Entry(TypedDict):",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "    text: str",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    agent: str",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    source: str",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Board(TypedDict):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    findings: Annotated[list[Entry], operator.add]    # append",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    questions: Annotated[list[str], operator.add]     # append",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    decision: str                                     # one writer",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def carrier(s: Board):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return {\"findings\": [Entry(text=\"Linehaul delayed 18 h\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            agent=\"carrier\", source=\"carrier API #A71\")]}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "def weather(s: Board):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return {\"findings\": [Entry(text=\"Rain alert, Nagpur\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            agent=\"weather\", source=\"IMD bulletin 14:00\")]}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "def dispatcher(s: Board):                    # reads findings only",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    risks = [f for f in s[\"findings\"] if f[\"agent\"] in (\"carrier\", \"weather\")]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return {\"decision\": \"reroute\" if len(risks) >= 2 else \"hold\"}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "g = StateGraph(Board)",
+        "steps": []
+      },
+      {
+        "text": "for name, fn in [(\"carrier\", carrier), (\"weather\", weather), (\"dispatcher\", dispatcher)]:",
+        "steps": []
+      },
+      {
+        "text": "    g.add_node(name, fn)",
+        "steps": []
+      },
+      {
+        "text": "g.add_edge(START, \"carrier\"); g.add_edge(START, \"weather\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "g.add_edge([\"carrier\", \"weather\"], \"dispatcher\")      # join",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "g.add_edge(\"dispatcher\", END)",
+        "steps": []
+      },
+      {
+        "text": "print(g.compile().invoke({\"findings\": [], \"questions\": []}))",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@dataclass",
+        "steps": []
+      },
+      {
+        "text": "class Msg:                           # the same flow as typed messages",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    sender: str; to: str; data: dict; source: str",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "note = Msg(\"carrier\", \"dispatcher\", {\"delay_h\": 18}, \"carrier API #A71\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Type the state",
+        "text": "The board is a typed dict with three fields: findings, open questions and the decision. Every finding is an Entry, not free text."
+      },
+      {
+        "title": "Choose a reducer per field",
+        "text": "findings and questions use operator.add, so parallel updates are appended. decision has one writer, so plain replacement is safe."
+      },
+      {
+        "title": "Fan out parallel writers",
+        "text": "The carrier and weather agents start together from START and each returns one finding. Without the reducer, LangGraph would reject the two same-step writes with InvalidUpdateError."
+      },
+      {
+        "title": "Scope reads",
+        "text": "The dispatcher reads only the findings it needs and writes only the decision. Smaller reads mean fewer tokens and less distraction."
+      },
+      {
+        "title": "Record provenance",
+        "text": "Every entry names the agent that wrote it and its source, so a reviewer can trace the reroute decision back to the carrier API and the IMD bulletin."
+      },
+      {
+        "title": "Contrast with messages",
+        "text": "The same flow can run as typed messages sent to a named recipient. Each agent then sees only what is addressed to it; protocols such as A2A standardise this across systems."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"110\" y=\"6\" width=\"140\" height=\"122\" rx=\"8\"/><text class=\"tl m\" x=\"180\" y=\"22\">Board (typed state)</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"120\" y=\"30\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"46\" text-anchor=\"middle\">findings · append</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx \" x=\"120\" y=\"62\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"78\" text-anchor=\"middle\">questions · append</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx \" x=\"120\" y=\"94\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"110\" text-anchor=\"middle\">decision · replace</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"120\" y=\"30\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"46\" text-anchor=\"middle\">findings · append</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"120\" y=\"62\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"78\" text-anchor=\"middle\">questions · append</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"120\" y=\"94\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"110\" text-anchor=\"middle\">decision · replace</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"24\" width=\"84\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"50\" y=\"43.5\">carrier</text></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx \" x=\"8\" y=\"78\" width=\"84\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"50\" y=\"97.5\">weather</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M92 39L118 41\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M92 93L118 47\" marker-end=\"url(#arr)\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"268\" y=\"56\" width=\"84\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"310\" y=\"77.5\">dispatcher</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln acc\" d=\"M242 44L266 64\" marker-end=\"url(#arrA)\"/></g><text class=\"sb a\" x=\"310\" y=\"106\" style=\"--d:0.3s\">reads findings only</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"140\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"155\" text-anchor=\"middle\">carrier · “Linehaul delayed 18 h” · carrier API #A71</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"8\" y=\"166\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"181\" text-anchor=\"middle\">weather · “Rain alert, Nagpur” · IMD bulletin 14:00</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"200\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"216\" text-anchor=\"middle\">Msg carrier → dispatcher · {delay_h: 18} · #A71</text></g><text class=\"tl m a\" x=\"180\" y=\"242\" style=\"--d:0.2s\">Each agent reads only what is sent to it</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Parallel findings are merged instead of lost",
+      "Typed fields make findings checkable and easy to read",
+      "Scoped reads keep each agent’s context small",
+      "Provenance makes every claim auditable"
+    ],
+    "cons": [
+      "A missing reducer silently loses writes, or raises errors",
+      "A shared board invites everyone to read everything",
+      "Schemas need design and versioning",
+      "Message passing needs routing and addressing"
+    ],
+    "avoidWhen": [
+      "One agent does all the work: its own state is enough",
+      "Agents never need each other’s findings"
+    ],
+    "tools": [
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Typed graph state with per-key reducers such as operator.add",
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "name": "MetaGPT",
+        "type": "Open source",
+        "what": "Role agents publish structured documents to a shared message pool",
+        "url": "https://github.com/FoundationAgents/MetaGPT"
+      },
+      {
+        "name": "A2A",
+        "type": "Open protocol (Linux Foundation)",
+        "what": "Agent Cards, Tasks, Messages, Parts and Artifacts between agent systems",
+        "url": "https://a2a-protocol.org/latest/specification/"
+      },
+      {
+        "name": "Magentic-One",
+        "type": "Research system (Microsoft)",
+        "what": "A shared task ledger and progress ledger kept by the orchestrator",
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html"
+      },
+      {
+        "name": "CrewAI task context",
+        "type": "Open source",
+        "what": "Passing selected task outputs as context to later tasks",
+        "url": "https://docs.crewai.com/en/concepts/processes"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "During a festive sale, up to six agents (carrier, warehouse, weather, customs, fleet and returns) assess each at-risk shipment in parallel. They produce 4, 3, 5, 4, 3 and 5 findings of about 0.75k tokens each, and every agent then reads what it needs to decide. The team can share through a typed board, a free-text group chat or typed messages to named agents.",
+    "controls": [
+      "Choose how agents share: a shared board, free-text chat or typed messages.",
+      "Set the number of parallel writers and, on the board, the reducer and read scope.",
+      "Turn agent and source fields on every entry on or off."
+    ],
+    "outputs": [
+      {
+        "name": "Findings lost",
+        "meaning": "Findings overwritten or buried and never picked up."
+      },
+      {
+        "name": "Tokens each agent reads",
+        "meaning": "What one agent loads, against reading every finding once."
+      },
+      {
+        "name": "Write conflicts",
+        "meaning": "Colliding writes or unresolved contradictions."
+      },
+      {
+        "name": "Provenance",
+        "meaning": "Entries that record which agent wrote them and from which source."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Board, no reducer",
+        "expect": "3 writers with no reducer: only the last writer’s 5 findings survive, so 7 of 12 are lost, with 2 colliding writes. Reads look small (3.8k against 9k) only because data is missing. Provenance 50%."
+      },
+      {
+        "k": "append",
+        "name": "Append reducer",
+        "expect": "4 writers with operator.add: nothing lost of 16, but every agent reads all 12k tokens. Provenance 50%."
+      },
+      {
+        "k": "chat",
+        "name": "Free-text chat",
+        "expect": "4 writers in a group chat: nothing is overwritten, but about 3 findings are buried, everyone reads 19.2k tokens of prose, 2 contradictions stay open, provenance 30%."
+      },
+      {
+        "k": "typed",
+        "name": "Typed messages",
+        "expect": "3 writers sending typed messages: nothing lost, each agent reads 6k against 9k, provenance 60% because sources are not recorded."
+      }
+    ],
+    "missions": [
+      {
+        "k": "nolost",
+        "text": "Lose 0 findings with 4 or more parallel writers.",
+        "hint": "Use the append reducer on the board, or typed messages."
+      },
+      {
+        "k": "half",
+        "text": "Without losing anything, halve the tokens each agent reads compared with reading every finding.",
+        "hint": "With 4 or more writers, scope reads to the fields each agent needs, or use typed messages."
+      },
+      {
+        "k": "prov",
+        "text": "Reach 100% provenance in typed-message mode.",
+        "hint": "Turn on agent and source fields."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Explicit graphs with typed state, reducers, parallel branches, checkpoints and interrupts.",
+        "ex": "Carrier, warehouse and weather nodes write to one typed board that a dispatcher node reads.",
+        "pros": [
+          "Precise control of state and flow",
+          "Persistence and human-in-the-loop"
+        ],
+        "cons": [
+          "More code than prompt-level frameworks",
+          "Graph design takes practice"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "n": "MetaGPT",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Role agents that publish structured documents to a shared message pool and subscribe by role.",
+        "ex": "A product manager agent publishes a requirements document that engineer agents subscribe to.",
+        "pros": [
+          "Structured artefacts instead of chat",
+          "Publish-subscribe cuts what each role reads"
+        ],
+        "cons": [
+          "Opinionated software-company workflow",
+          "Less general than a graph library"
+        ],
+        "url": "https://github.com/FoundationAgents/MetaGPT"
+      },
+      {
+        "n": "A2A protocol",
+        "type": "Open protocol · Linux Foundation",
+        "start": 2,
+        "prod": 3,
+        "best": "Messages, tasks and artefacts between separately built agent systems, discovered through Agent Cards.",
+        "ex": "A bank’s KYC agent sends a task to a vendor’s document-verification agent and receives an artefact back.",
+        "pros": [
+          "Vendor-neutral and cross-framework",
+          "Clear task lifecycle"
+        ],
+        "cons": [
+          "A protocol, not an orchestrator",
+          "Adds network and security work"
+        ],
+        "url": "https://a2a-protocol.org/latest/specification/"
+      },
+      {
+        "n": "Magentic-One",
+        "type": "Research system · Microsoft",
+        "start": 1,
+        "prod": 1,
+        "best": "Studying an orchestrator that keeps a shared task ledger and progress ledger for its team.",
+        "ex": "Read how the ledgers record facts, guesses and the plan, then compare with a typed board.",
+        "pros": [
+          "Explicit shared ledgers",
+          "Documented design"
+        ],
+        "cons": [
+          "Built on AutoGen, now in maintenance mode",
+          "A research system, not a product"
+        ],
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/magentic-one.html"
+      },
+      {
+        "n": "CrewAI task context",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Passing selected earlier task outputs as context to later tasks in a crew.",
+        "ex": "A pricing task receives only the competitor-research task’s output as context.",
+        "pros": [
+          "Simple scoping of what each task sees",
+          "No state schema to design"
+        ],
+        "cons": [
+          "Less control over merges",
+          "Provenance is up to you"
+        ],
+        "url": "https://docs.crewai.com/en/concepts/processes"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Parallel writers in one app",
+        "tool": "LangGraph with reducers"
+      },
+      {
+        "need": "Agents from different vendors",
+        "tool": "A2A"
+      },
+      {
+        "need": "Role-based document flow",
+        "tool": "MetaGPT"
+      }
+    ],
+    "goals": [
+      "Choose a reducer for each field of a shared state",
+      "Scope reads so each agent loads only what it needs",
+      "Record provenance for every finding"
+    ]
+  },
+  "practice": {
+    "scenario": "During a festive sale, a Bengaluru e-commerce logistics team runs three agents per at-risk shipment: carrier, warehouse and weather. All three write findings, each with its source, to one typed shipment-risk board. A dispatcher agent reads the board and decides whether to reroute, and parallel writes are merged with an append reducer so nothing is lost.",
+    "industries": [
+      {
+        "industry": "E-commerce logistics",
+        "use": "Carrier, warehouse and weather agents write to one shipment-risk board"
+      },
+      {
+        "industry": "Insurance claims",
+        "use": "Document, fraud and coverage agents share a typed claim file"
+      },
+      {
+        "industry": "Incident response",
+        "use": "Log, metrics and deploy agents post findings to one incident record"
+      }
+    ],
+    "analogy": "A hospital patient chart. Each specialist adds dated, signed notes to the same chart; nobody erases another’s entry, and each reads only the sections they need.",
+    "library": {
+      "name": "LangGraph",
+      "what": "Graph state is a typed dict; a reducer per key decides how updates merge, and parallel branches join before the next node runs.",
+      "install": "pip install langgraph"
+    },
+    "note": "In LangGraph, two parallel nodes writing the same key with no reducer raise InvalidUpdateError; sequential writes simply overwrite.",
+    "samples": [
+      {
+        "file": "shipment_board.py",
+        "language": "python",
+        "code": "import operator\nfrom typing import Annotated, TypedDict\nfrom langgraph.graph import StateGraph, START, END\n\nclass Finding(TypedDict):\n    agent: str\n    source: str\n    text: str\n\nclass Board(TypedDict):\n    awb: str\n    findings: Annotated[list[Finding], operator.add]   # append, never replace\n    decision: str\n\ndef carrier(s: Board):\n    return {\"findings\": [{\"agent\": \"carrier\", \"source\": \"carrier API\",\n                          \"text\": \"Linehaul delayed 18 h at Nagpur hub\"}]}\n\ndef warehouse(s: Board):\n    return {\"findings\": [{\"agent\": \"warehouse\", \"source\": \"WMS\",\n                          \"text\": \"Packed, awaiting pickup\"}]}\n\ndef weather(s: Board):\n    return {\"findings\": [{\"agent\": \"weather\", \"source\": \"IMD alert\",\n                          \"text\": \"Heavy rain warning, Vidarbha\"}]}\n\ndef dispatcher(s: Board):\n    risky = [f for f in s[\"findings\"] if f[\"agent\"] in (\"carrier\", \"weather\")]\n    return {\"decision\": \"reroute via Hyderabad\" if len(risky) >= 2 else \"hold\"}\n\ng = StateGraph(Board)\nfor name, fn in [(\"carrier\", carrier), (\"warehouse\", warehouse),\n                 (\"weather\", weather), (\"dispatcher\", dispatcher)]:\n    g.add_node(name, fn)\nfor name in (\"carrier\", \"warehouse\", \"weather\"):\n    g.add_edge(START, name)                      # fan out in parallel\ng.add_edge([\"carrier\", \"warehouse\", \"weather\"], \"dispatcher\")   # join\ng.add_edge(\"dispatcher\", END)\nprint(g.compile().invoke({\"awb\": \"BLR123\", \"findings\": []}))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Four agents each write 5 findings of 0.6k tokens to a shared board, and each agent then reads the board. How many tokens (in thousands) does each agent read if it reads everything?",
+    "answer": "4 × 5 = 20 findings × 0.6k = 12k tokens per agent. If each reads only the 2 fields it needs (say a quarter of the board), that falls to 3k.",
+    "expected": {
+      "value": 12,
+      "tolerance": 0.1,
+      "label": "tokens read per agent (k) ="
+    },
+    "interview": [
+      {
+        "question": "What happens in LangGraph when two parallel nodes write the same key?",
+        "answer": "If the key has no reducer, LangGraph raises InvalidUpdateError because it cannot pick one value; sequential writes simply overwrite. With a reducer such as operator.add, the updates are merged."
+      },
+      {
+        "question": "When would you choose message passing over a shared board?",
+        "answer": "When agents belong to separate systems or teams, when each should see only what is addressed to it, or when you need an auditable record of who told whom what. Protocols such as A2A standardise those messages across systems."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t leave a multi-writer field without a reducer.",
+        "fix": "Declare how updates merge, for example Annotated[list, operator.add]."
+      },
+      {
+        "mistake": "Don’t let every agent read everything.",
+        "fix": "Scope reads to the fields each agent needs, and record the author and source of every entry."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ss01",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Three parallel LangGraph nodes each return {\"findings\": [x]} into a key declared as findings: list[str]. What happens?",
+      "options": [
+        "All three are appended automatically",
+        "LangGraph raises InvalidUpdateError, because the key has no reducer and receives several values in one step",
+        "Only the first write is kept",
+        "The graph deadlocks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without a reducer LangGraph cannot choose between concurrent values for one key, so it rejects the update."
+    },
+    {
+      "id": "ss02",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "How do you fix that board so all three findings are kept?",
+      "options": [
+        "Run the nodes one after another",
+        "Declare findings: Annotated[list[str], operator.add]",
+        "Rename the key in each node",
+        "Increase the recursion limit"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "operator.add is a reducer that concatenates the updates, so parallel writes merge."
+    },
+    {
+      "id": "ss03",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "A claim file is shared by several agents. Which fields need a reducer? Select all that apply.",
+      "options": [
+        "Findings written by the document, fraud and coverage agents",
+        "Open questions that any agent may add",
+        "The final decision, written only by the adjudicator",
+        "The claim ID, set once at the start"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fields with several writers need a merge rule. Single-writer or write-once fields can use plain replacement."
+    },
+    {
+      "id": "ss04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Five agents each write 6 findings of about 0.5k tokens, and every agent then reads the whole board. How many tokens do the five agents read in total?",
+      "options": [
+        "15k",
+        "75k",
+        "30k",
+        "150k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The board holds 5 × 6 × 0.5k = 15k tokens; five agents each read it: 5 × 15k = 75k."
+    },
+    {
+      "id": "ss05",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "On the same board, each agent reads only the findings of the 2 writers it depends on. How many tokens do the five agents read in total?",
+      "options": [
+        "6k",
+        "30k",
+        "75k",
+        "12k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each reads 2 × 6 × 0.5k = 6k; five agents: 5 × 6k = 30k."
+    },
+    {
+      "id": "ss06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An AML team asks every agent to record its name and source on each finding. What does this buy?",
+      "options": [
+        "Fewer tokens",
+        "An audit trail: every statement in the note can be traced to who wrote it and where it came from",
+        "Faster models",
+        "Automatic conflict resolution"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Provenance makes findings auditable, which regulators and analysts need."
+    },
+    {
+      "id": "ss07",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Agents coordinate through a free-text group chat. What problems are likely? Select all that apply.",
+      "options": [
+        "Findings are buried in prose and missed",
+        "Sources are dropped or inconsistent",
+        "Every agent reads everything",
+        "Parallel writes are rejected with an error"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Free text keeps every message but buries findings, loses sources and makes everyone read everything. Rejected writes are a typed-state problem."
+    },
+    {
+      "id": "ss08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s KYC agent must discover what a vendor’s document-verification agent can do before sending it work over A2A. What does it read?",
+      "options": [
+        "The vendor’s Agent Card",
+        "The vendor’s system prompt",
+        "A shared LangGraph state",
+        "An AutoGen termination condition"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "In A2A, an Agent Card advertises an agent’s identity, capabilities and how to reach it."
+    },
+    {
+      "id": "ss09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In MetaGPT, how do role agents share work?",
+      "options": [
+        "Each role reads every chat message",
+        "Roles publish structured documents to a shared message pool and subscribe to what their role needs",
+        "A single agent does everything",
+        "Roles hand off the conversation one by one"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "MetaGPT uses a shared message pool with publish–subscribe by role, which scopes what each agent reads."
+    },
+    {
+      "id": "ss10",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A board replaces the findings list on every write. Three parallel writers produce 6, 4 and 5 findings, and the writer with 5 finishes last. How many findings are lost?",
+      "options": [
+        "5",
+        "10",
+        "0",
+        "15"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only the last write survives: 5 of 15 kept, so 10 are lost."
+    },
+    {
+      "id": "ss11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "When is typed message passing a better fit than a shared board? Select all that apply.",
+      "options": [
+        "The agents belong to different organisations or systems",
+        "You need a record of who sent what to whom",
+        "All agents live in one graph and feed one decision",
+        "Only one agent does all the work"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Messages suit separate systems and auditable exchanges. One graph feeding one decision is the board’s home ground; one agent needs neither."
+    },
+    {
+      "id": "ss12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "In LangGraph, a node updates a key that has no reducer, and no other node writes it in that step. What happens to the old value?",
+      "options": [
+        "It is appended to",
+        "It is overwritten",
+        "It is kept and the update ignored",
+        "An error is raised"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The default for a key without a reducer is to overwrite it with the new value."
+    },
+    {
+      "id": "ss13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A chat app’s LangGraph state uses add_messages for its messages key. What does that reducer do?",
+      "options": [
+        "Replaces the list each turn",
+        "Merges new messages into the list, updating any with the same ID",
+        "Deletes old messages",
+        "Sorts messages alphabetically"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "add_messages appends new messages and updates existing ones that share an ID."
+    },
+    {
+      "id": "ss14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claim file has 60 entries, and 48 of them name both the agent and the source. What is the provenance rate?",
+      "options": [
+        "48%",
+        "80%",
+        "75%",
+        "12%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "48 ÷ 60 = 0.8, or 80%."
+    },
+    {
+      "id": "ss15",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What did the 2025 blackboard multi-agent paper (Han et al.) report against static and dynamic multi-agent baselines?",
+      "options": [
+        "Lower accuracy but fewer tokens",
+        "The best average performance while spending fewer tokens",
+        "Higher accuracy at triple the tokens",
+        "No difference"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The authors report the best average performance across their datasets with fewer tokens than the baselines."
+    },
+    {
+      "id": "ss16",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A research team’s board holds prices, news, filings and analyst notes. Which read rules scope reads well? Select all that apply.",
+      "options": [
+        "The valuation agent reads only prices and filings",
+        "Each agent reads only the fields it needs",
+        "Every agent reads the full board to be safe",
+        "Writers re-read their own output on every step"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Scoped reads cut tokens and distraction. Reading everything, or re-reading one’s own output, wastes context."
+    },
+    {
+      "id": "ss17",
+      "kind": "single",
+      "industry": "Research",
+      "question": "What role does Magentic-One’s task ledger play?",
+      "options": [
+        "It stores the model’s weights",
+        "It is a shared record of facts, guesses and the plan that the orchestrator keeps up to date",
+        "It counts tokens for billing",
+        "It routes users to agents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The task ledger is an explicit shared record that the orchestrator uses to plan and replan."
+    },
+    {
+      "id": "ss18",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "The carrier agent reports an ETA of Friday; the warehouse agent reports Saturday. How should the board handle it?",
+      "options": [
+        "Keep whichever arrived last",
+        "Keep both, each with its agent, source and time, and resolve them by a stated rule or escalate",
+        "Delete both",
+        "Average the two dates"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With provenance on both entries, a rule (for example, trust the carrier’s scan data) or a person can resolve the conflict transparently."
+    },
+    {
+      "id": "ss19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "An incident board records findings from log, metrics and deploy agents. Which fields should each entry carry? Select all that apply.",
+      "options": [
+        "The agent that wrote it",
+        "The source it came from",
+        "A timestamp",
+        "The agent’s full system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Author, source and time make entries traceable and orderable. The system prompt adds tokens without helping anyone audit the finding."
+    },
+    {
+      "id": "ss20",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A board holds 40 findings of 0.8k tokens. The dispatcher’s read scope covers 25% of them. How many tokens does it read?",
+      "options": [
+        "32k",
+        "8k",
+        "24k",
+        "10k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40 × 0.8k = 32k; 25% of 32k = 8k."
+    }
+  ]
+}

@@ -1,0 +1,810 @@
+{
+  "id": "ftagent",
+  "moduleSlug": "fine-tuning",
+  "name": "Fine-Tuning for Tool Use and Agent Trajectories",
+  "shortName": "Agent fine-tuning",
+  "question": "Can a small model learn to use our tools as well as a big one?",
+  "summary": "General supervised fine-tuning teaches style and format; agent fine-tuning teaches a model to act. Each example is a whole trajectory: the user request, the assistant’s tool calls with arguments, the tool results and the final reply, in the model’s own chat and tool-call template. Trajectories come from production logs or from a strong teacher model run in a sandbox, and only those verified to have succeeded are kept. Loss is computed on assistant turns only, so the model learns to call tools rather than to invent tool results. The payoff is a small model that runs your agent loop at a fraction of the cost and latency, judged on end-to-end task success, not on text similarity. LoRA mechanics are covered by Supervised Fine-Tuning; learning from rewards by RLVR.",
+  "useCases": [
+    "Replacing a large model in a high-volume agent with a small one",
+    "Proprietary tools and schemas a general model keeps getting wrong",
+    "On-premise agents where a large hosted model is not allowed"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Trajectory format",
+        "detail": "the exact chat template and tool-call syntax the model will see in serving"
+      },
+      {
+        "term": "Success filter",
+        "detail": "keep only trajectories whose end state was verified correct"
+      },
+      {
+        "term": "Loss masking",
+        "detail": "train on assistant turns only; tool outputs and user turns are masked"
+      },
+      {
+        "term": "Data size",
+        "detail": "hundreds to a few thousand good trajectories often suffice with LoRA"
+      },
+      {
+        "term": "Task success",
+        "detail": "end-to-end success on held-out tasks in a sandbox"
+      },
+      {
+        "term": "Hallucinated tool results",
+        "detail": "model writes a tool output instead of calling the tool"
+      }
+    ]
+  },
+  "steps": [
+    "Define tasks and a sandbox with checkable end states",
+    "Collect trajectories from logs or a teacher model; keep verified successes",
+    "Fine-tune with LoRA on assistant turns only, in the serving chat template",
+    "Evaluate task success, tool-call validity and hallucinated results against the teacher"
+  ],
+  "pitfalls": [
+    "Training on unfiltered logs, so the model learns failed and looping runs",
+    "Computing loss on tool outputs, so the model learns to invent results",
+    "Training in one tool-call format and serving with another"
+  ],
+  "tools": [
+    "TRL SFTTrainer",
+    "Unsloth",
+    "Axolotl",
+    "LLaMA-Factory",
+    "τ-bench / BFCL for evaluation"
+  ],
+  "remember": "Whole trajectories, verified successes only, loss on assistant turns.",
+  "caption": "Illustrative: Yatra Setu, a fictional travel-booking company, fine-tunes an 8B model to run its booking agent.",
+  "comparison": {
+    "scope": "Tool-calling behaviour of a small model",
+    "cost": 3,
+    "needs": "Verified trajectories and a sandbox",
+    "best": "Learning failed or invented tool calls"
+  },
+  "diagram": {
+    "file": "diagrams/ftagent.svg"
+  },
+  "lesson": {
+    "file": "train_agent_lora.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from datasets import load_dataset",
+        "steps": []
+      },
+      {
+        "text": "from peft import LoraConfig",
+        "steps": []
+      },
+      {
+        "text": "from trl import SFTConfig, SFTTrainer",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ds = load_dataset(\"json\", data_files=\"trajectories.jsonl\")[\"train\"]    # messages + tools",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "ds = ds.filter(lambda r: r[\"verified_success\"])                      # 3,100 → 2,000",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "cfg = SFTConfig(output_dir=\"booking-8b-lora\", num_train_epochs=2,",
+        "steps": []
+      },
+      {
+        "text": "                assistant_only_loss=True,     # user + tool turns masked",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                max_length=6144, per_device_train_batch_size=2,",
+        "steps": []
+      },
+      {
+        "text": "                gradient_accumulation_steps=8, learning_rate=1e-4)",
+        "steps": []
+      },
+      {
+        "text": "trainer = SFTTrainer(model=\"Qwen/Qwen3-8B\", train_dataset=ds, args=cfg,",
+        "steps": []
+      },
+      {
+        "text": "                     peft_config=LoraConfig(r=32, lora_alpha=64,",
+        "steps": []
+      },
+      {
+        "text": "                                            target_modules=\"all-linear\"))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "trainer.train()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# eval in the sandbox on 300 held-out tasks",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "report = run_sandbox(\"booking-8b-lora\", tasks=\"heldout_300.jsonl\")",
+        "steps": []
+      },
+      {
+        "text": "print(report.success, report.valid_calls, report.invented_results)",
+        "steps": []
+      },
+      {
+        "text": "# 8B base 48% · teacher 78% · tuned 73%, invented results 2%",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Store trajectories as chat messages",
+        "text": "Yatra Setu, a fictional travel-booking company, logs each booking run as messages with tool calls and tool results, plus the tool schemas, in the same template the model will be served with."
+      },
+      {
+        "title": "Keep verified successes",
+        "text": "A sandbox checks each run’s end state: was the right train held for the right date and seats? 2,000 of 3,100 teacher trajectories pass and are kept."
+      },
+      {
+        "title": "Mask everything but the assistant",
+        "text": "With assistant-only loss, the model learns to write tool calls and replies. It never learns to write tool outputs, which is how models start inventing results."
+      },
+      {
+        "title": "Train a LoRA adapter",
+        "text": "Two epochs of LoRA on an 8B model take a few GPU-hours. Data generation by the teacher was the larger cost."
+      },
+      {
+        "title": "Evaluate in the sandbox",
+        "text": "300 held-out tasks run end to end. Score task success, valid tool calls and invented tool results, not text overlap."
+      },
+      {
+        "title": "Compare with the teacher",
+        "text": "The base 8B model succeeds on 48% and the teacher on 78%; the tuned 8B reaches 73% at about one fifteenth of the cost per task."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">messages + tool_calls + tools schema</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">3,100 teacher runs</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">2,000 verified</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"87\" text-anchor=\"middle\">user: masked</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"72\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"87\" text-anchor=\"middle\">tool: masked</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"240\" y=\"72\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"87\" text-anchor=\"middle\">assistant: loss</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"117\" text-anchor=\"middle\">LoRA r=32 · 2 epochs</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"132\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"147\" text-anchor=\"middle\">300 held-out tasks in the sandbox</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"162\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"178\" text-anchor=\"middle\">base 48%</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"162\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"178\" text-anchor=\"middle\">tuned 73%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"162\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"178\" text-anchor=\"middle\">teacher 78%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Small model runs the agent at a fraction of the cost and latency",
+      "Learns your proprietary tools and schemas",
+      "Can run on-premise",
+      "Task success is directly measurable in a sandbox"
+    ],
+    "cons": [
+      "Needs a sandbox with checkable end states",
+      "Teacher trajectories cost money to generate",
+      "Retrain when tools or schemas change",
+      "Can lose general ability outside the trained tasks"
+    ],
+    "avoidWhen": [
+      "Tools and workflows that still change weekly",
+      "Low volume where a large model’s cost is acceptable"
+    ],
+    "tools": [
+      {
+        "name": "TRL",
+        "type": "Open source · Hugging Face",
+        "what": "SFTTrainer with tool-aware chat templates and assistant-only loss",
+        "url": "https://huggingface.co/docs/trl/sft_trainer"
+      },
+      {
+        "name": "Unsloth",
+        "type": "Open source",
+        "what": "Fast, memory-light LoRA fine-tuning",
+        "url": "https://github.com/unslothai/unsloth"
+      },
+      {
+        "name": "Axolotl",
+        "type": "Open source",
+        "what": "Config-driven fine-tuning with chat and tool formats",
+        "url": "https://github.com/axolotl-ai-cloud/axolotl"
+      },
+      {
+        "name": "LLaMA-Factory",
+        "type": "Open source",
+        "what": "Fine-tuning UI and CLI including agent data formats",
+        "url": "https://github.com/hiyouga/LLaMA-Factory"
+      },
+      {
+        "name": "BFCL",
+        "type": "Open benchmark · Berkeley",
+        "what": "Function-calling benchmark to sanity-check tool use",
+        "url": "https://github.com/ShishirPatil/gorilla"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Yatra Setu, a fictional travel-booking company, fine-tunes an 8B model for its booking agent. The base 8B completes 48% of held-out tasks; the large teacher 78%. Each trajectory costs about ₹15 to generate and ₹6 to train on.",
+    "controls": [
+      "Choose the training trajectories: all logged runs, or only runs verified successful.",
+      "Compute loss on assistant turns only, masking tool outputs.",
+      "Set the number of trajectories: 500, 2,000 or 8,000."
+    ],
+    "outputs": [
+      {
+        "name": "Task success",
+        "meaning": "End-to-end success on held-out tasks in the sandbox."
+      },
+      {
+        "name": "Invented tool results",
+        "meaning": "Share of runs where the model writes a tool output itself."
+      },
+      {
+        "name": "Gap to teacher",
+        "meaning": "Points below the large model."
+      },
+      {
+        "name": "Data and training cost",
+        "meaning": "₹ for generating and training on the trajectories."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "All logs, no masking",
+        "expect": "Success 55%, invented results 12%, ₹42,000."
+      },
+      {
+        "k": "filtered",
+        "name": "Verified only, no masking",
+        "expect": "68%, invented 9%."
+      },
+      {
+        "k": "masked",
+        "name": "Verified + masked",
+        "expect": "73%, invented 2%, 5 points below the teacher."
+      },
+      {
+        "k": "big",
+        "name": "Verified + masked, 8,000",
+        "expect": "76%, but ₹1,68,000."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 72% success with invented results at 3% or less for ₹50,000 or less.",
+        "hint": "Clean data and the right loss."
+      },
+      {
+        "k": "mask",
+        "text": "With verified data, show the model still inventing tool results in 8% of runs or more.",
+        "hint": "Tool outputs carry loss."
+      },
+      {
+        "k": "scale",
+        "text": "Reach 75% task success.",
+        "hint": "More good data, at a price."
+      }
+    ],
+    "tools": [
+      {
+        "n": "TRL",
+        "type": "Open source · Hugging Face",
+        "start": 3,
+        "prod": 3,
+        "best": "SFT on tool-calling conversations.",
+        "ex": "assistant_only_loss with LoRA on an 8B model.",
+        "pros": [
+          "Standard library",
+          "Tool-aware templates"
+        ],
+        "cons": [
+          "You write the pipeline"
+        ],
+        "url": "https://huggingface.co/docs/trl/sft_trainer"
+      },
+      {
+        "n": "Unsloth",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Fast LoRA on one GPU.",
+        "ex": "Tune an 8B model on a single 24 GB GPU.",
+        "pros": [
+          "Fast",
+          "Low memory"
+        ],
+        "cons": [
+          "Fewer multi-GPU options"
+        ],
+        "url": "https://github.com/unslothai/unsloth"
+      },
+      {
+        "n": "Axolotl",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Config-driven multi-GPU runs.",
+        "ex": "YAML config for chat plus tool data.",
+        "pros": [
+          "Reproducible configs",
+          "Many formats"
+        ],
+        "cons": [
+          "Config learning curve"
+        ],
+        "url": "https://github.com/axolotl-ai-cloud/axolotl"
+      },
+      {
+        "n": "LLaMA-Factory",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "UI-driven fine-tuning.",
+        "ex": "Try agent data formats without code.",
+        "pros": [
+          "Web UI",
+          "Many models"
+        ],
+        "cons": [
+          "Less control"
+        ],
+        "url": "https://github.com/hiyouga/LLaMA-Factory"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "First run",
+        "tool": "TRL + LoRA, assistant-only loss"
+      },
+      {
+        "need": "One GPU",
+        "tool": "Unsloth"
+      },
+      {
+        "need": "Team pipelines",
+        "tool": "Axolotl configs"
+      }
+    ],
+    "goals": [
+      "Build trajectory data in the serving chat template",
+      "Keep verified successes and mask non-assistant turns",
+      "Evaluate end-to-end task success in a sandbox"
+    ]
+  },
+  "practice": {
+    "scenario": "Yatra Setu, a fictional travel-booking company, runs a booking agent with tools to search trains, hold seats and take UPI payments. A large model completes 78% of tasks but costs about ₹6 a task; the base 8B model completes 48%. It runs the large model as a teacher in a sandbox, keeps 2,000 of 3,100 trajectories whose end states were verified, and fine-tunes the 8B model with LoRA on assistant turns only. The tuned model completes 73% of held-out tasks, invents tool results in 2% of runs, and costs about ₹0.40 a task.",
+    "industries": [
+      {
+        "industry": "Travel",
+        "use": "Booking agents with search, hold and payment tools"
+      },
+      {
+        "industry": "Banking",
+        "use": "Back-office agents calling core-banking APIs on-premise"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Plan-change agents with proprietary provisioning tools"
+      }
+    ],
+    "analogy": "Training a new booking clerk by having them watch only the calls a senior clerk handled well, and practise their own lines, not the customer’s or the computer’s.",
+    "library": {
+      "name": "TRL",
+      "what": "Hugging Face’s SFTTrainer accepts conversational data with tool calls and can compute loss on assistant turns only.",
+      "install": "pip install trl peft datasets"
+    },
+    "note": "assistant_only_loss needs a chat template that marks assistant turns; check the TRL docs for your model. The file format is one JSON object per trajectory with messages, tools and verified_success.",
+    "samples": [
+      {
+        "file": "prepare_trajectories.py",
+        "language": "python",
+        "code": "import json\n\nkept, total = [], 0\nwith open(\"teacher_runs.jsonl\", encoding=\"utf-8\") as f:\n    for line in f:\n        run = json.loads(line)\n        total += 1\n        end = run[\"end_state\"]\n        ok = (end.get(\"pnr\") is not None and end.get(\"seats\") == run[\"task\"][\"seats\"]\n              and end.get(\"date\") == run[\"task\"][\"date\"])\n        if ok and len(run[\"messages\"]) <= 30:            # drop long, looping runs\n            kept.append({\"messages\": run[\"messages\"], \"tools\": run[\"tools\"], \"verified_success\": True})\n\nwith open(\"trajectories.jsonl\", \"w\", encoding=\"utf-8\") as f:\n    for r in kept:\n        f.write(json.dumps(r, ensure_ascii=False) + \"\\n\")\nprint(f\"kept {len(kept)} of {total} runs\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A task costs ₹6 with the large model and ₹0.40 with the tuned 8B. At 50,000 tasks a month, what is the monthly saving in ₹?",
+    "answer": "(6 − 0.40) × 50,000 = 5.6 × 50,000 = ₹2,80,000 a month. The ₹42,000 data and training cost pays back in under a week.",
+    "expected": {
+      "value": 280000,
+      "tolerance": 1000,
+      "label": "₹ ="
+    },
+    "interview": [
+      {
+        "question": "How would you fine-tune a small model to run an agent?",
+        "answer": "Collect trajectories from logs or a teacher in a sandbox, keep only runs whose end state was verified, format them in the serving chat and tool template, train LoRA with loss on assistant turns only, and evaluate end-to-end task success on held-out tasks."
+      },
+      {
+        "question": "Why mask tool outputs during training?",
+        "answer": "If tool outputs carry loss, the model learns to write them, and at run time it may invent a result instead of calling the tool."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Training on all logs",
+        "fix": "Keep verified successful trajectories only"
+      },
+      {
+        "mistake": "Scoring by text similarity",
+        "fix": "Score end-to-end task success in a sandbox"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ft01",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "What is one training example in agent fine-tuning?",
+      "options": [
+        "A single sentence",
+        "A whole trajectory with tool calls and results",
+        "A tool schema only",
+        "An image"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "User, calls, results, reply."
+    },
+    {
+      "id": "ft02",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Which trajectories should be kept?",
+      "options": [
+        "All of them",
+        "Only runs verified successful",
+        "Only the longest",
+        "Only failures"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Failures get learned too."
+    },
+    {
+      "id": "ft03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why mask tool outputs from the loss?",
+      "options": [
+        "So the model does not learn to invent tool results",
+        "To save disk",
+        "To speed up tools",
+        "It is required by LoRA"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Call tools, don’t write their output."
+    },
+    {
+      "id": "ft04",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "3,100 runs, 2,000 verified. Share kept?",
+      "options": [
+        "about 35%",
+        "about 65%",
+        "100%",
+        "20%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2,000 ÷ 3,100."
+    },
+    {
+      "id": "ft05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Training data must match which format?",
+      "options": [
+        "The chat and tool-call template used in serving",
+        "Any JSON",
+        "Plain text",
+        "CSV"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Mismatch breaks tool calls."
+    },
+    {
+      "id": "ft06",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "How should the tuned agent be evaluated? Select all that apply.",
+      "options": [
+        "End-to-end task success",
+        "Valid tool calls",
+        "Invented tool results",
+        "BLEU against the teacher only"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Text overlap is weak."
+    },
+    {
+      "id": "ft07",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "₹6 vs ₹0.40 per task at 50,000 tasks. Monthly saving?",
+      "options": [
+        "₹2,80,000",
+        "₹3,00,000",
+        "₹28,000",
+        "₹20,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "5.6 × 50,000."
+    },
+    {
+      "id": "ft08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "2,000 trajectories at ₹15 + ₹6 each cost?",
+      "options": [
+        "₹30,000",
+        "₹42,000",
+        "₹12,000",
+        "₹21,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2,000 × 21."
+    },
+    {
+      "id": "ft09",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Base 48%, tuned 73%. Gain?",
+      "options": [
+        "15 points",
+        "25 points",
+        "73 points",
+        "5 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "73 − 48."
+    },
+    {
+      "id": "ft10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which technique covers learning from verifiable rewards instead of examples?",
+      "options": [
+        "RLVR",
+        "Agent SFT",
+        "Prompt caching",
+        "Grounding"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Module 14 RLVR."
+    },
+    {
+      "id": "ft11",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A tuned model replies with a PNR without calling hold_seat. Likely cause?",
+      "options": [
+        "Tool outputs carried loss in training",
+        "Too little GPU",
+        "Wrong temperature",
+        "A slow network"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It learned to write results."
+    },
+    {
+      "id": "ft12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Where can trajectories come from? Select all that apply.",
+      "options": [
+        "Production logs",
+        "A teacher model in a sandbox",
+        "Human demonstrations",
+        "Random text"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Then filter."
+    },
+    {
+      "id": "ft13",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Why cap trajectory length when filtering?",
+      "options": [
+        "Very long runs are often loops",
+        "Short runs are wrong",
+        "GPUs dislike short runs",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Drop looping runs."
+    },
+    {
+      "id": "ft14",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "When is agent fine-tuning a poor fit?",
+      "options": [
+        "Tools change every week",
+        "High volume, stable tools",
+        "On-premise needs",
+        "Cost pressure"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "You would retrain constantly."
+    },
+    {
+      "id": "ft15",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Going from 2,000 to 8,000 trajectories adds 3 points and costs?",
+      "options": [
+        "₹42,000 more",
+        "₹1,26,000 more",
+        "₹8,000 more",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6,000 × ₹21."
+    },
+    {
+      "id": "ft16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does assistant_only_loss in TRL do?",
+      "options": [
+        "Computes loss only on assistant turns",
+        "Removes the assistant",
+        "Trains only on tools",
+        "Disables LoRA"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Needs a template that marks assistant turns."
+    },
+    {
+      "id": "ft17",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "Signs the training data is dirty? Select all that apply.",
+      "options": [
+        "Many runs end without a PNR",
+        "Looping tool calls",
+        "Invented tool outputs in assistant turns",
+        "Consistent verified end states"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The last is clean data."
+    },
+    {
+      "id": "ft18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which benchmark sanity-checks general function calling?",
+      "options": [
+        "BFCL",
+        "ImageNet",
+        "SQuAD",
+        "GLUE"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Berkeley Function Calling."
+    },
+    {
+      "id": "ft19",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "Invented results fall from 9% to 2% on 50,000 tasks. Fewer bad runs a month?",
+      "options": [
+        "3,500",
+        "4,500",
+        "1,000",
+        "7,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "50,000 × 0.07."
+    },
+    {
+      "id": "ft20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does the sandbox provide?",
+      "options": [
+        "Tasks with checkable end states",
+        "Free GPUs",
+        "A chat UI",
+        "Customer data"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Verification of success."
+    }
+  ]
+}

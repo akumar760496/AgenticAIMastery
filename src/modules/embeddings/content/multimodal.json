@@ -1,0 +1,865 @@
+{
+  "id": "multimodal",
+  "moduleSlug": "embeddings",
+  "name": "Multimodal Embeddings",
+  "shortName": "Multimodal",
+  "question": "Can one search cover text, images and more?",
+  "summary": "Multimodal models embed different kinds of content into one shared vector space, so a text query can find an image and an image can find related text. CLIP-style models learn this by aligning millions of images with their captions.",
+  "useCases": [
+    "Product catalogues searched by description or photo",
+    "Slides, scanned pages and documents full of charts",
+    "Media libraries: photos, video frames, audio"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Shared space",
+        "detail": "text and images compared with the same cosine similarity"
+      },
+      {
+        "term": "Cross-modal search",
+        "detail": "text → image, image → text, image → image"
+      },
+      {
+        "term": "CLIP-style training",
+        "detail": "contrastive alignment of image–caption pairs"
+      },
+      {
+        "term": "Page images",
+        "detail": "embed page screenshots to keep tables and charts (e.g. ColPali)"
+      },
+      {
+        "term": "Other modalities",
+        "detail": "audio, video frames, code"
+      }
+    ]
+  },
+  "steps": [
+    "Pick a model that covers your media types and languages",
+    "Embed images (or page renders) and text into the same index",
+    "Store a link to the original asset and any extracted text as metadata",
+    "Test cross-modal queries in both directions with real examples"
+  ],
+  "pitfalls": [
+    "Fine visual detail such as small text or exact counts is often lost",
+    "Larger vectors and more storage per item",
+    "Quality varies a lot by domain, e.g. medical images or engineering drawings"
+  ],
+  "tools": [
+    "CLIP",
+    "SigLIP",
+    "Cohere Embed",
+    "Voyage multimodal",
+    "Jina CLIP",
+    "ColPali"
+  ],
+  "remember": "One space, many media.",
+  "caption": "Squares are images, the circle is the text query. It lands beside the matching photos.",
+  "comparison": {
+    "scope": "Meaning across media",
+    "cost": 3,
+    "needs": "Catalogues, slides, scanned docs",
+    "best": "Loses fine visual detail"
+  },
+  "diagram": {
+    "file": "diagrams/multimodal.svg"
+  },
+  "lesson": {
+    "file": "image_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from PIL import Image",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers import SentenceTransformer",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = SentenceTransformer(\"clip-ViT-B-32\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "products = load_catalogue()     # id, photo path, description, URL",
+        "steps": []
+      },
+      {
+        "text": "img_vecs = model.encode([Image.open(p.photo) for p in products],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                        normalize_embeddings=True)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "q = model.encode(\"red running shoe\", normalize_embeddings=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "scores = img_vecs @ q           # text vs image, same space",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "top = scores.argsort()[::-1][:3]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "print([(products[i].id, round(float(scores[i]), 2)) for i in top])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# typical text-image cosines are low (about 0.2-0.35): rank, don't threshold",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "photo = model.encode(Image.open(\"customer_upload.jpg\"), normalize_embeddings=True)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "similar = (img_vecs @ photo).argsort()[::-1][:3]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "index.upsert([{\"id\": p.id, \"vector\": v.tolist(),",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "               \"meta\": {\"url\": p.url, \"caption\": p.description}}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "              for p, v in zip(products, img_vecs)])",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Pick a model that covers both media",
+        "text": "A CLIP-style model has an image encoder and a text encoder trained together, so both produce vectors in one space."
+      },
+      {
+        "title": "Embed the catalogue photos",
+        "text": "Each product photo becomes one vector. A red shoe whose seller wrote only “New arrival, SKU 4471” is still findable by what it looks like."
+      },
+      {
+        "title": "Embed the text query",
+        "text": "“red running shoe” goes through the text encoder and lands in the same space as the photos."
+      },
+      {
+        "title": "Compare across media",
+        "text": "Cosine similarity works as usual. Scores of 0.31 and 0.29 look low, but text–image scores are low in general: the ranking is what counts."
+      },
+      {
+        "title": "Search by photo too",
+        "text": "A customer’s photo goes through the image encoder and lands next to the same two red shoes: image-to-image search, same index."
+      },
+      {
+        "title": "Store links and test both directions",
+        "text": "Keep each asset’s URL and caption as metadata, then test text-to-image and image-to-image queries on real examples."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"344\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"25.5\">One model, two encoders: image + text</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx\" x=\"8\" y=\"52\" width=\"30\" height=\"26\" rx=\"4\"/><path d=\"M12 73l7-8 5 5 4-3 7 6\" class=\"ln\" style=\"stroke-width:1.2\"/><circle cx=\"29\" cy=\"60\" r=\"2.4\" style=\"fill:var(--fail)\"/></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx\" x=\"40\" y=\"52\" width=\"30\" height=\"26\" rx=\"4\"/><path d=\"M44 73l7-8 5 5 4-3 7 6\" class=\"ln\" style=\"stroke-width:1.2\"/><circle cx=\"61\" cy=\"60\" r=\"2.4\" style=\"fill:var(--fail)\"/></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx\" x=\"72\" y=\"52\" width=\"30\" height=\"26\" rx=\"4\"/><path d=\"M76 73l7-8 5 5 4-3 7 6\" class=\"ln\" style=\"stroke-width:1.2\"/><circle cx=\"93\" cy=\"60\" r=\"2.4\" style=\"fill:var(--accent)\"/></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M104 65L126 65\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"128\" y=\"50\" width=\"108\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"182\" y=\"69.5\">Image encoder</text></g><g class=\"a\" style=\"--d:0.4s\"><path class=\"ln \" d=\"M238 65L250 65\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.45s\"><rect class=\"bx soft\" x=\"252\" y=\"46\" width=\"100\" height=\"160\" rx=\"8\"/><text class=\"sb\" x=\"302\" y=\"200\">shared space</text></g><rect class=\"a\" x=\"267\" y=\"77\" width=\"10\" height=\"10\" rx=\"2\" style=\"fill:var(--fail);--d:0.55s\"/><rect class=\"a\" x=\"287\" y=\"91\" width=\"10\" height=\"10\" rx=\"2\" style=\"fill:var(--fail);--d:0.63s\"/><rect class=\"a\" x=\"321\" y=\"155\" width=\"10\" height=\"10\" rx=\"2\" style=\"fill:var(--accent);--d:0.7100000000000001s\"/><rect class=\"a\" x=\"257\" y=\"145\" width=\"10\" height=\"10\" rx=\"2\" style=\"fill:var(--rule-strong);--d:0.79s\"/><rect class=\"a\" x=\"325\" y=\"65\" width=\"10\" height=\"10\" rx=\"2\" style=\"fill:var(--rule-strong);--d:0.8700000000000001s\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"100\" width=\"112\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"64\" y=\"117\" text-anchor=\"middle\">“red running shoe”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M120 113L126 113\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"128\" y=\"98\" width=\"108\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"182\" y=\"117.5\">Text encoder</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M238 113L250 113\" marker-end=\"url(#arr)\"/></g><circle class=\"a\" cx=\"280\" cy=\"106\" r=\"6\" style=\"fill:var(--ink);--d:0.35s\"/>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw pass\" pathLength=\"1\" d=\"M280 106 L272 82\" style=\"--d:0s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M280 106 L292 96\" style=\"--d:0.1s\"/><text class=\"tl l a\" x=\"8\" y=\"150\" style=\"--d:0.3s\">cos 0.31 and 0.29: low, but ranked first</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx\" x=\"8\" y=\"160\" width=\"30\" height=\"26\" rx=\"4\"/><path d=\"M12 181l7-8 5 5 4-3 7 6\" class=\"ln\" style=\"stroke-width:1.2\"/><circle cx=\"29\" cy=\"168\" r=\"2.4\" style=\"fill:var(--fail)\"/></g><text class=\"sb a\" x=\"44\" y=\"170\" text-anchor=\"start\" style=\"--d:0.05s;text-anchor:start\">customer</text><text class=\"sb a\" x=\"44\" y=\"182\" text-anchor=\"start\" style=\"--d:0.05s;text-anchor:start\">photo</text><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M96 173L126 173\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"128\" y=\"158\" width=\"108\" height=\"30\" rx=\"7\"/><text class=\"lb\" x=\"182\" y=\"177.5\">Image encoder</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M238 173L250 173\" marker-end=\"url(#arr)\"/></g><path class=\"a\" d=\"M288 80 l6 10 h-12z\" style=\"fill:var(--warn);--d:0.35s\"/>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"218\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"235\" text-anchor=\"middle\">store URL + caption · test text→image, image→image</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Search images by description and by example photo",
+      "Finds items whose text metadata is poor or missing",
+      "One index and one similarity for several media",
+      "Page-image models keep tables and charts in documents"
+    ],
+    "cons": [
+      "Fine visual detail such as small printed text is often lost",
+      "Text–image scores are low and model-specific, so thresholds are tricky",
+      "More storage: one or more vectors per asset",
+      "Quality varies a lot by domain"
+    ],
+    "avoidWhen": [
+      "All content is plain text (a text model is cheaper and stronger)",
+      "The answer depends on exact small text in images (use OCR as well)"
+    ],
+    "tools": [
+      {
+        "name": "OpenCLIP",
+        "type": "Open source",
+        "what": "Open CLIP models trained on public datasets",
+        "url": "https://github.com/mlfoundations/open_clip"
+      },
+      {
+        "name": "SigLIP",
+        "type": "Open model (Google)",
+        "what": "Image–text embeddings with a sigmoid loss",
+        "url": "https://huggingface.co/docs/transformers/model_doc/siglip"
+      },
+      {
+        "name": "Jina CLIP v2",
+        "type": "Open model and API",
+        "what": "Multilingual text–image embeddings",
+        "url": "https://huggingface.co/jinaai/jina-clip-v2"
+      },
+      {
+        "name": "Voyage multimodal",
+        "type": "Hosted API",
+        "what": "Interleaved text and images, screenshots and slides",
+        "url": "https://docs.voyageai.com/docs/multimodal-embeddings"
+      },
+      {
+        "name": "Cohere Embed",
+        "type": "Hosted API",
+        "what": "Text and image inputs in one embedding model",
+        "url": "https://docs.cohere.com/docs/embeddings"
+      },
+      {
+        "name": "ColPali",
+        "type": "Open source",
+        "what": "Retrieving document pages from their images",
+        "url": "https://github.com/illuin-tech/colpali"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fashion marketplace indexes six products. Shoppers either type a description or upload a photo, and the top 3 results are shown. One red running shoe has a useless seller description; another shoe has a tiny AIR print on its heel. Choose the model and what to index so every query finds its products.",
+    "controls": [
+      "Pick the query: a text description, a customer’s photo, or a fine-detail text query.",
+      "Choose a text-only embedding model or a CLIP-style multimodal model.",
+      "Tick what gets indexed: product descriptions, product photos, or both."
+    ],
+    "outputs": [
+      {
+        "name": "Recall in top 3",
+        "meaning": "Relevant products in the top 3 ÷ all relevant products for this query."
+      },
+      {
+        "name": "Searchable vectors",
+        "meaning": "How many vectors the index holds that this model can search."
+      },
+      {
+        "name": "Poorly described shoe (P2) found",
+        "meaning": "Whether the red shoe with the useless description made the top 3."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Text model, descriptions",
+        "expect": "“red running shoe” returns P1, P3 and P6. P2’s description says nothing useful, so recall is 50%."
+      },
+      {
+        "k": "photos",
+        "name": "CLIP, photos only",
+        "expect": "The AIR-print query returns P1, P2 and P5: the tiny print is invisible to image embeddings, so recall is 0%."
+      },
+      {
+        "k": "photoq",
+        "name": "Photo, text model",
+        "expect": "A text-only model cannot embed the customer’s photo: no results."
+      },
+      {
+        "k": "descclip",
+        "name": "Photo, CLIP, descriptions",
+        "expect": "Image-to-text search returns P1, P3 and P5: recall 50%, because P2’s description is useless."
+      }
+    ],
+    "missions": [
+      {
+        "k": "photo",
+        "text": "Answer the customer’s photo with both red running shoes in the top 3.",
+        "hint": "Switch to the CLIP-style model and index product photos."
+      },
+      {
+        "k": "hidden",
+        "text": "Find the poorly described red shoe, P2, with the text query “red running shoe”.",
+        "hint": "Only its photo describes it: CLIP model, photos indexed."
+      },
+      {
+        "k": "detail",
+        "text": "Find the AIR-print shoe while product photos are indexed.",
+        "hint": "Image embeddings lose small printed text. Index the descriptions as well as the photos."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenCLIP",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Open implementations and weights of CLIP-style models trained on public data.",
+        "ex": "Self-host a ViT-B/32 model to embed 2 million catalogue photos for text and photo search.",
+        "pros": [
+          "Many open checkpoints and sizes",
+          "Runs on your own hardware"
+        ],
+        "cons": [
+          "You choose and evaluate the checkpoint",
+          "GPU needed for large catalogues"
+        ],
+        "url": "https://github.com/mlfoundations/open_clip"
+      },
+      {
+        "n": "SigLIP",
+        "type": "Open model · Google",
+        "start": 2,
+        "prod": 3,
+        "best": "Image–text embeddings trained with a sigmoid loss, available in Hugging Face Transformers.",
+        "ex": "Match insurance damage photos to short text descriptions of claim types.",
+        "pros": [
+          "Strong zero-shot quality for its size",
+          "Standard Transformers API"
+        ],
+        "cons": [
+          "Some fine-tuning usually needed for niche domains",
+          "Fine print and counts remain weak spots"
+        ],
+        "url": "https://huggingface.co/docs/transformers/model_doc/siglip"
+      },
+      {
+        "n": "Jina CLIP v2",
+        "type": "Open model · commercial API",
+        "start": 3,
+        "prod": 2,
+        "best": "Multilingual text–image embeddings with Matryoshka dimensions.",
+        "ex": "Let shoppers search one catalogue in Hindi, Tamil or English, by text or photo.",
+        "pros": [
+          "Many languages",
+          "Smaller vectors via truncation"
+        ],
+        "cons": [
+          "Open weights are non-commercial; production use means the API or a licence",
+          "Newer, smaller community"
+        ],
+        "url": "https://huggingface.co/jinaai/jina-clip-v2"
+      },
+      {
+        "n": "Voyage multimodal",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Embedding interleaved text and images such as slides, screenshots and PDFs.",
+        "ex": "Search a bank’s slide decks where the answer sits in a chart with a caption.",
+        "pros": [
+          "Handles screenshots and mixed content",
+          "No infrastructure"
+        ],
+        "cons": [
+          "Hosted only",
+          "Per-call pricing"
+        ],
+        "url": "https://docs.voyageai.com/docs/multimodal-embeddings"
+      },
+      {
+        "n": "Cohere Embed",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Text and images embedded by one hosted model.",
+        "ex": "Index product photos and descriptions for a retailer through one API.",
+        "pros": [
+          "One API for both media",
+          "Multilingual text side"
+        ],
+        "cons": [
+          "Hosted only",
+          "Image inputs cost more than text"
+        ],
+        "url": "https://docs.cohere.com/docs/embeddings"
+      },
+      {
+        "n": "ColPali",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Retrieving document pages directly from their images, keeping tables and layout.",
+        "ex": "Search scanned KYC forms and annual reports without an OCR pipeline.",
+        "pros": [
+          "No OCR or layout parsing needed",
+          "Strong on visually rich pages"
+        ],
+        "cons": [
+          "Many vectors per page: more storage",
+          "Heavier to serve than single-vector models"
+        ],
+        "url": "https://github.com/illuin-tech/colpali"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype text and photo search",
+        "tool": "OpenCLIP via sentence-transformers"
+      },
+      {
+        "need": "Slides, screenshots and PDFs",
+        "tool": "Voyage multimodal or ColPali"
+      },
+      {
+        "need": "Hosted, many languages",
+        "tool": "Cohere Embed or Jina CLIP v2"
+      }
+    ],
+    "goals": [
+      "Explain how a shared vector space lets text find images and images find text",
+      "Explain why text–image scores are low and why ranking matters more than thresholds",
+      "Name what image embeddings miss and how to cover it"
+    ]
+  },
+  "practice": {
+    "scenario": "A shopping app lets users type “red running shoe with white sole” or upload a photo. Product images and descriptions sit in one CLIP index, so both kinds of query return the same shoes.",
+    "industries": [
+      {
+        "industry": "Retail & fashion",
+        "use": "Search by photo or by description"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Match damage photos to similar past claims"
+      },
+      {
+        "industry": "Enterprise documents",
+        "use": "Search slide decks and scanned forms by what they show"
+      }
+    ],
+    "analogy": "A bilingual guide who understands a description and a photo equally well, and points to the same shelf for both.",
+    "library": {
+      "name": "CLIP via sentence-transformers",
+      "what": "Loads CLIP models with the same encode() call used for text, so images and text land in one space.",
+      "install": "pip install sentence-transformers pillow"
+    },
+    "samples": [
+      {
+        "file": "image_search.py",
+        "language": "python",
+        "code": "from PIL import Image\nfrom sentence_transformers import SentenceTransformer, util\n\nmodel = SentenceTransformer(\"clip-ViT-B-32\")          # text and images, one space\npaths = [\"shoe_red.jpg\", \"shoe_blue.jpg\", \"handbag.jpg\"]\nimg_vecs = model.encode([Image.open(p) for p in paths])\n\nquery = model.encode(\"red running shoe with white sole\")\nbest = util.cos_sim(query, img_vecs)[0].argmax()\nprint(paths[int(best)])                               # shoe_red.jpg\n\n# image -> image works the same way:\n# model.encode(Image.open(\"customer_photo.jpg\"))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "With a CLIP model, a text query scores 0.31, 0.12 and 0.29 against three images. Image 1 is the right match. Why are the scores so low, and what matters?",
+    "answer": "Text–image similarities in CLIP-style models are usually low in absolute terms. What matters is the ranking: image 1 comes first. Tune any threshold per model on your own data.",
+    "interview": [
+      {
+        "question": "How does CLIP put text and images in one space?",
+        "answer": "It trains an image encoder and a text encoder together with a contrastive loss on image–caption pairs, pulling matching pairs together and pushing mismatched ones apart."
+      },
+      {
+        "question": "How would you search scanned PDFs full of charts and tables?",
+        "answer": "Either OCR and layout parsing into text chunks, or embed page images directly with a document-image model such as ColPali, which keeps the visual layout. Many systems combine both."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Comparing similarity scores across models",
+        "fix": "Tune thresholds per model on your data"
+      },
+      {
+        "mistake": "Dropping the link to the original asset",
+        "fix": "Store the asset URL and extracted text as metadata"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mm01",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Customers upload photos of broken parts to find the right spare. Which technique fits?",
+      "options": [
+        "BM25",
+        "Multimodal embeddings",
+        "Contrastive fine-tuning on text only",
+        "HyDE"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Photos and product listings need to share one vector space."
+    },
+    {
+      "id": "mm02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer wants to find past claims whose damage photos look like a new one. How?",
+      "options": [
+        "Embed claim photos with an image encoder and search image-to-image",
+        "Search claim notes with BM25",
+        "Ask an LLM to describe the photo and search for the exact caption",
+        "Use binary quantization only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Image-to-image search compares photo vectors directly in the same space."
+    },
+    {
+      "id": "mm03",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which statements about CLIP-style models are true? Select all that apply.",
+      "options": [
+        "The image and text encoders are trained together",
+        "Training aligns image–caption pairs contrastively",
+        "In the original CLIP models, matching text–image cosine scores are typically low, around 0.2 to 0.35",
+        "They read small serial numbers reliably"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "CLIP aligns images and captions; its scores are low in absolute terms, and fine printed detail is a known weakness."
+    },
+    {
+      "id": "mm04",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "A 0.8 similarity threshold copied from text search returns no products for text-to-image queries. What do you do?",
+      "options": [
+        "Rank and keep the top k, or tune a threshold for this model",
+        "Raise the threshold to 0.9",
+        "Switch the images to binary",
+        "Use BM25 on file names"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Cross-modal scores are low for everyone. The ranking is what carries the signal."
+    },
+    {
+      "id": "mm05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank must search thousands of scanned KYC forms full of tables and stamps. Which approach fits?",
+      "options": [
+        "OCR and layout parsing, or page-image retrieval such as ColPali",
+        "A text-only model on the file names",
+        "BM25 on the image bytes",
+        "Matryoshka truncation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Either extract the text or embed the page images; many systems combine both."
+    },
+    {
+      "id": "mm06",
+      "kind": "single",
+      "industry": "Media",
+      "question": "2 million images are embedded at 512 float32 dimensions. How much memory do the vectors need?",
+      "options": [
+        "About 4.1 GB",
+        "About 1.0 GB",
+        "About 16.4 GB",
+        "About 0.5 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "512 × 4 B = 2,048 B × 2 million ≈ 4.1 GB."
+    },
+    {
+      "id": "mm07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A red running shoe is listed as “New arrival, SKU 4471”, and text search never shows it for “red running shoe”. What fixes this?",
+      "options": [
+        "Index product photos with a multimodal model",
+        "Raise k1",
+        "Lower the chunk overlap",
+        "Add more stop words"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Its photo carries what the description lacks."
+    },
+    {
+      "id": "mm08",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are real risks when using general image embeddings on patient photos? Select all that apply.",
+      "options": [
+        "Clinical images differ from web photos, so quality can drop",
+        "Fine details can be lost",
+        "Embedding patient photos brings privacy and consent obligations",
+        "General models always beat specialist ones"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Domain shift, lost detail and data protection are the main concerns; specialist models often do better."
+    },
+    {
+      "id": "mm09",
+      "kind": "single",
+      "industry": "PropTech",
+      "question": "Buyers type “sunny balcony with plants” to search listing photos. What kind of search is this?",
+      "options": [
+        "Text-to-image search in a shared space",
+        "Image-to-image search",
+        "BM25 on photo file names",
+        "Query decomposition"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The text encoder embeds the query; it is compared with photo vectors."
+    },
+    {
+      "id": "mm10",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Students search lecture slides where the answer is in a diagram with a short caption. What fits best?",
+      "options": [
+        "A model that embeds slide images or mixed text and images",
+        "BM25 on slide titles only",
+        "A text model on file names",
+        "int8 quantization"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Slides carry meaning in their visuals, so embed the rendered slide, not just its text."
+    },
+    {
+      "id": "mm11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Text-to-text and text-to-image scores are merged by raw value, and photo matches never appear. Why?",
+      "options": [
+        "Text–text scores sit on a higher scale, so they always win",
+        "Photos cannot be searched with text",
+        "The photo index is empty",
+        "Cosine similarity is undefined for images"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Normalize each list or merge by rank, for example with reciprocal rank fusion."
+    },
+    {
+      "id": "mm12",
+      "kind": "single",
+      "industry": "Fashion",
+      "question": "Shoppers search one catalogue in Hindi, Tamil and English, by text or photo. What should you look for?",
+      "options": [
+        "A multilingual multimodal model, with a licence that allows commercial use",
+        "Any English-only CLIP model",
+        "BM25 per language",
+        "Binary vectors"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Language coverage and licence both matter; some open multilingual weights are non-commercial."
+    },
+    {
+      "id": "mm13",
+      "kind": "multi",
+      "industry": "Retail",
+      "question": "What should each image vector’s metadata include? Select all that apply.",
+      "options": [
+        "The URL of the original image",
+        "The product caption or description",
+        "The product ID",
+        "The raw image pixels"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Metadata links results back to products and enables filtering. Pixels belong in object storage."
+    },
+    {
+      "id": "mm14",
+      "kind": "single",
+      "industry": "Manufacturing",
+      "question": "Engineers search drawings by exact part numbers printed on them. What should you add to image embeddings?",
+      "options": [
+        "OCR the drawings and index the text with BM25",
+        "A higher similarity threshold",
+        "Larger image vectors",
+        "Contrastive training on captions only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Image embeddings lose small printed text; OCR plus keyword search catches exact numbers."
+    },
+    {
+      "id": "mm15",
+      "kind": "single",
+      "industry": "Media",
+      "question": "A 2-hour video is sampled at one frame every 2 seconds for embedding. How many frames is that?",
+      "options": [
+        "3,600",
+        "7,200",
+        "1,800",
+        "120"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "7,200 seconds ÷ 2 = 3,600 frames, each linked to its timestamp."
+    },
+    {
+      "id": "mm16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Photos were embedded with a CLIP image encoder, but queries use a separate sentence-transformers text model. What happens?",
+      "options": [
+        "Scores are meaningless, because the vectors come from unrelated spaces",
+        "It works if the dimensions match",
+        "Results improve because the text model is stronger",
+        "Only the threshold needs changing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only the paired text encoder produces vectors in the image encoder’s space."
+    },
+    {
+      "id": "mm17",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which checks belong in a multimodal search evaluation? Select all that apply.",
+      "options": [
+        "Text-to-image queries with known matches",
+        "Image-to-image queries with known matches",
+        "Fine-detail queries, to confirm text indexing covers them",
+        "Only checking that the average cosine is above 0.5"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Test each direction and the known weak spot. Average scores say nothing about ranking quality."
+    },
+    {
+      "id": "mm18",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which of these are cross-modal searches? Select all that apply.",
+      "options": [
+        "A text query that retrieves product photos",
+        "A photo that retrieves a manual page",
+        "A text question that retrieves a text FAQ",
+        "A photo of router lights that retrieves a troubleshooting article"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Cross-modal means the query and result are different media."
+    },
+    {
+      "id": "mm19",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A general CLIP model ranks dermatology photos poorly. What is the most promising next step?",
+      "options": [
+        "Fine-tune on labelled domain image–text pairs, or use a domain-specific model",
+        "Raise the similarity threshold",
+        "Convert the photos to binary vectors",
+        "Search file names with BM25"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Domain shift is fixed with domain data, often through contrastive fine-tuning."
+    },
+    {
+      "id": "mm20",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "How does SigLIP’s training differ from the original CLIP?",
+      "options": [
+        "It uses a pairwise sigmoid loss instead of a softmax over the batch",
+        "It trains without any text",
+        "It uses BM25 scores as labels",
+        "It only works on videos"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "SigLIP scores each image–text pair independently with a sigmoid loss."
+    }
+  ]
+}

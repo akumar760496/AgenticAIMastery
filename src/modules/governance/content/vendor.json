@@ -1,0 +1,924 @@
+{
+  "id": "vendor",
+  "moduleSlug": "governance",
+  "name": "Third-Party and Vendor Model Risk",
+  "shortName": "Vendor risk",
+  "question": "What happens to us when our model provider changes, leaks or goes down?",
+  "summary": "When a bank or broker runs its agent on someone else’s model, the provider’s terms, versions and outages become the firm’s own risk, and regulators still hold the firm accountable. Vendor model risk management covers due diligence before signing (training use, retention and zero data retention, data residency, SOC 2, ISO/IEC 27001 and 42001), contracts with SLAs, audit rights and incident notice, pinned model versions with evals on every change, concentration risk with a tested fallback and an exit plan, and ongoing monitoring. The regulatory duties themselves sit in the DPDP and RBI and SEBI techniques; this one is the vendor-facing engineering and contracting that meets them.",
+  "useCases": [
+    "Before signing with an LLM provider or AI vendor",
+    "Any regulated workload that runs on a third-party model",
+    "When a provider announces a deprecation or changes its terms"
+  ],
+  "keyFacts": {
+    "label": "What to manage",
+    "items": [
+      {
+        "term": "Data terms",
+        "detail": "training use, retention days, zero data retention, region"
+      },
+      {
+        "term": "Assurance",
+        "detail": "SOC 2 Type II, ISO/IEC 27001, ISO/IEC 42001 reports and their scope"
+      },
+      {
+        "term": "Contract",
+        "detail": "SLA, audit and regulator access, incident notice, sub-processors"
+      },
+      {
+        "term": "Versions",
+        "detail": "pinned dated model; evals re-run before any change"
+      },
+      {
+        "term": "Concentration",
+        "detail": "second provider behind one interface, failover drilled"
+      },
+      {
+        "term": "Exit",
+        "detail": "documented plan, data return and deletion, time to migrate"
+      }
+    ]
+  },
+  "steps": [
+    "Run due diligence on data terms, residency and certificates before any customer data flows",
+    "Write the contract: SLA, audit and regulator access, incident notice, sub-processors, exit",
+    "Pin model versions and re-run the eval suite on every version or deprecation change",
+    "Keep a tested fallback behind an abstraction layer, a written exit plan, and review the vendor on a schedule"
+  ],
+  "pitfalls": [
+    "Calling a floating alias, so the provider changes behaviour in production without a release",
+    "A fallback provider that has never carried real traffic, or has weaker data terms than the primary",
+    "Relying on a certificate without reading its scope, or on a vendor’s word instead of the contract"
+  ],
+  "tools": [
+    "Provider data-control and zero data retention settings",
+    "Provider deprecation pages and changelogs",
+    "LiteLLM or a similar gateway for pinned routing and fallbacks",
+    "promptfoo or your own regression evals",
+    "A third-party risk module in your GRC tool"
+  ],
+  "remember": "Read the terms, pin the version, test the fallback, write the exit, keep watching.",
+  "caption": "Illustrative: Godavari Bank, a fictional private bank, 2,00,000 complaint conversations a month on one overseas provider. Educational, not legal advice.",
+  "comparison": {
+    "scope": "Every external model or AI vendor",
+    "cost": 2,
+    "needs": "Contract terms, pinned versions and a tested fallback",
+    "best": "Silent changes and a single point of failure"
+  },
+  "diagram": {
+    "file": "diagrams/vendor.svg"
+  },
+  "lesson": {
+    "file": "vendor_llm.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "VENDOR = {\"name\": \"primary-llm\", \"trains_on_our_data\": False,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "          \"retention_days\": 0, \"region\": \"in\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "          \"certs\": {\"SOC 2 Type II\", \"ISO/IEC 27001\", \"ISO/IEC 42001\"}}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def due_diligence(v):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    gaps = [k for k, ok in {\"training\": not v[\"trains_on_our_data\"],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            \"retention\": v[\"retention_days\"] == 0, \"region\": v[\"region\"] == \"in\",",
+        "steps": []
+      },
+      {
+        "text": "            \"certs\": {\"SOC 2 Type II\", \"ISO/IEC 27001\"} <= v[\"certs\"]}.items() if not ok]",
+        "steps": []
+      },
+      {
+        "text": "    return gaps            # must be empty before customer data flows",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "CONTRACT = {\"availability_sla\": 0.999, \"incident_notice_hours\": 6,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"audit_rights\": [\"bank\", \"RBI\"], \"subprocessors\": \"notify 30 days before\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"exit\": {\"data_return_days\": 30, \"deletion_certificate\": True}}",
+        "steps": [
+          2,
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "PINNED = {\"primary\": \"model-a-2026-03-15\", \"fallback\": \"model-b-2026-02-01\"}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_version_change(route, new_model):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    report = run_evals(new_model, suite=\"complaints_v7\")   # 400 labelled cases",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if report.score < BASELINE[route] - 0.02:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return block(route, new_model, report)             # stay on the pin",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return propose_pin(route, new_model, report)           # change via review",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def complete(messages):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        return primary.chat(model=PINNED[\"primary\"], messages=messages, timeout=20)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    except (ProviderDown, Timeout):",
+        "steps": []
+      },
+      {
+        "text": "        return fallback.chat(model=PINNED[\"fallback\"], messages=messages)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_vendor_incident(notice):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    open_incident(notice, our_clocks={\"CERT-In\": \"6 h\", \"DPDP Board\": \"without delay\"})",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def monthly_review():",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    check(deprecation_notices(), terms_changes(), sla_report(), cert_expiry())",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    drill_failover(); rehearse_exit_plan(yearly=True)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Due diligence before data flows",
+        "text": "Godavari Bank, a fictional private bank, checks four things before any complaint text reaches the provider: no training on its data, retention it has agreed (zero data retention here, instead of the default 30 days of logs), processing in India, and current SOC 2 Type II and ISO/IEC 27001 reports whose scope covers the API it will use."
+      },
+      {
+        "title": "A contract you can enforce",
+        "text": "The contract turns assurances into obligations: a 99.9% availability SLA, notice of incidents within 6 hours so the bank can meet its own CERT-In and DPDP clocks, audit and access rights for the bank and its regulator, notice before new sub-processors, and an exit clause for data return and deletion."
+      },
+      {
+        "title": "Pin a dated version",
+        "text": "The code names a dated snapshot, not a floating alias. With an alias the provider can change the model behind the same name, and the bank’s complaint summaries change with no release on its side."
+      },
+      {
+        "title": "Evals on every change",
+        "text": "A deprecation notice or a new snapshot triggers the eval suite: 400 labelled complaints. If the score drops more than 2 points below the baseline, the change is blocked and the pin stays. Otherwise the new version is proposed through the normal release review."
+      },
+      {
+        "title": "A tested fallback",
+        "text": "All calls go through one function. If the primary provider is down or times out, the same request goes to a second provider on its own pinned version, with the same data terms. A fallback counts only if it has carried real traffic in a drill."
+      },
+      {
+        "title": "Keep watching, and plan the exit",
+        "text": "Each month someone checks deprecation notices, terms changes, SLA reports and certificate expiry, and drills the failover. Once a year the exit plan is rehearsed: which prompts move, which evals prove the new model, how data comes back and is deleted, and how long it takes."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Due diligence</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"8\" y=\"20\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"35\" text-anchor=\"middle\">no training</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"124\" y=\"20\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"179\" y=\"35\" text-anchor=\"middle\">0-day logs</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"240\" y=\"20\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"35\" text-anchor=\"middle\">India region</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"50\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"65\" text-anchor=\"middle\">SLA 99.9%</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"184\" y=\"50\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"65\" text-anchor=\"middle\">incident notice ≤ 6 h</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"76\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"91\" text-anchor=\"middle\">audit rights: bank and RBI · exit clause</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"106\" width=\"150\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"83\" y=\"121\" text-anchor=\"middle\">\"model-a\" alias</text></g><text class=\"tl a\" x=\"166\" y=\"121\" style=\"text-anchor:start;--d:0.1s\">→</text><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"184\" y=\"106\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"121\" text-anchor=\"middle\">model-a-2026-03-15</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"149\" style=\"text-anchor:end;--d:0s\">baseline</text><rect x=\"118\" y=\"139\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"139\" width=\"129\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"149\" style=\"text-anchor:start;--d:0.2s\">86%</text><text class=\"tl a\" x=\"112\" y=\"169\" style=\"text-anchor:end;--d:0.2s\">new snapshot</text><rect x=\"118\" y=\"159\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"159\" width=\"121.50000000000001\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"274\" y=\"169\" style=\"text-anchor:start;--d:0.4s\">81%: blocked</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"184\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"199\" text-anchor=\"middle\">primary: down</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 195L190 195\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"192\" y=\"184\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"272\" y=\"199\" text-anchor=\"middle\">fallback: serving</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"214\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"229\" text-anchor=\"middle\">monthly: deprecations · terms · SLA · certs · drill</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"254\" style=\"text-anchor:middle;fill:var(--ink-2)\">exit plan rehearsed yearly</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Customer data terms are known and enforceable, not assumed",
+      "Provider changes arrive as reviewed releases, not surprises",
+      "A provider outage becomes a short failover instead of a day offline",
+      "Answers the vendor questions RBI, SEBI and DPDP reviews will ask"
+    ],
+    "cons": [
+      "Zero data retention and enterprise terms can need a larger commitment",
+      "Pinned versions still retire, so migrations and evals recur",
+      "A second provider means porting prompts and re-running evals twice",
+      "Contract negotiation and yearly reviews take legal and risk time"
+    ],
+    "avoidWhen": [
+      "A throwaway prototype on synthetic data, with no customer data and no production users",
+      "Fully self-hosted open-weight models, where the risk moves to your own operations rather than a vendor (still pin and eval)"
+    ],
+    "tools": [
+      {
+        "name": "OpenAI data controls",
+        "type": "Provider documentation",
+        "what": "Default retention, zero data retention eligibility and data residency options for the API",
+        "url": "https://platform.openai.com/docs/guides/your-data"
+      },
+      {
+        "name": "Anthropic model deprecations",
+        "type": "Provider documentation",
+        "what": "Deprecation and retirement schedule for dated model snapshots",
+        "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations"
+      },
+      {
+        "name": "LiteLLM",
+        "type": "Open source",
+        "what": "One interface over many providers, with pinned model names, retries and fallbacks",
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Regression evals you can re-run on a new model version before switching",
+        "url": "https://www.promptfoo.dev"
+      },
+      {
+        "name": "RBI Master Direction on Outsourcing of IT Services",
+        "type": "Regulator direction",
+        "what": "Due diligence, contracts, audit access, concentration risk and exit strategy for regulated entities",
+        "url": "https://www.rbi.org.in"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Godavari Bank, a fictional private bank, summarises 2,00,000 customer complaint conversations a month with an overseas LLM provider. This year the provider has one 8-hour incident and moves its model alias several times. Choose the data terms, how the model version is set, whether there is a tested second provider and whether an exit plan exists, and watch customer-data exposure, silent changes, outage impact, audit findings and cost. Educational, not legal advice.",
+    "controls": [
+      "Choose the data terms: the provider’s default 30-day log retention, or zero data retention agreed in the contract.",
+      "Choose a floating alias or a pinned snapshot with evals on every change, and a single provider or a primary with a tested fallback.",
+      "Tick whether an exit plan is documented and rehearsed, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Days customer data stays at the provider",
+        "meaning": "How long complaint text sits in the provider’s logs, and roughly how many conversations that is at any time."
+      },
+      {
+        "name": "Silent behaviour changes reaching production",
+        "meaning": "Provider-side model changes a year that reach customers with no eval or release on the bank’s side."
+      },
+      {
+        "name": "Outage impact",
+        "meaning": "How long the assistant is unavailable during the provider’s 8-hour incident."
+      },
+      {
+        "name": "Audit findings",
+        "meaning": "Gaps an outsourcing-style inspection would raise, out of 4: data terms, change control, exit strategy, concentration."
+      },
+      {
+        "name": "Extra cost a year",
+        "meaning": "Illustrative yearly cost of the controls chosen, in rupees."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Default terms, alias, one provider",
+        "expect": "30 days of data at the provider (about 2,00,000 conversations), 6 silent changes a year, 8 hours down, 4 findings, ₹0 extra."
+      },
+      {
+        "k": "terms",
+        "name": "Contract fixes only",
+        "expect": "Zero retention and an exit plan: 0 days, but still 6 silent changes and 8 hours down; 1 finding, ₹7,20,000 a year."
+      },
+      {
+        "k": "twoalias",
+        "name": "Second provider on aliases",
+        "expect": "Outage falls to 15 minutes, but silent changes rise to 10 a year as both aliases move; 3 findings, ₹9,00,000."
+      },
+      {
+        "k": "full",
+        "name": "Full vendor programme",
+        "expect": "0 days, 0 silent changes (3 planned upgrades after evals), 15 minutes down, 0 findings, ₹18,60,000 a year."
+      }
+    ],
+    "missions": [
+      {
+        "k": "lean",
+        "text": "Clear every audit finding for less than ₹10,00,000 a year.",
+        "hint": "A documented exit plan manages concentration on paper; you may not need the second provider for the audit."
+      },
+      {
+        "k": "resilient",
+        "text": "Keep the outage under an hour with no silent behaviour changes reaching production.",
+        "hint": "You need both a tested fallback and pinned versions."
+      },
+      {
+        "k": "drift",
+        "text": "Show how a second provider can make version drift worse.",
+        "hint": "Add the fallback but leave the model version on a floating alias."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LiteLLM",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "One interface over many providers, with pinned model names, retries and fallbacks.",
+        "ex": "Route complaints to a pinned primary snapshot and fail over to a second provider after a timeout.",
+        "pros": [
+          "Swap providers without rewriting callers",
+          "Fallbacks and retries in configuration"
+        ],
+        "cons": [
+          "Another component on the critical path",
+          "Provider-specific features may not map cleanly"
+        ],
+        "url": "https://docs.litellm.ai"
+      },
+      {
+        "n": "OpenAI data controls",
+        "type": "Provider documentation",
+        "start": 3,
+        "prod": 3,
+        "best": "States default API retention, zero data retention eligibility and data residency options.",
+        "ex": "Confirm what is logged, for how long, and in which region before customer data flows.",
+        "pros": [
+          "Authoritative for that provider",
+          "Covers training use and retention"
+        ],
+        "cons": [
+          "Terms change: re-check at each review",
+          "Some options need approval or an enterprise agreement"
+        ],
+        "url": "https://platform.openai.com/docs/guides/your-data"
+      },
+      {
+        "n": "Anthropic model deprecations",
+        "type": "Provider documentation",
+        "start": 3,
+        "prod": 3,
+        "best": "Deprecation and retirement dates for dated model snapshots.",
+        "ex": "Feed the retirement date into the migration plan and schedule the eval run weeks ahead.",
+        "pros": [
+          "Dates to plan against",
+          "Lists recommended replacements"
+        ],
+        "cons": [
+          "Covers one provider",
+          "Aliases still move between snapshots"
+        ],
+        "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Regression evals across models and providers from one configuration.",
+        "ex": "Score the 400-case complaints suite on the pinned snapshot and a candidate side by side.",
+        "pros": [
+          "Compares providers directly",
+          "Runs in CI"
+        ],
+        "cons": [
+          "Your test cases decide its value",
+          "Model-graded checks need calibration"
+        ],
+        "url": "https://www.promptfoo.dev"
+      },
+      {
+        "n": "RBI Master Direction on Outsourcing of IT Services",
+        "type": "Regulator direction",
+        "start": 2,
+        "prod": 3,
+        "best": "What banks and NBFCs are expected to do when outsourcing IT: due diligence, contracts, audit access, concentration and exit.",
+        "ex": "Map each clause of the LLM provider contract to the direction before signing.",
+        "pros": [
+          "Clear checklist for regulated entities",
+          "Aligns risk, legal and engineering"
+        ],
+        "cons": [
+          "Needs interpretation for AI services",
+          "Not a technical specification"
+        ],
+        "url": "https://www.rbi.org.in"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "The provider can change the model behind our alias",
+        "tool": "Pin a dated snapshot and re-run evals on every change"
+      },
+      {
+        "need": "One provider outage takes us offline",
+        "tool": "A second provider behind a gateway, drilled monthly, plus an exit plan"
+      },
+      {
+        "need": "We do not know what the provider keeps",
+        "tool": "Read the data terms and agree zero data retention and region in writing"
+      }
+    ],
+    "goals": [
+      "Run due diligence on a model provider’s data terms, region and assurance reports",
+      "Explain why pinning and evals on change stop silent behaviour changes",
+      "Weigh a tested fallback against a documented exit plan for concentration risk"
+    ]
+  },
+  "practice": {
+    "scenario": "Godavari Bank, a fictional private bank, summarises 2,00,000 customer complaint conversations a month with an overseas LLM provider, on default terms and a floating model alias. One Tuesday the complaint summaries start dropping the amount in dispute: the provider had moved the alias to a new snapshot. Two months later the provider has an 8-hour incident and the assistant is down all day. The fix was a vendor programme, not a better prompt: zero data retention agreed in writing, an India region, a pinned snapshot with a 400-case eval run before any change, a second provider behind one gateway that is drilled monthly, and a written exit plan. Inspection findings went from 4 to 0.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Complaint summarisation and reply drafting on a provider’s model, reviewed under RBI outsourcing expectations"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "Research summaries and client chat on a vendor model, where SEBI Regulation 16C keeps the broker responsible for the output"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Clinical note drafting on a hosted model, where retention, region and, in the US, HIPAA business associate terms decide what may be sent"
+      }
+    ],
+    "analogy": "Renting a delivery van instead of owning one. You read the rental terms, insist the company does not swap the engine without telling you, keep a second rental firm’s number on file, and know how you would move to your own van. The parcels are still yours if they arrive late.",
+    "library": {
+      "name": "LiteLLM",
+      "what": "An open-source gateway and Python SDK with one interface over many model providers; its Router takes pinned model names, retries and fallbacks between deployments.",
+      "install": "pip install litellm"
+    },
+    "note": "Model names are examples of dated snapshots; use the snapshot names your providers currently list, and check their deprecation pages. run_eval_suite and alert_risk_team are stubs for your own eval harness and alerting. Provider keys are read from environment variables. Data terms such as zero data retention are agreed with the provider, not set in this code. Educational, not legal advice.",
+    "samples": [
+      {
+        "file": "vendor_gateway.py",
+        "language": "python",
+        "code": "from litellm import Router\n\nPRIMARY = \"anthropic/claude-sonnet-4-5-20250929\"     # dated snapshot, not an alias\nFALLBACK = \"openai/gpt-4.1-2025-04-14\"               # second provider, same data terms\n\nrouter = Router(\n    model_list=[\n        {\"model_name\": \"complaints\", \"litellm_params\": {\"model\": PRIMARY, \"timeout\": 20}},\n        {\"model_name\": \"complaints-backup\", \"litellm_params\": {\"model\": FALLBACK, \"timeout\": 20}},\n    ],\n    fallbacks=[{\"complaints\": [\"complaints-backup\"]}],\n    num_retries=1,\n)\n\nVENDOR_CHECKS = {\n    \"trains_on_our_data\": False,\n    \"retention_days\": 0,                 # zero data retention agreed in the contract\n    \"region\": \"india\",\n    \"incident_notice_hours\": 6,          # lets us meet CERT-In's 6-hour clock\n    \"exit_plan_rehearsed\": \"2026-03-10\",\n}\n\nBASELINE = 0.86                          # score of the pinned snapshot on 400 cases\n\n\ndef summarise(complaint_text: str) -> str:\n    resp = router.completion(\n        model=\"complaints\",\n        messages=[{\"role\": \"system\", \"content\": \"Summarise the complaint. Keep amounts, dates and account references.\"},\n                  {\"role\": \"user\", \"content\": complaint_text}],\n    )\n    return resp.choices[0].message.content\n\n\ndef consider_new_snapshot(candidate: str) -> bool:\n    \"\"\"Run on a deprecation notice or a new snapshot; never switch without it.\"\"\"\n    score = run_eval_suite(candidate, suite=\"complaints_v7\")     # stub: your eval harness\n    if score < BASELINE - 0.02:\n        alert_risk_team(f\"{candidate} scored {score:.2f}; staying on {PRIMARY}\")\n        return False\n    return True                         # propose the change through normal release review"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Godavari Bank’s LLM provider offers a 99.9% monthly availability SLA. In a 30-day month, how many minutes of downtime can the provider have without breaching it?",
+    "answer": "30 × 24 × 60 = 43,200 minutes. 0.1% of 43,200 = 43.2 minutes. An SLA usually pays service credits, not the bank’s losses, so 43 minutes of complaint handling can stop within the SLA; a tested fallback is what keeps the service up.",
+    "expected": {
+      "value": 43.2,
+      "tolerance": 0.5,
+      "label": "minutes ="
+    },
+    "interview": [
+      {
+        "question": "How do you run due diligence on an LLM provider for a regulated workload?",
+        "answer": "Start with the data terms: whether inputs are used for training, how long logs are kept, whether zero data retention is available, where processing happens and which sub-processors are involved. Read the SOC 2 Type II and ISO/IEC 27001 reports, and ISO/IEC 42001 if offered, checking that their scope covers the service you will use. Then put what matters into the contract: SLA, incident notice fast enough for your own reporting clocks, audit and regulator access, sub-processor notice, and data return and deletion on exit."
+      },
+      {
+        "question": "Why pin model versions, and what does it cost you?",
+        "answer": "A floating alias lets the provider change the model behind the same name, so behaviour changes in production with no release on your side. Pinning a dated snapshot makes every change a deliberate upgrade that runs through your evals first. The cost is that snapshots retire, so you must track deprecation notices and budget for migrations and eval runs a few times a year."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Treating the vendor as responsible for the vendor’s model",
+        "fix": "The regulated firm stays accountable; manage the vendor through contract, testing and monitoring"
+      },
+      {
+        "mistake": "Adding a fallback provider that has never carried traffic",
+        "fix": "Pin it, give it the same data terms, and drill the failover on a schedule"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "vk01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s complaints assistant calls ‘model-a’, a floating alias. Summaries change overnight with no release on the bank’s side. What is the most likely cause?",
+      "options": [
+        "The bank’s prompt was edited",
+        "The provider moved the alias to a new model snapshot",
+        "The customer data changed",
+        "The network was slow"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An alias points to whichever snapshot the provider chooses. Pin a dated snapshot and upgrade only after evals."
+    },
+    {
+      "id": "vk02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A provider’s 99.9% monthly availability SLA applies to a 30-day month. How many minutes of downtime does it allow?",
+      "options": [
+        "4.3 minutes",
+        "43.2 minutes",
+        "432 minutes",
+        "8.6 hours"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "30 × 24 × 60 = 43,200 minutes; 0.1% of that is 43.2 minutes."
+    },
+    {
+      "id": "vk03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments firm sends 1,80,000 chats a month to a provider that keeps API logs for 30 days by default. Roughly how many chats sit in the provider’s logs at any time?",
+      "options": [
+        "6,000",
+        "60,000",
+        "1,80,000",
+        "54,00,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "30 days of logs hold about one month of traffic: about 1,80,000 chats. Zero data retention brings it to none."
+    },
+    {
+      "id": "vk04",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Under SEBI’s Regulation 16C, who is responsible for the output of an AI tool a broker buys from a vendor?",
+      "options": [
+        "The vendor",
+        "The broker",
+        "Nobody, if the vendor is certified",
+        "The exchange"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The intermediary is solely responsible for the AI tools it relies on, bought or built. See the RBI and SEBI technique for the rule itself."
+    },
+    {
+      "id": "vk05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which RBI direction sets expectations such as due diligence, audit access, concentration risk and an exit strategy when a bank outsources IT services?",
+      "options": [
+        "Master Direction on Outsourcing of Information Technology Services",
+        "Master Direction on KYC",
+        "Priority Sector Lending directions",
+        "Payment Aggregator guidelines"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The 2023 Master Direction on Outsourcing of IT Services covers these for regulated entities. Educational, not legal advice."
+    },
+    {
+      "id": "vk06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer’s vendor shows a SOC 2 Type II report. What should the risk team check first?",
+      "options": [
+        "The logo on the cover",
+        "That the report’s scope covers the API service the insurer will use, and its period is current",
+        "That it mentions AI",
+        "Nothing: SOC 2 Type II means no risk"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A report only assures the systems and period in its scope."
+    },
+    {
+      "id": "vk07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom operator’s support agent runs on one provider. The provider has an 8-hour incident. With a tested fallback that switches in 15 minutes, how much outage do customers see?",
+      "options": [
+        "8 hours",
+        "4 hours",
+        "15 minutes",
+        "None at all, ever"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A drilled fallback turns the incident into a short failover."
+    },
+    {
+      "id": "vk08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A new snapshot scores 83% on the bank’s 400-case eval suite. The pinned snapshot scores 86% and the tolerance is 2 points. What should happen?",
+      "options": [
+        "Switch: newer is better",
+        "Block the change and stay on the pinned snapshot",
+        "Switch and monitor",
+        "Retire the eval suite"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A 3-point drop exceeds the 2-point tolerance."
+    },
+    {
+      "id": "vk09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in an LLM provider contract for a regulated bank? Select all that apply.",
+      "options": [
+        "Incident notice within a set number of hours",
+        "Audit and access rights for the bank and its regulator",
+        "A promise that the model will never make mistakes",
+        "Data return and deletion on exit"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Contracts can require notice, access and exit terms; no contract can make a model error-free."
+    },
+    {
+      "id": "vk10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital group wants a second LLM provider as a fallback. What makes the fallback a real control?",
+      "options": [
+        "An API key in the vault",
+        "It carries traffic in regular drills, on a pinned version and with the same data terms",
+        "It is cheaper",
+        "It is from the same provider in another region only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A fallback that has never served traffic, or has weaker data terms, fails when it is needed."
+    },
+    {
+      "id": "vk11",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC’s single-provider assistant has no exit plan. Which finding is an outsourcing review most likely to raise?",
+      "options": [
+        "Concentration risk and no exit strategy",
+        "Too many evals",
+        "Excessive documentation",
+        "Using Hindi prompts"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Regulated entities are expected to assess concentration and plan how to exit a provider."
+    },
+    {
+      "id": "vk12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace moves two assistants to a second provider but keeps both on floating aliases. The primary alias moves 6 times a year and the fallback’s 4. How many silent behaviour changes can reach production a year?",
+      "options": [
+        "4",
+        "6",
+        "10",
+        "24"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "6 + 4 = 10. A second provider doubles the version-drift surface unless both are pinned."
+    },
+    {
+      "id": "vk13",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are part of due diligence on an LLM provider before customer data flows? Select all that apply.",
+      "options": [
+        "Whether inputs are used for training",
+        "Log retention and zero data retention options",
+        "Where data is processed",
+        "The provider’s share price"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Training use, retention and residency decide what happens to customer data."
+    },
+    {
+      "id": "vk14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank adds zero data retention (₹6,00,000 a year), pinned versions with evals (₹2,40,000) and a documented exit plan (₹1,20,000). What is the extra yearly cost?",
+      "options": [
+        "₹8,40,000",
+        "₹9,60,000",
+        "₹10,20,000",
+        "₹18,60,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6,00,000 + 2,40,000 + 1,20,000 = ₹9,60,000."
+    },
+    {
+      "id": "vk15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Under the DPDP Act, what is a model vendor that processes customers’ personal data on a fintech’s behalf?",
+      "options": [
+        "A data fiduciary with sole responsibility",
+        "A data processor, engaged under a contract, with the fintech remaining responsible",
+        "A consent manager",
+        "Outside the Act"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The fiduciary engages processors under a contract and stays responsible. See the DPDP technique."
+    },
+    {
+      "id": "vk16",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A provider emails that a model snapshot retires in 90 days. What is the right first step?",
+      "options": [
+        "Switch to the replacement the same day",
+        "Run the eval suite on the replacement and plan the migration through release review",
+        "Ignore it until the API fails",
+        "Move to a floating alias to avoid future notices"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deprecations are planned migrations: evaluate, then change through review before the date."
+    },
+    {
+      "id": "vk17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which help manage concentration risk on a single LLM provider? Select all that apply.",
+      "options": [
+        "An abstraction layer so callers do not depend on one provider’s API",
+        "A tested second provider",
+        "A documented, rehearsed exit plan",
+        "Using only the provider’s newest alias"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Portability, a working alternative and a known exit reduce dependence; aliases add drift, not resilience."
+    },
+    {
+      "id": "vk18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "The contract requires the vendor to report security incidents to the bank within 6 hours. Why 6?",
+      "options": [
+        "It is a random number",
+        "So the bank can meet CERT-In’s 6-hour reporting direction for cyber incidents",
+        "Because SLAs are measured in 6-hour blocks",
+        "Because DPDP requires 6 days"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The vendor’s notice clock must fit inside the bank’s own reporting clocks."
+    },
+    {
+      "id": "vk19",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Two independent providers each have 99.9% availability. Roughly what share of the time are both down together?",
+      "options": [
+        "0.1%",
+        "0.01%",
+        "0.0001%",
+        "0.2%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.001 × 0.001 = 0.000001, or 0.0001%, if failures are truly independent and the fallback works."
+    },
+    {
+      "id": "vk20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A vendor quietly adds a new sub-processor in another country. Which contract clause would have given the operator a say?",
+      "options": [
+        "An availability SLA",
+        "Advance notice of new sub-processors, with a right to object",
+        "A price cap",
+        "A logo-usage clause"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sub-processor notice lets you check where data goes before it moves."
+    }
+  ]
+}

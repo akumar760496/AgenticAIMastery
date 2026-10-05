@@ -1,0 +1,872 @@
+{
+  "id": "prefix",
+  "moduleSlug": "performance",
+  "name": "Prefix Caching",
+  "shortName": "KV reuse",
+  "question": "Why recompute the same prompt start?",
+  "summary": "Inside the inference server, the key–value (KV) cache for a prompt prefix is kept after a request finishes and reused by the next request that starts with the same tokens. The shared part skips prefill entirely, cutting time to first token for agents that resend the same system prompt, tools and history at every step. It is the engine-level mechanism behind provider prompt caching.",
+  "useCases": [
+    "Self-hosted models serving agents with long, repeated prompts",
+    "Many users sharing one system prompt",
+    "Multi-turn chats where each turn extends the last"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "KV cache",
+        "detail": "attention keys and values for tokens already processed"
+      },
+      {
+        "term": "Prefix match",
+        "detail": "reuse needs identical opening tokens"
+      },
+      {
+        "term": "PagedAttention",
+        "detail": "KV cache stored in blocks that requests can share (vLLM)"
+      },
+      {
+        "term": "RadixAttention",
+        "detail": "a prefix tree of cached blocks (SGLang)"
+      },
+      {
+        "term": "Cache-aware routing",
+        "detail": "send requests to the replica that holds their prefix"
+      }
+    ]
+  },
+  "steps": [
+    "Turn on automatic prefix caching in your serving engine",
+    "Keep the prompt prefix stable across turns and users",
+    "Route sessions to the same replica to keep caches warm",
+    "Track cache hit rate and time to first token"
+  ],
+  "pitfalls": [
+    "Any change early in the prompt forces a full recompute",
+    "Cached blocks compete with live requests for GPU memory",
+    "Across many replicas, hit rate falls without cache-aware routing"
+  ],
+  "tools": [
+    "vLLM automatic prefix caching",
+    "SGLang RadixAttention",
+    "TensorRT-LLM",
+    "NVIDIA Dynamo"
+  ],
+  "remember": "Same start, skip the prefill.",
+  "caption": "Only the few hundred new tokens per user need prefill. The shared 6,000 are reused.",
+  "comparison": {
+    "scope": "Inference engine",
+    "cost": 1,
+    "needs": "Time to first token, GPU cost",
+    "best": "Needs stable prefixes; uses memory"
+  },
+  "diagram": {
+    "file": "diagrams/prefix.svg"
+  },
+  "lesson": {
+    "file": "prefix_cache.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from collections import OrderedDict",
+        "steps": []
+      },
+      {
+        "text": "BLOCK = 16                                    # tokens per KV block",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "cache = OrderedDict()                         # block hash -> KV block on GPU",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def block_hashes(tokens):",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "    h, out = None, []",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    for i in range(0, len(tokens) - len(tokens) % BLOCK, BLOCK):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        h = hash((h, tuple(tokens[i:i + BLOCK])))   # chained with parent",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        out.append(h)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return out",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def prefill(tokens):",
+        "steps": []
+      },
+      {
+        "text": "    hashes = block_hashes(tokens)",
+        "steps": []
+      },
+      {
+        "text": "    hit = 0",
+        "steps": []
+      },
+      {
+        "text": "    while hit < len(hashes) and hashes[hit] in cache:",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "        cache.move_to_end(hashes[hit])            # recently used",
+        "steps": [
+          4,
+          6
+        ]
+      },
+      {
+        "text": "        hit += 1",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    reused = [cache[h] for h in hashes[:hit]]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    fresh = model.compute_kv(tokens[hit * BLOCK:], past=reused)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    for h, kv in zip(hashes[hit:], fresh):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        cache[h] = kv",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    while gpu_blocks_used() > LIMIT:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        cache.popitem(last=False)                 # evict least recently used",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return reused + fresh, hit * BLOCK            # tokens skipped",
+        "steps": [
+          4,
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Cut the prompt into blocks",
+        "text": "The KV cache is stored in fixed blocks, 16 tokens each in vLLM. The 6,000-token system prompt and tools fill 375 blocks."
+      },
+      {
+        "title": "Hash each block with its parent",
+        "text": "Each block’s key includes the hash of everything before it, so a block can only match when the whole prefix up to it is identical."
+      },
+      {
+        "title": "First request: a miss",
+        "text": "Nothing is cached yet, so all 6,300 tokens are prefilled: 0.63 s at 10,000 tokens per second. The blocks are kept afterwards."
+      },
+      {
+        "title": "Next request: reuse the prefix",
+        "text": "User B’s prompt shares the first 375 blocks. They are looked up, not recomputed, and only 300 new tokens are prefilled: 0.03 s."
+      },
+      {
+        "title": "One early change breaks the chain",
+        "text": "Put a timestamp in the first line and the first block differs, so every later hash differs too. The whole prompt is recomputed."
+      },
+      {
+        "title": "Evict cold blocks, watch the hit rate",
+        "text": "When GPU memory is needed, the least recently used blocks are evicted. Track cache hit rate and time to first token together."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Prompt in 16-token blocks</text><rect class=\"a\" x=\"8\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0s\"/><rect class=\"a\" x=\"26\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.02s\"/><rect class=\"a\" x=\"44\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.04s\"/><rect class=\"a\" x=\"62\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.06s\"/><rect class=\"a\" x=\"80\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.08s\"/><rect class=\"a\" x=\"98\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.1s\"/><rect class=\"a\" x=\"116\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.12s\"/><rect class=\"a\" x=\"134\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.14s\"/><rect class=\"a\" x=\"152\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.16s\"/><rect class=\"a\" x=\"170\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.18s\"/><rect class=\"a\" x=\"188\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.2s\"/><rect class=\"a\" x=\"206\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.22s\"/><rect class=\"a\" x=\"224\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.24s\"/><rect class=\"a\" x=\"242\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.26s\"/><rect class=\"a\" x=\"260\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.28s\"/><rect class=\"a\" x=\"278\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.3s\"/><rect class=\"a\" x=\"296\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--accent);opacity:.75;--d:0.32s\"/><rect class=\"a\" x=\"320\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--warn);--d:0.4s\"/><rect class=\"a\" x=\"338\" y=\"20\" width=\"15\" height=\"16\" rx=\"2\" style=\"fill:var(--warn);--d:0.4s\"/><text class=\"mono l a\" x=\"8\" y=\"50\" style=\"--d:0.45s\">system + tools · 375 blocks</text><text class=\"mono a\" x=\"352\" y=\"50\" style=\"text-anchor:end;--d:0.5s\">user · 300</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"60\" width=\"52\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"34\" y=\"74\" text-anchor=\"middle\">h1</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"78\" y=\"60\" width=\"52\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"104\" y=\"74\" text-anchor=\"middle\">h2</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx soft\" x=\"148\" y=\"60\" width=\"52\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"174\" y=\"74\" text-anchor=\"middle\">h3</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"218\" y=\"60\" width=\"52\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"244\" y=\"74\" text-anchor=\"middle\">…</text></g><g class=\"a\" style=\"--d:0.32s\"><rect class=\"bx soft\" x=\"288\" y=\"60\" width=\"52\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"314\" y=\"74\" text-anchor=\"middle\">h375</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M62 70L76 70\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.18s\"><path class=\"ln \" d=\"M132 70L146 70\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.26s\"><path class=\"ln \" d=\"M202 70L216 70\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><path class=\"ln \" d=\"M272 70L286 70\" marker-end=\"url(#arr)\"/></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"104\" style=\"--d:0s\">Request A</text><rect x=\"76\" y=\"94\" width=\"236\" height=\"16\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"316\" y=\"106\" style=\"--d:0.3s\">0.63 s</text><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t warn\" x=\"194\" y=\"124\">miss: compute 6,300 tokens, keep the blocks</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"146\" style=\"--d:0s\">Request B</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"hatch\" x=\"76\" y=\"136\" width=\"225\" height=\"16\" rx=\"3\" style=\"stroke-dasharray:3 2\"/><text class=\"sb\" x=\"188\" y=\"148\">375 blocks reused</text></g><rect x=\"303\" y=\"136\" width=\"11\" height=\"16\" rx=\"3\" class=\"bar grow \" style=\"--d:0.2s\"/><text class=\"mono l a\" x=\"318\" y=\"148\" style=\"--d:0.3s\">0.03 s</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"180\" style=\"--d:0s\">Request C</text><rect x=\"76\" y=\"170\" width=\"236\" height=\"16\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"316\" y=\"182\" style=\"--d:0.2s\">0.63 s</text><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t fail\" x=\"194\" y=\"200\">timestamp in line 1 → no block matches</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"216\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"233\" text-anchor=\"middle\">LRU evicts cold blocks</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"182\" y=\"216\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"233\" text-anchor=\"middle\">track hit rate + TTFT</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Large cuts to time to first token for long, repeated prompts",
+      "No change to outputs: the same KV values are reused",
+      "Often a single flag, and default-on in recent vLLM",
+      "Saves GPU compute, which raises throughput"
+    ],
+    "cons": [
+      "Any early change in the prompt defeats it",
+      "Cached blocks compete with live requests for GPU memory",
+      "Hit rate drops across replicas without cache-aware routing",
+      "Helps prefill only, not token-by-token decoding"
+    ],
+    "avoidWhen": [
+      "Prompts share little or nothing at the start",
+      "You use a hosted API: use the provider’s prompt caching instead"
+    ],
+    "tools": [
+      {
+        "name": "vLLM",
+        "type": "Open source inference server",
+        "what": "Automatic prefix caching over paged KV blocks",
+        "url": "https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/"
+      },
+      {
+        "name": "SGLang",
+        "type": "Open source inference server",
+        "what": "RadixAttention: a prefix tree of cached KV",
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "name": "TensorRT-LLM",
+        "type": "Open source (NVIDIA)",
+        "what": "KV cache reuse across requests",
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      },
+      {
+        "name": "NVIDIA Dynamo",
+        "type": "Open source (NVIDIA)",
+        "what": "KV-aware routing across many replicas",
+        "url": "https://github.com/ai-dynamo/dynamo"
+      },
+      {
+        "name": "LMCache",
+        "type": "Open source",
+        "what": "Shares and offloads KV cache beyond one GPU",
+        "url": "https://github.com/LMCache/LMCache"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A self-hosted model serves an agent platform with eight tenants. Each tenant’s system prompt and tools total several thousand tokens and are identical on every request; each request adds a few hundred new tokens. One replica’s GPU memory can keep the cached prefixes of 4 tenants. Prefill runs at 10,000 tokens per second, so time to first token is roughly prefill tokens ÷ 10,000.",
+    "controls": [
+      "Drag the size of the shared prefix and the new tokens per request.",
+      "Turn prefix caching on or off, and choose whether the current time goes in the first line of the prompt.",
+      "Set the number of replicas and choose random or cache-aware routing."
+    ],
+    "outputs": [
+      {
+        "name": "Prefix cache hit rate",
+        "meaning": "Share of requests whose prefix is already cached on the replica they reach."
+      },
+      {
+        "name": "Prompt tokens reused",
+        "meaning": "Tokens that skip prefill ÷ all prompt tokens."
+      },
+      {
+        "name": "Time to first token",
+        "meaning": "Tokens still prefilled ÷ 10,000 per second."
+      },
+      {
+        "name": "Tenants per replica",
+        "meaning": "How many distinct prefixes each replica must hold."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Random routing",
+        "expect": "4 replicas, random routing: every replica sees all 8 tenants but holds 4, so the hit rate is 50%. Expect 3,300 prefill tokens and 0.33 s."
+      },
+      {
+        "k": "sticky",
+        "name": "Cache-aware routing",
+        "expect": "Each replica serves 2 tenants and keeps both warm: 100% hits, 300 prefill tokens, 0.03 s instead of 0.63 s."
+      },
+      {
+        "k": "ts",
+        "name": "Timestamp first",
+        "expect": "A timestamp in line 1 changes the first block on every request, so the hit rate is 0% and TTFT is 0.63 s, even with cache-aware routing."
+      },
+      {
+        "k": "off",
+        "name": "Caching off",
+        "expect": "Every request prefills all 6,300 tokens: 0.63 s."
+      }
+    ],
+    "missions": [
+      {
+        "k": "sticky",
+        "text": "With at least 4 replicas, get time to first token down to 0.03 s or less.",
+        "hint": "Each replica must keep every tenant it serves warm."
+      },
+      {
+        "k": "zero",
+        "text": "Keep prefix caching on but make the hit rate zero with one change.",
+        "hint": "What happens when the very first tokens differ on every request?"
+      },
+      {
+        "k": "fewest",
+        "text": "Reach a 100% hit rate with cache-aware routing on the fewest replicas.",
+        "hint": "8 tenants, 4 cached prefixes per replica."
+      }
+    ],
+    "tools": [
+      {
+        "n": "vLLM automatic prefix caching",
+        "type": "Open source · inference server",
+        "start": 3,
+        "prod": 3,
+        "best": "Hash-based reuse of paged KV blocks for any matching prompt prefix, on by default in recent versions.",
+        "ex": "Serve a support agent whose 6,000-token system prompt is prefilled once and reused by every conversation.",
+        "pros": [
+          "Often no code changes",
+          "Works with PagedAttention memory management"
+        ],
+        "cons": [
+          "Per-instance cache; routing across replicas is up to you",
+          "Cached blocks share memory with live requests"
+        ],
+        "url": "https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/"
+      },
+      {
+        "n": "SGLang RadixAttention",
+        "type": "Open source · inference server",
+        "start": 2,
+        "prod": 3,
+        "best": "A radix tree of cached prefixes with cache-aware scheduling, strong for branching agent workloads.",
+        "ex": "Many agent branches share a long history; each branch reuses the common part automatically.",
+        "pros": [
+          "Handles branching prefixes well",
+          "Scheduling favours cache hits"
+        ],
+        "cons": [
+          "Smaller ecosystem than vLLM",
+          "Tuning needs benchmarking"
+        ],
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "n": "NVIDIA Dynamo",
+        "type": "Open source · NVIDIA",
+        "start": 1,
+        "prod": 3,
+        "best": "KV-aware routing across many replicas, so requests land where their prefix is cached.",
+        "ex": "Route each tenant’s traffic to the worker that already holds its system-prompt KV blocks.",
+        "pros": [
+          "Built for multi-node fleets",
+          "Also handles disaggregated serving"
+        ],
+        "cons": [
+          "A platform to operate",
+          "Overkill for a single replica"
+        ],
+        "url": "https://github.com/ai-dynamo/dynamo"
+      },
+      {
+        "n": "LMCache",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Sharing and offloading KV cache to CPU memory or storage, beyond one GPU’s memory.",
+        "ex": "Keep long document prefixes in CPU memory so they survive GPU eviction.",
+        "pros": [
+          "Extends cache capacity",
+          "Integrates with vLLM"
+        ],
+        "cons": [
+          "Adds a component to deploy",
+          "Offload speed depends on hardware"
+        ],
+        "url": "https://github.com/LMCache/LMCache"
+      },
+      {
+        "n": "TensorRT-LLM KV reuse",
+        "type": "Open source · NVIDIA",
+        "start": 1,
+        "prod": 3,
+        "best": "KV cache reuse inside NVIDIA’s optimized serving stack.",
+        "ex": "Enable block reuse for a fixed production model served with Triton.",
+        "pros": [
+          "High performance",
+          "Part of a mature NVIDIA stack"
+        ],
+        "cons": [
+          "NVIDIA only",
+          "More setup than vLLM"
+        ],
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "One self-hosted replica",
+        "tool": "vLLM automatic prefix caching"
+      },
+      {
+        "need": "Many replicas, many tenants",
+        "tool": "NVIDIA Dynamo KV-aware routing"
+      },
+      {
+        "need": "Branching agent histories",
+        "tool": "SGLang RadixAttention"
+      }
+    ],
+    "goals": [
+      "Explain why a single early change defeats prefix caching",
+      "Calculate time to first token with and without a cached prefix",
+      "Design prompts and routing that keep hit rates high across replicas"
+    ]
+  },
+  "practice": {
+    "scenario": "A support platform self-hosts a model for an agent whose system prompt and tool definitions total 6,000 tokens. With automatic prefix caching, every request after the first skips prefill for those tokens, so time to first token falls.",
+    "industries": [
+      {
+        "industry": "SaaS support platforms",
+        "use": "One long system prompt shared by every conversation"
+      },
+      {
+        "industry": "Coding tools",
+        "use": "Repository context reused across agent steps"
+      },
+      {
+        "industry": "Multi-tenant chat",
+        "use": "Thousands of users on the same instructions"
+      }
+    ],
+    "analogy": "Pre-printed letterhead. The header is printed once in bulk, and each letter only adds its own body.",
+    "library": {
+      "name": "vLLM",
+      "what": "Automatic prefix caching reuses KV-cache blocks for any matching prompt start. It is on by default in recent versions.",
+      "install": "pip install vllm"
+    },
+    "samples": [
+      {
+        "file": "prefix.py",
+        "language": "python",
+        "code": "from vllm import LLM, SamplingParams\n\nllm = LLM(model=\"Qwen/Qwen2.5-7B-Instruct\",\n          enable_prefix_caching=True)      # default-on in recent vLLM versions\n\nSYSTEM = open(\"system_prompt_and_tools.txt\").read()   # ~6,000 tokens, identical each time\nprompts = [f\"{SYSTEM}\\nUser: {q}\\nAssistant:\" for q in user_questions]\n\nouts = llm.generate(prompts, SamplingParams(max_tokens=256))\n# The first request computes the prefix KV cache; the rest reuse it.\n# Server equivalent:  vllm serve Qwen/Qwen2.5-7B-Instruct --enable-prefix-caching"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A prompt is 6,000 shared tokens plus 300 user tokens, and prefill runs at 10,000 tokens per second. With prefix caching, how long does prefill take, in seconds?",
+    "answer": "Without caching: 6,300 ÷ 10,000 = 0.63 s. With the shared 6,000 reused: 300 ÷ 10,000 = 0.03 s before the first token.",
+    "expected": {
+      "value": 0.03,
+      "tolerance": 0.002,
+      "label": "seconds ="
+    },
+    "interview": [
+      {
+        "question": "How is prefix caching different from a response cache?",
+        "answer": "Prefix caching reuses the attention KV state for shared prompt beginnings, and the model still generates a fresh answer. A response cache returns a stored answer and skips the model."
+      },
+      {
+        "question": "How do you keep prefix-cache hit rates high across many replicas?",
+        "answer": "Keep prompt prefixes identical, and route requests sharing a prefix (same session, tenant or system prompt) to the same replica with cache-aware or consistent-hash routing."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Per-user text at the start of the prompt",
+        "fix": "Shared content first, per-user content last"
+      },
+      {
+        "mistake": "Random load balancing across replicas",
+        "fix": "Cache-aware or session-sticky routing"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pc01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A self-hosted agent resends an 8,000-token system prompt and tool list on every step, and time to first token is 1.2 s. What is the first thing to try?",
+      "options": [
+        "Speculative decoding",
+        "Prefix caching with a byte-stable prompt start",
+        "A bigger model",
+        "Execution graphs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Most of the wait is prefill on the repeated prefix, which prefix caching skips."
+    },
+    {
+      "id": "pc02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A prompt is 8,000 shared tokens plus 400 new ones, and prefill runs at 20,000 tokens per second. What is the prefill time with a warm cache?",
+      "options": [
+        "0.02 s",
+        "0.42 s",
+        "0.40 s",
+        "0.21 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only the 400 new tokens are prefilled: 400 ÷ 20,000 = 0.02 s, against 0.42 s without the cache."
+    },
+    {
+      "id": "pc03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Prefix caching is enabled, yet the hit rate is 0%. The system prompt starts with “Today is {date} {time}.” What is wrong?",
+      "options": [
+        "The cache is too small",
+        "The changing timestamp makes the first block differ, so nothing after it can match",
+        "The model is too large",
+        "Hit rate is always 0% at first"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Move per-request text to the end of the prompt."
+    },
+    {
+      "id": "pc04",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which changes stop requests from reusing a shared cached prefix? Select all that apply.",
+      "options": [
+        "A request ID in the first line",
+        "Tool definitions listed in a different order each time",
+        "Appending the user’s message at the end",
+        "Changing one word in the system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything that changes early tokens breaks the match. Content appended at the end does not."
+    },
+    {
+      "id": "pc05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "vLLM caches KV in 16-token blocks and only full blocks are reused. A shared prefix is 5,000 tokens. How many blocks can be reused?",
+      "options": [
+        "312",
+        "313",
+        "5,000",
+        "16"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "5,000 ÷ 16 = 312.5, so 312 full blocks (4,992 tokens) are reusable."
+    },
+    {
+      "id": "pc06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Hit rate is 90% on a single replica but 30% across 8 replicas behind a round-robin load balancer. What is the fix?",
+      "options": [
+        "More GPU memory per replica",
+        "Cache-aware or session-sticky routing",
+        "Disable caching",
+        "Shorter prompts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each replica has its own cache. Send requests that share a prefix to the replica that holds it."
+    },
+    {
+      "id": "pc07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How does prefix caching differ from a response cache?",
+      "options": [
+        "It reuses attention state for a shared prompt start and still generates a fresh answer",
+        "It returns a stored answer",
+        "It caches tool results",
+        "It compresses the prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A response cache skips the model entirely; prefix caching only skips repeated prefill work."
+    },
+    {
+      "id": "pc08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "How does SGLang organize its cached prefixes?",
+      "options": [
+        "A radix tree of token sequences (RadixAttention)",
+        "A SQL table",
+        "A single global prompt",
+        "A list sorted by length"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The radix tree finds the longest shared prefix, which suits branching agent workloads."
+    },
+    {
+      "id": "pc09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "What is true about cached prefix blocks and GPU memory? Select all that apply.",
+      "options": [
+        "Cached blocks use the same GPU memory as live requests",
+        "They can be evicted under memory pressure",
+        "Least recently used blocks usually go first",
+        "Caching raises the model’s maximum context length"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Caching trades memory for recomputation; it does not change the context limit."
+    },
+    {
+      "id": "pc10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An advisory bot handles 10,000 requests a day, each with a 6,000-token shared prefix and 500 new tokens. With a 100% hit rate, how many prefill tokens are saved per day?",
+      "options": [
+        "60 million",
+        "65 million",
+        "5 million",
+        "6 million"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "6,000 × 10,000 = 60,000,000 tokens that no longer need prefill."
+    },
+    {
+      "id": "pc11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "In a multi-turn claims chat, each turn appends to the previous prompt. What can be reused on turn 5?",
+      "options": [
+        "Nothing",
+        "The system prompt and all earlier turns, as long as they are not rewritten",
+        "Only the last turn",
+        "Only the tool definitions"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each turn extends the cached prefix, so only the newest message needs prefill."
+    },
+    {
+      "id": "pc12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Does prefix caching change the model’s answers?",
+      "options": [
+        "Yes, answers become shorter",
+        "No: the reused keys and values are the ones prefill would have computed",
+        "Yes, it lowers accuracy",
+        "Only at high temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It skips repeated work without changing what the model sees."
+    },
+    {
+      "id": "pc13",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which workloads benefit most from prefix caching? Select all that apply.",
+      "options": [
+        "Agent loops that resend the same system prompt and tools each step",
+        "Many users sharing one set of instructions",
+        "Thousands of different long documents, each asked about once",
+        "Multi-turn chats that extend earlier turns"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Reuse needs repetition. One-off documents share nothing to reuse."
+    },
+    {
+      "id": "pc14",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A team calls a hosted model API rather than self-hosting. How do they get the benefit of prefix caching?",
+      "options": [
+        "They cannot",
+        "Use the provider’s prompt caching, for example cache_control breakpoints in Anthropic’s API or automatic caching in OpenAI’s",
+        "Run vLLM on their laptop",
+        "Shorten prompts to zero"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Hosted providers expose the same mechanism as prompt caching, with their own pricing and rules."
+    },
+    {
+      "id": "pc15",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "12 tenants, 4 replicas, and each replica can keep 3 tenants’ prefixes. With random routing, what hit rate would you expect?",
+      "options": [
+        "25%",
+        "75%",
+        "100%",
+        "33%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Every replica sees all 12 tenants and holds 3: about 3 ÷ 12 = 25%. Cache-aware routing (3 tenants per replica) would reach 100%."
+    },
+    {
+      "id": "pc16",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "What should you monitor after enabling prefix caching? Select all that apply.",
+      "options": [
+        "Cache hit rate",
+        "Time to first token at p50 and p95",
+        "KV cache memory usage",
+        "The sampling temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Hit rate, TTFT and memory show whether caching works and what it costs."
+    },
+    {
+      "id": "pc17",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which practices keep the prompt prefix stable? Select all that apply.",
+      "options": [
+        "Serialize tool schemas deterministically, for example with sorted keys",
+        "Put timestamps and request IDs at the end",
+        "Keep tool order fixed",
+        "Shuffle few-shot examples on every request"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Shuffling examples changes early tokens on every request."
+    },
+    {
+      "id": "pc18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What is PagedAttention?",
+      "options": [
+        "Storing the KV cache in fixed-size blocks, like operating-system pages, so memory is used efficiently and blocks can be shared",
+        "A way to page through documents",
+        "A compression method for weights",
+        "A retrieval technique"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Introduced with vLLM; block sharing is what makes prefix reuse cheap."
+    },
+    {
+      "id": "pc19",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A tutoring app puts each student’s name and grade at the top of a 7,000-token system prompt. What should change?",
+      "options": [
+        "Nothing",
+        "Move the student details after the shared instructions",
+        "Remove the system prompt",
+        "Use a bigger GPU"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Shared content first, per-user content last."
+    },
+    {
+      "id": "pc20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Prefill runs at 12,000 tokens per second. Prompts are 9,000 shared + 600 new tokens, and 80% of requests hit the cache. What is the average prefill time?",
+      "options": [
+        "0.20 s",
+        "0.05 s",
+        "0.80 s",
+        "0.16 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.8 × (600 ÷ 12,000) + 0.2 × (9,600 ÷ 12,000) = 0.04 + 0.16 = 0.20 s."
+    }
+  ]
+}

@@ -1,0 +1,257 @@
+{
+  "slug": "architectures",
+  "number": 7,
+  "techniqueOrder": [
+    "workflows",
+    "react",
+    "planexec",
+    "reflect",
+    "search",
+    "reasoning",
+    "hitl",
+    "codeact"
+  ],
+  "glossary": [
+    {
+      "term": "agent",
+      "definition": "A system in which the model decides its own next steps and tool calls, rather than following a code path written in advance."
+    },
+    {
+      "term": "prompt chaining",
+      "definition": "A workflow that splits a task into fixed steps, each a model call that works on the previous output, often with a code check between steps."
+    },
+    {
+      "term": "routing",
+      "definition": "A workflow step that classifies an input and sends it down a specialised path, such as a different prompt, tool set or model."
+    },
+    {
+      "term": "parallelization",
+      "definition": "Running model calls at the same time: sectioning splits independent subtasks; voting repeats the same task and aggregates the answers."
+    },
+    {
+      "term": "ReAct",
+      "definition": "Reason plus act: a loop in which the model thinks, calls a tool, reads the observation and decides again."
+    },
+    {
+      "term": "observation",
+      "definition": "The result of a tool call, appended to the conversation so the model can use it on the next step."
+    },
+    {
+      "term": "step cap",
+      "definition": "A hard limit on the number of loop iterations or tool calls an agent may make for one task."
+    },
+    {
+      "term": "ReWOO",
+      "definition": "Reasoning without observation: the planner writes all steps with placeholders such as #E1, tools fill them in, and one solver call writes the answer."
+    },
+    {
+      "term": "evaluator–optimizer",
+      "definition": "A loop in which one call generates a draft and another evaluates it against criteria and returns feedback for revision."
+    },
+    {
+      "term": "Reflexion",
+      "definition": "A method in which an agent writes short lessons after failed attempts and reads them on the next attempt."
+    },
+    {
+      "term": "Tree of Thoughts",
+      "definition": "A method that explores several candidate reasoning steps at each point, scores them and searches the tree with BFS or DFS."
+    },
+    {
+      "term": "value function",
+      "definition": "A score for a partial solution, from a model prompt or a checker, used to decide which branches to keep or prune."
+    },
+    {
+      "term": "thinking budget",
+      "definition": "The number of tokens, or the effort level, a reasoning model may spend thinking before it answers."
+    },
+    {
+      "term": "test-time compute",
+      "definition": "Extra computation spent when answering, such as longer thinking, sampling or search, instead of a larger model."
+    },
+    {
+      "term": "interrupt",
+      "definition": "A deliberate pause in an agent run that saves its state and waits for outside input, such as a person's approval, before continuing."
+    },
+    {
+      "term": "checkpointer",
+      "definition": "The component that saves an agent's state after each step so a paused or failed run can resume from where it stopped."
+    },
+    {
+      "term": "approval limit",
+      "definition": "A rule in code, such as a rupee amount, above which an action pauses for a person instead of running automatically."
+    },
+    {
+      "term": "code action",
+      "definition": "An agent step expressed as a short program that calls tools as functions, instead of a single structured tool call."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "id": "S2",
+      "title": "ReAct: synergizing reasoning and acting in language models (Yao et al., 2022)",
+      "url": "https://arxiv.org/abs/2210.03629"
+    },
+    {
+      "id": "S3",
+      "title": "ReWOO: decoupling reasoning from observations (Xu et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.18323"
+    },
+    {
+      "id": "S4",
+      "title": "LangChain: Plan-and-execute agents",
+      "url": "https://www.langchain.com/blog/planning-agents"
+    },
+    {
+      "id": "S5",
+      "title": "An LLM compiler for parallel function calling (Kim et al., 2023)",
+      "url": "https://arxiv.org/abs/2312.04511"
+    },
+    {
+      "id": "S6",
+      "title": "Plan-and-Solve prompting (Wang et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.04091"
+    },
+    {
+      "id": "S7",
+      "title": "Self-Refine: iterative refinement with self-feedback (Madaan et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.17651"
+    },
+    {
+      "id": "S8",
+      "title": "Reflexion: language agents with verbal reinforcement learning (Shinn et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.11366"
+    },
+    {
+      "id": "S9",
+      "title": "Large language models cannot self-correct reasoning yet (Huang et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.01798"
+    },
+    {
+      "id": "S10",
+      "title": "Tree of Thoughts: deliberate problem solving with LLMs (Yao et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.10601"
+    },
+    {
+      "id": "S11",
+      "title": "LangGraph",
+      "url": "https://www.langchain.com/langgraph"
+    },
+    {
+      "id": "S12",
+      "title": "OpenAI Agents SDK: running agents",
+      "url": "https://openai.github.io/openai-agents-python/running_agents/"
+    },
+    {
+      "id": "S13",
+      "title": "Claude Agent SDK overview",
+      "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+    },
+    {
+      "id": "S14",
+      "title": "smolagents: what is a ReAct agent?",
+      "url": "https://huggingface.co/docs/smolagents/conceptual_guides/react"
+    },
+    {
+      "id": "S15",
+      "title": "Language Agent Tree Search (Zhou et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.04406"
+    },
+    {
+      "id": "S16",
+      "title": "Self-consistency improves chain of thought reasoning (Wang et al., 2022)",
+      "url": "https://arxiv.org/abs/2203.11171"
+    },
+    {
+      "id": "S17",
+      "title": "Claude docs: Building with extended thinking",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+    },
+    {
+      "id": "S18",
+      "title": "OpenAI docs: Reasoning models",
+      "url": "https://developers.openai.com/api/docs/guides/reasoning"
+    },
+    {
+      "id": "S19",
+      "title": "Scaling LLM test-time compute optimally (Snell et al., 2024)",
+      "url": "https://arxiv.org/abs/2408.03314"
+    },
+    {
+      "id": "S20",
+      "title": "DeepSeek-R1: incentivizing reasoning capability via RL (2025)",
+      "url": "https://arxiv.org/abs/2501.12948"
+    },
+    {
+      "id": "S21",
+      "title": "LangGraph: Interrupts (human-in-the-loop)",
+      "url": "https://docs.langchain.com/oss/python/langgraph/interrupts"
+    },
+    {
+      "id": "S22",
+      "title": "OpenAI Agents SDK: Human-in-the-loop",
+      "url": "https://openai.github.io/openai-agents-python/human_in_the_loop/"
+    },
+    {
+      "id": "S23",
+      "title": "Executable code actions elicit better LLM agents (CodeAct, Wang et al., 2024)",
+      "url": "https://arxiv.org/abs/2402.01030"
+    },
+    {
+      "id": "S24",
+      "title": "smolagents documentation",
+      "url": "https://huggingface.co/docs/smolagents"
+    },
+    {
+      "id": "S25",
+      "title": "Anthropic: Code execution tool",
+      "url": "https://docs.claude.com/en/docs/agents-and-tools/tool-use/code-execution-tool"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "We can write every step down in advance",
+      "techniqueId": "workflows",
+      "advice": "Use a workflow: chain the steps with code gates, route by request type, and run independent parts in parallel."
+    },
+    {
+      "symptom": "The steps are unknown until we see tool results",
+      "techniqueId": "react",
+      "advice": "Use a ReAct loop with a step cap, compact tool results and errors returned as observations."
+    },
+    {
+      "symptom": "The steps are knowable, but deciding them one at a time is slow and costly",
+      "techniqueId": "planexec",
+      "advice": "Plan once with a strong model, execute with cheap executors, and replan only on failure."
+    },
+    {
+      "symptom": "There is a clear standard to check drafts against",
+      "techniqueId": "reflect",
+      "advice": "Add an evaluator–optimizer loop that critiques against tests or rules and keeps the best draft."
+    },
+    {
+      "symptom": "Early wrong choices commit us to a dead end",
+      "techniqueId": "search",
+      "advice": "Search: propose several thoughts per step, score them, keep the best and back out of dead ends."
+    },
+    {
+      "symptom": "The difficulty is inside one hard problem",
+      "techniqueId": "reasoning",
+      "advice": "Raise the thinking budget or effort for the hard cases first, and route easy ones to low effort."
+    },
+    {
+      "symptom": "A wrong action would be costly or impossible to undo",
+      "techniqueId": "hitl",
+      "advice": "Put a checkpoint before it: pause above a limit, save the state, let a person approve, edit or reject, then resume."
+    },
+    {
+      "symptom": "The agent takes hundreds of tool calls for bulk data work",
+      "techniqueId": "codeact",
+      "advice": "Let it write short programs over typed tools, run in a locked-down sandbox."
+    }
+  ]
+}

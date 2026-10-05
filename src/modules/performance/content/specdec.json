@@ -1,0 +1,888 @@
+{
+  "id": "specdec",
+  "moduleSlug": "performance",
+  "name": "Speculative Decoding",
+  "shortName": "Faster decoding",
+  "question": "Can a small model draft tokens for the big one?",
+  "summary": "A fast draft model proposes several tokens ahead. The large target model checks them all in a single forward pass and keeps the longest correct prefix, supplying its own token at the first mismatch. With the standard acceptance rule the output matches what the target model would have produced alone. Reported speed-ups are typically around 2–3×.",
+  "useCases": [
+    "Interactive products where tokens per second matters",
+    "Long outputs such as code, reports and documents",
+    "Edits that copy large parts of the input (prompt lookup)"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Draft",
+        "detail": "a small model, or extra heads (Medusa, EAGLE)"
+      },
+      {
+        "term": "Verification",
+        "detail": "the target scores all drafted tokens in parallel"
+      },
+      {
+        "term": "Acceptance rate",
+        "detail": "accepted tokens ÷ drafted tokens"
+      },
+      {
+        "term": "Lookahead k",
+        "detail": "tokens drafted per step, often 3–8"
+      },
+      {
+        "term": "Prompt lookup",
+        "detail": "draft by copying n-grams from the prompt"
+      }
+    ]
+  },
+  "steps": [
+    "Pick a draft that shares the target’s tokenizer",
+    "Measure acceptance rate on your real prompts",
+    "Tune lookahead k; too high wastes verification work",
+    "Use prompt-lookup decoding for code edits that repeat the input"
+  ],
+  "pitfalls": [
+    "A low acceptance rate gives little or even negative speed-up",
+    "The draft model needs extra GPU memory",
+    "Gains shrink at large batch sizes, when the GPU is already busy"
+  ],
+  "tools": [
+    "vLLM",
+    "SGLang",
+    "TensorRT-LLM",
+    "Hugging Face TGI",
+    "EAGLE",
+    "Medusa"
+  ],
+  "remember": "Draft fast, verify in one pass.",
+  "caption": "Accepted tokens are free extra output. The first mismatch is replaced by the target’s own token.",
+  "comparison": {
+    "scope": "Inference engine",
+    "cost": 3,
+    "needs": "Decode speed (tokens per second)",
+    "best": "Needs a well-matched draft"
+  },
+  "diagram": {
+    "file": "diagrams/specdec.svg"
+  },
+  "lesson": {
+    "file": "speculative.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def speculative_step(tokens, k=4):",
+        "steps": []
+      },
+      {
+        "text": "    draft = []",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    for _ in range(k):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        draft.append(small.greedy_next(tokens + draft))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    preds = big.greedy_all(tokens + draft)   # 1 pass, k+1 predictions",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    out = []",
+        "steps": []
+      },
+      {
+        "text": "    for i, tok in enumerate(draft):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if tok != preds[i]:",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "            out.append(preds[i])        # target's own token",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            return out, i",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        out.append(tok)                 # accepted",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    out.append(preds[k])                # all k accepted: bonus token",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return out, k",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "accepted = checked = 0",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "while not finished(tokens):",
+        "steps": []
+      },
+      {
+        "text": "    new, acc = speculative_step(tokens)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    tokens += new",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    accepted += acc",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    checked += acc + (1 if acc < 4 else 0)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "alpha = accepted / checked            # per-token acceptance",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "c = 0.05                              # draft cost ÷ target pass",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "tokens_per_pass = (1 - alpha ** 5) / (1 - alpha)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "speedup = tokens_per_pass / (1 + 4 * c)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Draft k tokens cheaply",
+        "text": "The small draft model proposes k = 4 tokens one after another. Each draft step costs a small fraction of a target pass."
+      },
+      {
+        "title": "Verify all of them in one pass",
+        "text": "The target model runs once over the prompt plus the 4 drafts and produces its own prediction at every position, 5 in total."
+      },
+      {
+        "title": "Accept the longest matching prefix",
+        "text": "“five” and “business” match the target’s predictions, so both are kept. This sketch uses greedy matching; with sampling, a probabilistic rule keeps the target’s distribution exactly."
+      },
+      {
+        "title": "Replace the first mismatch",
+        "text": "The target wanted “days”, not “weeks”. Its token is used and the rest of the draft is discarded: 3 new tokens from one target pass."
+      },
+      {
+        "title": "Measure acceptance",
+        "text": "Count accepted drafts against drafts checked. Over this run the per-token acceptance rate α is 0.70; on real prompts it is the number that decides everything."
+      },
+      {
+        "title": "Estimate the speed-up",
+        "text": "With k = 4 and α = 0.7, a pass yields (1 − 0.7⁵) ÷ 0.3 ≈ 2.77 tokens. Dividing by the cost 1 + 4 × 0.05 = 1.2 gives about 2.3×."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tl l\" x=\"8\" y=\"14\">Text so far:</text><text class=\"lb\" x=\"76\" y=\"14\" style=\"text-anchor:start\">“The refund takes …”</text></g><text class=\"tl l a\" x=\"8\" y=\"32\" style=\"--d:0.05s\">Draft model, k = 4</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"38\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"40\" y=\"54\" text-anchor=\"middle\">five</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"78\" y=\"38\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"110\" y=\"54\" text-anchor=\"middle\">business</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx soft\" x=\"148\" y=\"38\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"54\" text-anchor=\"middle\">weeks</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"218\" y=\"38\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"250\" y=\"54\" text-anchor=\"middle\">.</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"148\" y=\"88\" width=\"204\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"250\" y=\"104\" text-anchor=\"middle\">target: 1 pass, 5 predictions</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"8\" y=\"120\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"40\" y=\"136\" text-anchor=\"middle\">five</text></g><g class=\"a\" style=\"--d:0.28s\"><rect class=\"bx \" x=\"78\" y=\"120\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"110\" y=\"136\" text-anchor=\"middle\">business</text></g><g class=\"a\" style=\"--d:0.36s\"><rect class=\"bx \" x=\"148\" y=\"120\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"136\" text-anchor=\"middle\">days</text></g><g class=\"a\" style=\"--d:0.44s\"><rect class=\"bx \" x=\"218\" y=\"120\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"250\" y=\"136\" text-anchor=\"middle\">for</text></g><g class=\"a\" style=\"--d:0.52s\"><rect class=\"bx \" x=\"288\" y=\"120\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"320\" y=\"136\" text-anchor=\"middle\">in</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<path class=\"ln draw pass\" pathLength=\"1\" d=\"M40 62 L40 120\" style=\"--d:0s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M110 62 L110 120\" style=\"--d:0.1s\"/><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"40\" cy=\"76\" r=\"9\" class=\"bd-pass\"/><path d=\"M36 76l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"110\" cy=\"76\" r=\"9\" class=\"bd-pass\"/><path d=\"M106 76l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"180\" cy=\"76\" r=\"9\" class=\"bd-fail\"/><path d=\"M176.5 72.5l7 7M183.5 72.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><text class=\"tag-t\" x=\"250\" y=\"80\" style=\"fill:var(--muted)\">discarded</text></g><text class=\"tl l a\" x=\"8\" y=\"162\" style=\"--d:0.2s\">Output this step</text><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"8\" y=\"168\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"40\" y=\"184\" text-anchor=\"middle\">five</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"78\" y=\"168\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"110\" y=\"184\" text-anchor=\"middle\">business</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx acc\" x=\"148\" y=\"168\" width=\"64\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"184\" text-anchor=\"middle\">days</text></g><text class=\"mono l a\" x=\"218\" y=\"184\" style=\"--d:0.6s\">3 tokens, 1 pass</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"202\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"217\" text-anchor=\"middle\">this step: 2 of 3 checked</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"182\" y=\"202\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"217\" text-anchor=\"middle\">whole run: α = 0.70</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"228\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"242\" text-anchor=\"middle\">k = 4, α = 0.7 → 2.77 tokens per pass ÷ 1.2 ≈ 2.3×</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Faster decoding with no change to the output under the standard acceptance rule",
+      "Works with existing models; no retraining of the target",
+      "Largest gains on long, predictable outputs such as code",
+      "Prompt lookup needs no draft model at all"
+    ],
+    "cons": [
+      "Gains depend on acceptance rate and vanish when it is low",
+      "The draft model uses extra GPU memory",
+      "Less benefit at large batch sizes",
+      "More settings to tune: draft choice and lookahead k"
+    ],
+    "avoidWhen": [
+      "The GPU is already saturated with large batches",
+      "You call a hosted API and cannot change the inference engine"
+    ],
+    "tools": [
+      {
+        "name": "vLLM",
+        "type": "Open source inference server",
+        "what": "Draft-model, n-gram and EAGLE speculation as configuration",
+        "url": "https://docs.vllm.ai/en/latest/features/speculative_decoding/"
+      },
+      {
+        "name": "SGLang",
+        "type": "Open source inference server",
+        "what": "EAGLE-based speculative decoding in a fast runtime",
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "name": "TensorRT-LLM",
+        "type": "Open source (NVIDIA)",
+        "what": "Speculative decoding on NVIDIA GPUs with optimized kernels",
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      },
+      {
+        "name": "Hugging Face Transformers",
+        "type": "Open source library",
+        "what": "Assisted generation for experiments in Python",
+        "url": "https://huggingface.co/blog/assisted-generation"
+      },
+      {
+        "name": "EAGLE",
+        "type": "Research code",
+        "what": "Draft heads that predict from the target’s own features",
+        "url": "https://github.com/SafeAILab/EAGLE"
+      },
+      {
+        "name": "Medusa",
+        "type": "Research code",
+        "what": "Extra decoding heads that propose several tokens",
+        "url": "https://github.com/FasterDecoding/Medusa"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A self-hosted model generates trade-confirmation summaries at 40 tokens per second with plain decoding. You are testing speculative decoding: a small draft model proposes k tokens, and the target model checks them all in one pass. The output is unchanged; only speed changes. Numbers use the standard expected-tokens formula, (1 − α^(k+1)) ÷ (1 − α).",
+    "controls": [
+      "Set the acceptance rate α: how often the target agrees with a drafted token.",
+      "Set lookahead k and the draft’s cost per token, relative to one target pass.",
+      "Choose the batch size: on a busy GPU, verifying extra tokens stops being free."
+    ],
+    "outputs": [
+      {
+        "name": "Tokens per target pass",
+        "meaning": "Expected tokens produced by one draft-and-verify step."
+      },
+      {
+        "name": "Cost of one step",
+        "meaning": "1 target pass + k draft tokens, plus verification load at larger batches."
+      },
+      {
+        "name": "Speed-up",
+        "meaning": "Tokens per pass ÷ cost of the step."
+      },
+      {
+        "name": "Tokens thrown away",
+        "meaning": "Drafted tokens rejected or discarded each step."
+      },
+      {
+        "name": "Best k",
+        "meaning": "The lookahead that maximizes speed-up for these settings."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Typical draft",
+        "expect": "α 0.60, k 4, cost 0.05, batch 1: 2.31 tokens per pass, cost 1.20, a 1.92× speed-up (about 77 tokens per second)."
+      },
+      {
+        "k": "matched",
+        "name": "Well-matched draft",
+        "expect": "α 0.80, k 5: 3.69 tokens per pass for a cost of 1.25, a 2.95× speed-up (about 118 tokens per second)."
+      },
+      {
+        "k": "mismatch",
+        "name": "Poor draft",
+        "expect": "α 0.30, k 8, cost 0.10: only 1.43 tokens per pass for a cost of 1.80, so 0.79×: slower than plain decoding."
+      },
+      {
+        "k": "busy",
+        "name": "Busy GPU",
+        "expect": "α 0.70, k 4, batch 64: 2.77 tokens per pass but a cost of 1.80, so 1.54×. A shorter lookahead, k = 3, does better (1.58×)."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fast",
+        "text": "Reach a speed-up of 2.5× or more.",
+        "hint": "Raise the acceptance rate first; a well-matched draft matters more than a long lookahead."
+      },
+      {
+        "k": "slower",
+        "text": "Make speculative decoding slower than plain decoding.",
+        "hint": "Low acceptance, a long lookahead and an expensive draft."
+      },
+      {
+        "k": "busyk",
+        "text": "At batch size 64, pick the lookahead k that gives the highest speed-up.",
+        "hint": "The output panel names the best k. Under load it is shorter than at batch size 1."
+      }
+    ],
+    "tools": [
+      {
+        "n": "vLLM",
+        "type": "Open source · inference server",
+        "start": 3,
+        "prod": 3,
+        "best": "Speculative decoding as configuration: a draft model, n-gram prompt lookup, EAGLE or MTP heads.",
+        "ex": "Serve a 70B model with a 1B draft from the same family and num_speculative_tokens set to 5.",
+        "pros": [
+          "Widely used and actively developed",
+          "Several draft methods behind one option"
+        ],
+        "cons": [
+          "Settings and supported methods change between versions",
+          "Gains need measuring on your own traffic"
+        ],
+        "url": "https://docs.vllm.ai/en/latest/features/speculative_decoding/"
+      },
+      {
+        "n": "SGLang",
+        "type": "Open source · inference server",
+        "start": 2,
+        "prod": 3,
+        "best": "High-throughput serving with EAGLE-based speculative decoding.",
+        "ex": "Enable EAGLE drafting for a chat model and compare tokens per second at batch sizes 1 and 32.",
+        "pros": [
+          "Strong performance focus",
+          "Production use at large scale"
+        ],
+        "cons": [
+          "Fewer tutorials than vLLM",
+          "Draft heads must match the target model"
+        ],
+        "url": "https://github.com/sgl-project/sglang"
+      },
+      {
+        "n": "TensorRT-LLM",
+        "type": "Open source · NVIDIA",
+        "start": 1,
+        "prod": 3,
+        "best": "Maximum performance on NVIDIA GPUs, with several speculative methods.",
+        "ex": "Build an engine with Medusa heads for a fixed production model on H100s.",
+        "pros": [
+          "Highly optimized kernels",
+          "Backed by NVIDIA"
+        ],
+        "cons": [
+          "NVIDIA hardware only",
+          "Heavier build and deployment workflow"
+        ],
+        "url": "https://github.com/NVIDIA/TensorRT-LLM"
+      },
+      {
+        "n": "Hugging Face Transformers",
+        "type": "Open source · library",
+        "start": 3,
+        "prod": 1,
+        "best": "Experimenting with assisted generation in a notebook before committing to a server.",
+        "ex": "Pass assistant_model to generate() and measure acceptance on 100 of your prompts.",
+        "pros": [
+          "A few lines of Python",
+          "Good for measuring acceptance"
+        ],
+        "cons": [
+          "Not a high-throughput server",
+          "Single-request oriented"
+        ],
+        "url": "https://huggingface.co/blog/assisted-generation"
+      },
+      {
+        "n": "EAGLE",
+        "type": "Research code",
+        "start": 1,
+        "prod": 2,
+        "best": "Draft heads that predict from the target model’s own hidden features, giving high acceptance.",
+        "ex": "Train or download EAGLE heads for your model, then serve them through vLLM or SGLang.",
+        "pros": [
+          "High acceptance rates",
+          "Supported by major servers"
+        ],
+        "cons": [
+          "Heads are model-specific",
+          "Training your own takes effort"
+        ],
+        "url": "https://github.com/SafeAILab/EAGLE"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Try it on a self-hosted model",
+        "tool": "vLLM"
+      },
+      {
+        "need": "Measure acceptance in a notebook",
+        "tool": "Hugging Face Transformers"
+      },
+      {
+        "need": "Maximum NVIDIA performance",
+        "tool": "TensorRT-LLM"
+      }
+    ],
+    "goals": [
+      "Explain why speculative decoding does not change the output",
+      "Calculate expected tokens per pass and net speed-up from α, k and draft cost",
+      "Explain why the best lookahead shrinks at large batch sizes"
+    ]
+  },
+  "practice": {
+    "scenario": "A self-hosted model writes trade-confirmation summaries and code edits. Adding speculative decoding with a small draft model from the same family raises tokens per second, and because every drafted token is checked by the main model, the output stays the same.",
+    "industries": [
+      {
+        "industry": "Coding assistants",
+        "use": "Prompt-lookup drafting speeds up edits that copy the input"
+      },
+      {
+        "industry": "Chat products",
+        "use": "Faster streaming for long answers"
+      },
+      {
+        "industry": "Document processing",
+        "use": "Faster long summaries on self-hosted GPUs"
+      }
+    ],
+    "analogy": "A junior drafts the next few lines of a letter; the senior reads them at a glance, keeps what's right and fixes the first mistake.",
+    "library": {
+      "name": "vLLM",
+      "what": "The most widely used open-source inference server. Speculative decoding is a config option: a draft model, n-gram lookup, or EAGLE heads.",
+      "install": "pip install vllm"
+    },
+    "samples": [
+      {
+        "file": "spec.py",
+        "language": "python",
+        "code": "from vllm import LLM, SamplingParams\n\nllm = LLM(\n    model=\"meta-llama/Llama-3.1-70B-Instruct\",\n    tensor_parallel_size=4,\n    speculative_config={\n        \"model\": \"meta-llama/Llama-3.2-1B-Instruct\",   # draft: same tokenizer family\n        \"num_speculative_tokens\": 5,                    # lookahead k\n    },\n)\nout = llm.generate([\"Summarize this trade confirmation: ...\"],\n                   SamplingParams(temperature=0, max_tokens=300))\nprint(out[0].outputs[0].text)\n\n# For code edits, draft from the prompt itself (no draft model needed):\n# speculative_config={\"method\": \"ngram\", \"num_speculative_tokens\": 5,\n#                     \"prompt_lookup_max\": 4}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Lookahead k = 4. On average 3 drafted tokens are accepted per step, plus 1 token from the target. A target pass costs 1 unit and the draft costs 0.1 per token. Tokens per unit of cost?",
+    "answer": "Plain decoding: 1 token per unit. Speculative: 4 tokens per (1 + 4 × 0.1) = 1.4 units ≈ 2.86 tokens per unit, about 2.9× faster.",
+    "expected": {
+      "value": 2.86,
+      "tolerance": 0.03,
+      "label": "tokens / unit ="
+    },
+    "interview": [
+      {
+        "question": "Why doesn't speculative decoding change the output?",
+        "answer": "The target model checks every drafted token, and the acceptance rule keeps the output distribution identical to the target's own. Rejected tokens are replaced by the target's choice, so only speed changes."
+      },
+      {
+        "question": "When does speculative decoding help least?",
+        "answer": "When acceptance is low (a mismatched draft, creative high-temperature sampling), at large batch sizes where the GPU is already busy, or when the draft adds significant memory pressure."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "A draft model with a different tokenizer",
+        "fix": "Pick a draft from the same model family"
+      },
+      {
+        "mistake": "Setting lookahead k very high",
+        "fix": "Tune k on real prompts by acceptance rate"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sd01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why does speculative decoding not change the model’s output?",
+      "options": [
+        "The draft model is trained to be perfect",
+        "The target model verifies every drafted token, and the acceptance rule keeps its output distribution",
+        "Temperature is forced to 0",
+        "Outputs are cached"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rejected tokens are replaced by the target’s own choice, so only speed changes."
+    },
+    {
+      "id": "sd02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Acceptance rate α = 0.6 and lookahead k = 3. How many tokens does one target pass produce on average?",
+      "options": [
+        "2.18",
+        "1.80",
+        "2.40",
+        "3.00"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(1 − 0.6⁴) ÷ (1 − 0.6) = 0.8704 ÷ 0.4 ≈ 2.18."
+    },
+    {
+      "id": "sd03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Same settings (2.18 tokens per pass, k = 3). Each draft token costs 0.1 of a target pass. What is the net speed-up?",
+      "options": [
+        "1.67×",
+        "2.18×",
+        "1.30×",
+        "2.83×"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Step cost = 1 + 3 × 0.1 = 1.3, so 2.176 ÷ 1.3 ≈ 1.67×."
+    },
+    {
+      "id": "sd04",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Where does prompt-lookup (n-gram) drafting work well? Select all that apply.",
+      "options": [
+        "Editing code where most of the file is copied unchanged",
+        "Answering questions that quote the provided document",
+        "Writing a new poem at high temperature",
+        "Translating English into Hindi"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "It drafts by copying n-grams from the prompt, so it shines when the output repeats the input."
+    },
+    {
+      "id": "sd05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Measured acceptance is 0.25 and the speed-up is 1.05×. What is the best next step?",
+      "options": [
+        "Raise k to 10",
+        "Use a better-matched draft, such as one from the target’s family or EAGLE heads",
+        "Add more GPUs",
+        "Turn on prefix caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With low acceptance, a longer lookahead only wastes more drafts. A better draft raises acceptance."
+    },
+    {
+      "id": "sd06",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which are valid ways to produce draft tokens? Select all that apply.",
+      "options": [
+        "A smaller model from the same family",
+        "n-gram lookup in the prompt",
+        "Extra heads on the target, such as Medusa or EAGLE",
+        "A model with a different tokenizer, used as is"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Drafts must use the target’s vocabulary; a different tokenizer cannot be verified token by token without extra work."
+    },
+    {
+      "id": "sd07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Speculative decoding gave 2.4× at batch size 1 but almost nothing at batch size 128. Why?",
+      "options": [
+        "The draft broke",
+        "At large batches the GPU is compute-busy, so verifying extra tokens is no longer nearly free",
+        "Prefix caching turned off",
+        "The model changed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The gain comes from spare compute during memory-bound decoding; big batches use it up."
+    },
+    {
+      "id": "sd08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "How does Medusa draft tokens?",
+      "options": [
+        "A separate small model",
+        "Extra decoding heads on the target that predict several future tokens",
+        "A database lookup",
+        "Beam search"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Medusa adds heads to the target model, so no separate draft model is needed."
+    },
+    {
+      "id": "sd09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What distinguishes EAGLE from a small draft model?",
+      "options": [
+        "It drafts from the target model’s own hidden features",
+        "It uses a different tokenizer",
+        "It skips verification",
+        "It only works on CPUs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Predicting at the feature level gives high acceptance rates."
+    },
+    {
+      "id": "sd10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Plain decoding runs at 30 tokens per second; speculative decoding gives 2.4×. How long does a 600-token claim letter take to generate?",
+      "options": [
+        "About 8.3 s",
+        "20 s",
+        "12.5 s",
+        "4.8 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "30 × 2.4 = 72 tokens per second; 600 ÷ 72 ≈ 8.3 s, against 20 s."
+    },
+    {
+      "id": "sd11",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What should you measure before enabling speculative decoding in production? Select all that apply.",
+      "options": [
+        "Acceptance rate on real prompts",
+        "Tokens per second at production batch sizes",
+        "GPU memory headroom for the draft",
+        "The draft model’s public benchmark score"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Only your prompts and traffic show the real gain. The draft’s own quality score is beside the point."
+    },
+    {
+      "id": "sd12",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "At α = 0.5, raising k from 2 to 10 raises tokens per pass from 1.75 to about what?",
+      "options": [
+        "2.0",
+        "5.5",
+        "6.0",
+        "3.5"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(1 − 0.5¹¹) ÷ 0.5 ≈ 2.0. Most extra drafts are rejected, so a long lookahead mostly adds cost."
+    },
+    {
+      "id": "sd13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "With sampling at temperature 0.8, how are drafted tokens accepted without changing the output distribution?",
+      "options": [
+        "Only exact matches with the target’s top token are kept",
+        "Each is accepted with probability min(1, p_target ÷ p_draft), and on rejection a token is sampled from the adjusted distribution",
+        "All drafts are accepted",
+        "The draft’s probabilities are used directly"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "This rejection-sampling rule, from the original papers, makes the result distributed exactly as the target’s samples."
+    },
+    {
+      "id": "sd14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team uses a hosted model API and wants speculative decoding. What is true?",
+      "options": [
+        "They can add a draft model in their client code",
+        "It runs inside the inference engine, so they cannot add it themselves, though some providers offer related features such as predicted outputs",
+        "It is enabled by setting temperature to 0",
+        "It requires fine-tuning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Speculation happens in the serving engine. Self-hosting or a provider feature is required."
+    },
+    {
+      "id": "sd15",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Over a run, 1,200 drafted tokens were accepted out of 1,600 checked. What is the acceptance rate?",
+      "options": [
+        "0.75",
+        "0.67",
+        "1.33",
+        "0.25"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,200 ÷ 1,600 = 0.75."
+    },
+    {
+      "id": "sd16",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which reduce the benefit of speculative decoding? Select all that apply.",
+      "options": [
+        "A low acceptance rate",
+        "Large batch sizes",
+        "A draft whose tokenizer does not match",
+        "Long, predictable outputs such as code"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Long predictable outputs are where it helps most."
+    },
+    {
+      "id": "sd17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "In vLLM’s speculative_config, which key sets the lookahead k?",
+      "options": [
+        "num_speculative_tokens",
+        "max_tokens",
+        "tensor_parallel_size",
+        "enable_prefix_caching"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "num_speculative_tokens is the number of tokens drafted per step."
+    },
+    {
+      "id": "sd18",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "What are the costs of adding a draft model? Select all that apply.",
+      "options": [
+        "GPU memory for its weights",
+        "GPU memory for its own KV cache",
+        "More settings to tune, such as k",
+        "A change in the target’s output"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Memory and tuning are real costs. The output does not change."
+    },
+    {
+      "id": "sd19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "α = 0.9 and k = 4. Expected tokens per target pass?",
+      "options": [
+        "4.10",
+        "3.60",
+        "5.00",
+        "4.50"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(1 − 0.9⁵) ÷ 0.1 = 0.40951 ÷ 0.1 ≈ 4.10."
+    },
+    {
+      "id": "sd20",
+      "kind": "single",
+      "industry": "Chat products",
+      "question": "Time to first token is 3 s and users complain about the wait before anything appears. Will speculative decoding fix it?",
+      "options": [
+        "Yes, it speeds up everything",
+        "No: it speeds up decoding, not prefill. Look at prefix caching or prompt length",
+        "Yes, if k is large enough",
+        "Only at temperature 0"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The first token waits for prefill. Speculation helps the tokens after it."
+    }
+  ]
+}

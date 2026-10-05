@@ -1,0 +1,821 @@
+{
+  "id": "skills",
+  "moduleSlug": "tool-use",
+  "name": "Agent Skills",
+  "shortName": "Agent skills",
+  "question": "How do I give an agent many procedures without flooding its context?",
+  "summary": "A skill is a folder with instructions, scripts and reference files for one kind of task. Only each skill’s name and short description sit in the agent’s context; the full instructions load when a task matches, and bundled scripts run as code rather than being re-derived by the model. This progressive disclosure lets one agent carry dozens of procedures cheaply. Skills are code: review them, version them, and never install one you have not read.",
+  "useCases": [
+    "Operations agents with many written procedures",
+    "Company-specific formats, checklists and templates",
+    "Deterministic steps worth a script, such as date calculations or file checks"
+  ],
+  "keyFacts": {
+    "label": "What makes a good skill",
+    "items": [
+      {
+        "term": "Name and description",
+        "detail": "specific enough that the agent picks the right one"
+      },
+      {
+        "term": "Progressive disclosure",
+        "detail": "body and files load only when relevant"
+      },
+      {
+        "term": "Bundled scripts",
+        "detail": "deterministic steps run as code"
+      },
+      {
+        "term": "Reference files",
+        "detail": "forms, policies and examples read on demand"
+      },
+      {
+        "term": "Versioning and review",
+        "detail": "skills change behaviour like code does"
+      },
+      {
+        "term": "Trust",
+        "detail": "third-party skills can carry harmful instructions"
+      }
+    ]
+  },
+  "steps": [
+    "Write one skill per procedure: a folder with SKILL.md, scripts and references",
+    "Make the description say what it does and when to use it",
+    "Move deterministic steps into scripts the skill runs",
+    "Review, version and test skills; read any third-party skill before installing"
+  ],
+  "pitfalls": [
+    "Vague descriptions, so the wrong skill loads",
+    "Pasting every procedure into the system prompt instead",
+    "Installing a downloaded skill without reading it"
+  ],
+  "tools": [
+    "Anthropic Agent Skills",
+    "Claude Code skills",
+    "Claude Agent SDK",
+    "OpenAI Agents SDK (tools and instructions)"
+  ],
+  "remember": "Describe it well, load it late, script the exact parts.",
+  "caption": "Illustrative: Paisapath, a fictional fintech, runs 30 operations procedures through one agent.",
+  "comparison": {
+    "scope": "Packaging procedures for agents",
+    "cost": 2,
+    "needs": "Many procedures",
+    "best": "Wrong skill or untrusted skill"
+  },
+  "diagram": {
+    "file": "diagrams/skills.svg"
+  },
+  "lesson": {
+    "file": "chargeback/SKILL.md",
+    "language": "markdown",
+    "code": [
+      {
+        "text": "---",
+        "steps": []
+      },
+      {
+        "text": "name: chargeback",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "description: Respond to a card chargeback or disputed card charge,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "  including the response deadline, evidence list and customer message.",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "  Use when a customer disputes a card transaction.",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "---",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Chargeback response",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "1. Run scripts/deadline.py with the dispute date and card network",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "   to get the response deadline. Never compute dates yourself.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "2. Collect evidence: order record, delivery proof, customer messages.",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "   See reference/evidence.md for what each reason code needs.",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "3. Draft the response using templates/response.md.",
+        "steps": []
+      },
+      {
+        "text": "4. If the amount is above ₹25,000, stop and hand over to a person.",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Files",
+        "steps": []
+      },
+      {
+        "text": "- scripts/deadline.py      deterministic deadline calculator",
+        "steps": [
+          3,
+          6
+        ]
+      },
+      {
+        "text": "- reference/evidence.md    evidence per reason code",
+        "steps": [
+          4,
+          6
+        ]
+      },
+      {
+        "text": "- templates/response.md    response letter template",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Name and describe it precisely",
+        "text": "The name and description are all the agent sees up front. “Respond to a card chargeback … Use when a customer disputes a card transaction” tells it exactly when to load this skill."
+      },
+      {
+        "title": "Load the body only when needed",
+        "text": "Thirty descriptions cost about 3,000 tokens. The full instructions of this skill load only for chargeback tasks."
+      },
+      {
+        "title": "Script the exact parts",
+        "text": "Deadlines depend on the card network and dates. A script computes them; the model never does date arithmetic in its head."
+      },
+      {
+        "title": "Point to reference files",
+        "text": "Evidence rules per reason code live in a separate file, read only when the task gets that far."
+      },
+      {
+        "title": "Put limits in the skill",
+        "text": "Amounts above ₹25,000 go to a person. The skill carries the policy, not just the steps."
+      },
+      {
+        "title": "Review and version skills",
+        "text": "Skills change the agent’s behaviour, so they go through review like code. A downloaded skill is read before it is installed."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"25\" text-anchor=\"middle\">name: chargeback · description: disputes on cards</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"42\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"58\" text-anchor=\"middle\">30 descriptions: 3,000</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"42\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"58\" text-anchor=\"middle\">this body: +2,000</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"76\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"92\" text-anchor=\"middle\">scripts/deadline.py 2026-09-27 visa → 2026-10-27</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"108\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"123\" text-anchor=\"middle\">reference/evidence.md (read if needed)</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"138\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"154\" text-anchor=\"middle\">amount > ₹25,000 → a person</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"170\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"186\" text-anchor=\"middle\">reviewed · v3</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"170\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"186\" text-anchor=\"middle\">third-party: read first</text></g><text class=\"tl l a\" x=\"8\" y=\"224\" style=\"--d:0.3s\">right procedure 72% → 93% · ₹11,625 → ₹1,625 per 1,000</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Dozens of procedures for the context cost of their descriptions",
+      "Deterministic steps run as scripts, not model guesses",
+      "Procedures are files you can review, version and share",
+      "The same skill works across tasks and agents"
+    ],
+    "cons": [
+      "Selection depends on good descriptions",
+      "Scripts need an environment that can run them",
+      "Skills can carry harmful instructions if unreviewed",
+      "Another artefact to maintain"
+    ],
+    "avoidWhen": [
+      "A handful of short rules that fit comfortably in the system prompt",
+      "Actions that need a live API call (make it a tool)"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic Agent Skills",
+        "type": "Feature (Anthropic)",
+        "what": "Folders with SKILL.md loaded by progressive disclosure",
+        "url": "https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview"
+      },
+      {
+        "name": "Claude Code skills",
+        "type": "Agent feature (Anthropic)",
+        "what": "Project and personal skills for coding tasks",
+        "url": "https://code.claude.com/docs/en/skills"
+      },
+      {
+        "name": "Claude Agent SDK",
+        "type": "SDK (Anthropic)",
+        "what": "Build agents that load skills from the file system",
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Instructions and tools; skills can be modelled as loadable instructions",
+        "url": "https://openai.github.io/openai-agents-python/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Paisapath, a fictional fintech, runs 30 operations procedures through one agent. One procedure was downloaded from a public skills site. Input costs about ₹0.25 per 1,000 tokens.",
+    "controls": [
+      "Choose how procedures are packaged: system prompt, tools or skills.",
+      "Choose vague or specific descriptions.",
+      "Switch on bundled scripts and review of the third-party skill."
+    ],
+    "outputs": [
+      {
+        "name": "Context before any task",
+        "meaning": "Tokens the agent carries before reading the task."
+      },
+      {
+        "name": "Right procedure chosen",
+        "meaning": "Tasks where the matching procedure is used."
+      },
+      {
+        "name": "Tasks done correctly",
+        "meaning": "Right procedure, correctly executed."
+      },
+      {
+        "name": "Cost per 1,000 tasks",
+        "meaning": "Input tokens at the price above."
+      },
+      {
+        "name": "Third-party risk",
+        "meaning": "Whether an unread skill with a hidden instruction is active."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "All in the system prompt",
+        "expect": "45,000 tokens up front, 90% right procedure, 76.5% done correctly, ₹11,625 per 1,000 tasks."
+      },
+      {
+        "k": "tools",
+        "name": "30 tools, specific descriptions",
+        "expect": "9,000 tokens, 88% right procedure, 74.8% correct, ₹2,625."
+      },
+      {
+        "k": "vague",
+        "name": "Skills, vague descriptions",
+        "expect": "3,000 tokens and ₹1,625, but only 70% right procedure, and an unread skill is active."
+      },
+      {
+        "k": "full",
+        "name": "Skills done well",
+        "expect": "3,000 tokens, 93% right procedure, 90.2% correct, ₹1,625, no risk."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 90% correct tasks for ₹2,000 or less per 1,000 tasks with no unread skill.",
+        "hint": "Skills, specific descriptions, scripts and review."
+      },
+      {
+        "k": "lean",
+        "text": "Bring the context before any task to 5,000 tokens or less.",
+        "hint": "Package procedures as skills."
+      },
+      {
+        "k": "review",
+        "text": "Show the risk of installing a skill without reading it.",
+        "hint": "Skills with review off."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic Agent Skills",
+        "type": "Feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "SKILL.md folders with progressive disclosure across Claude apps and the API.",
+        "ex": "A chargeback skill with a deadline script and evidence reference.",
+        "pros": [
+          "Tiny context cost",
+          "Scripts run as code"
+        ],
+        "cons": [
+          "Claude-specific format",
+          "Needs a code environment for scripts"
+        ],
+        "url": "https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview"
+      },
+      {
+        "n": "Claude Code skills",
+        "type": "Agent feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Project skills that coding agents load when a task matches.",
+        "ex": "A release-checklist skill in the repository.",
+        "pros": [
+          "Lives in the repo",
+          "Reviewed in pull requests"
+        ],
+        "cons": [
+          "For coding workflows"
+        ],
+        "url": "https://code.claude.com/docs/en/skills"
+      },
+      {
+        "n": "Claude Agent SDK",
+        "type": "SDK · Anthropic",
+        "start": 2,
+        "prod": 3,
+        "best": "Custom agents that load skills from the file system.",
+        "ex": "An operations agent with a skills directory per team.",
+        "pros": [
+          "Same model as Claude Code",
+          "Programmable"
+        ],
+        "cons": [
+          "Tied to Claude models"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "Instructions and tools; load procedure text dynamically yourself.",
+        "ex": "A tool that returns a procedure’s instructions when called.",
+        "pros": [
+          "Provider-agnostic patterns"
+        ],
+        "cons": [
+          "No built-in skill format"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Many procedures, small context",
+        "tool": "Agent Skills"
+      },
+      {
+        "need": "Coding workflows in a repo",
+        "tool": "Claude Code skills"
+      },
+      {
+        "need": "Your own agent runtime",
+        "tool": "Agent SDK with a skills directory"
+      }
+    ],
+    "goals": [
+      "Explain progressive disclosure and why it saves context",
+      "Write a skill description that selects well",
+      "Treat skills as reviewed, versioned code"
+    ]
+  },
+  "practice": {
+    "scenario": "Paisapath, a fictional fintech, runs 30 operations procedures through one agent: KYC re-checks, chargebacks, GST invoice fixes and more. Each is a skill folder with a SKILL.md, scripts and reference files. Only the 30 names and descriptions sit in context; the chargeback skill's instructions and its deadline script load only when a customer disputes a charge. Every skill is reviewed and versioned like code.",
+    "industries": [
+      {
+        "industry": "Fintech operations",
+        "use": "Chargebacks, KYC re-checks and refunds as reusable procedures"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims intake checklists and document requirements per product"
+      },
+      {
+        "industry": "Software teams",
+        "use": "Release, migration and incident runbooks for coding agents"
+      }
+    ],
+    "analogy": "A binder of standard operating procedures with a clear index: staff read the index every day, and open a procedure only when its case comes up.",
+    "library": {
+      "name": "Claude Agent SDK",
+      "what": "Builds agents that discover skills from a skills directory and load them when a task matches their description.",
+      "install": "pip install claude-agent-sdk"
+    },
+    "note": "Option names for loading skills vary by SDK version; check the Agent SDK and Agent Skills documentation.",
+    "samples": [
+      {
+        "file": "scripts/deadline.py",
+        "language": "python",
+        "code": "\"\"\"Chargeback response deadline, used by the chargeback skill.\n\nUsage: python deadline.py 2026-09-27 visa\n\"\"\"\nimport sys\nfrom datetime import date, timedelta\n\nDAYS = {\"visa\": 30, \"mastercard\": 45, \"rupay\": 30}   # illustrative values\n\ndef deadline(dispute_date: str, network: str) -> date:\n    return date.fromisoformat(dispute_date) + timedelta(days=DAYS[network.lower()])\n\nif __name__ == \"__main__\":\n    print(deadline(sys.argv[1], sys.argv[2]).isoformat())"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Procedures in the system prompt add 45,000 tokens to every task; as skills they add 3,000 up front plus 2,000 when one loads. Over 1,000 tasks, how many tokens do skills save, in lakh?",
+    "answer": "Prompt: 45,000 × 1,000 = 4.5 crore tokens. Skills: 5,000 × 1,000 = 50 lakh. Saving: 4 crore = 400 lakh tokens.",
+    "expected": {
+      "value": 400,
+      "tolerance": 1,
+      "label": "lakh tokens ="
+    },
+    "interview": [
+      {
+        "question": "What is an Agent Skill and why use one?",
+        "answer": "A folder with a SKILL.md, scripts and references for one task. Only its name and description sit in context; the body loads when a task matches. Many procedures fit in little context, and exact steps run as scripts."
+      },
+      {
+        "question": "How do you keep skills safe?",
+        "answer": "Treat them as code: review, version and test them; read any third-party skill before installing; keep dangerous actions behind tools with policy checks."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Vague skill descriptions",
+        "fix": "Say what it does and when to use it"
+      },
+      {
+        "mistake": "Installing downloaded skills unread",
+        "fix": "Review every skill like code"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sl01",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What does an agent see of a skill before it is needed?",
+      "options": [
+        "Its whole folder",
+        "Its name and description",
+        "Nothing",
+        "Its scripts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Progressive disclosure keeps only metadata in context."
+    },
+    {
+      "id": "sl02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should an exact date calculation in a skill live?",
+      "options": [
+        "In the instructions for the model to work out",
+        "In a bundled script the skill runs",
+        "In the user’s message",
+        "Nowhere"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deterministic steps belong in code."
+    },
+    {
+      "id": "sl03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which description selects best?",
+      "options": [
+        "\"Payments helper\"",
+        "\"Respond to card chargebacks with deadline and evidence; use when a customer disputes a card charge\"",
+        "\"Useful skill\"",
+        "\"v2\""
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Say what it does and when to use it."
+    },
+    {
+      "id": "sl04",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which belong in a skill folder? Select all that apply.",
+      "options": [
+        "SKILL.md with name and description",
+        "Scripts for exact steps",
+        "Reference files read on demand",
+        "Production API keys"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Secrets never belong in a skill."
+    },
+    {
+      "id": "sl05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "30 procedures in the prompt cost 45,000 tokens per task. As skills, 3,000 up front. How many tokens saved per task before loading?",
+      "options": [
+        "42,000",
+        "3,000",
+        "45,000",
+        "15,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "45,000 − 3,000 = 42,000."
+    },
+    {
+      "id": "sl06",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A downloaded skill looks useful. First step?",
+      "options": [
+        "Install and test in production",
+        "Read and review it before installing",
+        "Ask the agent if it is safe",
+        "Rename it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Skills can carry hidden instructions."
+    },
+    {
+      "id": "sl07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When is a tool better than a skill?",
+      "options": [
+        "When the action needs a live API call with typed inputs",
+        "When the procedure is long",
+        "Never",
+        "When descriptions are vague"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Skills describe how; tools do the call."
+    },
+    {
+      "id": "sl08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Two skills have near-identical descriptions. What happens?",
+      "options": [
+        "The agent may load the wrong one",
+        "Both load",
+        "Neither loads",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Descriptions must be distinct."
+    },
+    {
+      "id": "sl09",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "How should skills be managed? Select all that apply.",
+      "options": [
+        "Versioned",
+        "Reviewed like code",
+        "Tested on real tasks",
+        "Edited live in production without review"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Skills change behaviour like code does."
+    },
+    {
+      "id": "sl10",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "At ₹0.25 per 1,000 tokens, what does 45,000 tokens per task cost for 1,000 tasks?",
+      "options": [
+        "₹11,250",
+        "₹1,125",
+        "₹112.5",
+        "₹45,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "45 lakh tokens × ₹0.25 ÷ 1,000 = ₹11,250."
+    },
+    {
+      "id": "sl11",
+      "kind": "single",
+      "industry": "Software",
+      "question": "What is progressive disclosure?",
+      "options": [
+        "Showing all instructions at once",
+        "Loading details only when they become relevant",
+        "Hiding errors",
+        "Encrypting prompts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Load late, keep context small."
+    },
+    {
+      "id": "sl12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A skill says \"amounts above ₹25,000 go to a person\". Why put it in the skill?",
+      "options": [
+        "The limit travels with the procedure wherever it is used",
+        "It makes the skill shorter",
+        "It is required by the SDK",
+        "It speeds up loading"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Policy belongs with the procedure."
+    },
+    {
+      "id": "sl13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Right procedure is chosen 70% of the time with vague descriptions and 93% with specific ones. Out of 1,000 tasks, how many more are right?",
+      "options": [
+        "230",
+        "93",
+        "700",
+        "23"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(0.93 − 0.70) × 1,000 = 230."
+    },
+    {
+      "id": "sl14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Where are Claude Code project skills usually stored?",
+      "options": [
+        "In the repository, reviewed like code",
+        "In a chat message",
+        "In the model weights",
+        "In a spreadsheet"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Project skills live with the code."
+    },
+    {
+      "id": "sl15",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "How does a skill relate to procedural memory?",
+      "options": [
+        "They are identical",
+        "Skills are written by people; procedural memory is procedures the agent learns and saves",
+        "Skills are slower",
+        "Procedural memory is for tools only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Both store procedures; the author differs."
+    },
+    {
+      "id": "sl16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are risks with skills? Select all that apply.",
+      "options": [
+        "Hidden instructions in third-party skills",
+        "Stale procedures after a policy change",
+        "Vague descriptions picking the wrong skill",
+        "Skills being too cheap"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Low cost is a benefit."
+    },
+    {
+      "id": "sl17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Scripts in a skill need what at runtime?",
+      "options": [
+        "An environment that can run code",
+        "A larger model",
+        "A GPU",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Skills with scripts need code execution."
+    },
+    {
+      "id": "sl18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "One skill body is 2,000 tokens and loads for 30% of tasks. Average added tokens per task?",
+      "options": [
+        "600",
+        "2,000",
+        "300",
+        "6,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,000 × 0.3 = 600."
+    },
+    {
+      "id": "sl19",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Why not put all 30 procedures as tools?",
+      "options": [
+        "Tools cannot run",
+        "Their schemas still cost context and tools suit actions more than long procedures",
+        "Tools are insecure",
+        "Tools need GPUs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tools are for actions; skills carry procedures."
+    },
+    {
+      "id": "sl20",
+      "kind": "single",
+      "industry": "Software",
+      "question": "What should a SKILL.md start with?",
+      "options": [
+        "A long history",
+        "Name and description metadata",
+        "The scripts",
+        "A licence only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The metadata is what selection uses."
+    }
+  ]
+}

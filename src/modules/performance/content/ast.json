@@ -1,0 +1,891 @@
+{
+  "id": "ast",
+  "moduleSlug": "performance",
+  "name": "AST-Precise Localization",
+  "shortName": "Code localization",
+  "question": "Exactly which lines need to change?",
+  "summary": "Instead of reading whole files or grepping text, the agent parses code into an abstract syntax tree and navigates by structure: the function, its callers, the class it belongs to. It loads and edits only the nodes involved, which saves context, avoids broken edits and speeds up finding the fault.",
+  "useCases": [
+    "Coding agents working in large repositories",
+    "Bug fixes that start from a stack trace or failing test",
+    "Refactors that must touch every caller of a function"
+  ],
+  "keyFacts": {
+    "label": "Techniques",
+    "items": [
+      {
+        "term": "Parsing",
+        "detail": "tree-sitter grammars for most languages"
+      },
+      {
+        "term": "Repo map",
+        "detail": "signatures of classes and functions, not full bodies"
+      },
+      {
+        "term": "Hierarchical localization",
+        "detail": "file → class or function → lines (as in Agentless)"
+      },
+      {
+        "term": "Symbol navigation",
+        "detail": "go-to-definition and find-references via LSP"
+      },
+      {
+        "term": "Structural edits",
+        "detail": "replace a node, then re-parse to validate"
+      }
+    ]
+  },
+  "steps": [
+    "Build a repo map of symbols and signatures with tree-sitter",
+    "Localize top-down: candidate files, then functions, then line ranges",
+    "Load only the selected nodes plus their immediate context",
+    "Validate every edit by re-parsing and running the tests"
+  ],
+  "pitfalls": [
+    "Dynamic code (reflection, metaprogramming) hides real call paths",
+    "Parsers lag behind new language syntax",
+    "Too narrow a view misses side effects in other files"
+  ],
+  "tools": [
+    "tree-sitter",
+    "Language Server Protocol",
+    "Aider repo map",
+    "ast-grep",
+    "SWE-agent",
+    "Agentless"
+  ],
+  "remember": "Navigate by structure, edit by node.",
+  "caption": "Token counts are illustrative. The saving grows with file size.",
+  "comparison": {
+    "scope": "Code tooling",
+    "cost": 3,
+    "needs": "Context size and edit accuracy",
+    "best": "Parser gaps; dynamic code"
+  },
+  "diagram": {
+    "file": "diagrams/ast.svg"
+  },
+  "lesson": {
+    "file": "localize.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import tree_sitter_python as tspython",
+        "steps": []
+      },
+      {
+        "text": "from tree_sitter import Language, Parser",
+        "steps": []
+      },
+      {
+        "text": "parser = Parser(Language(tspython.language()))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def symbols(path):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    tree = parser.parse(open(path, \"rb\").read())",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    for node in walk(tree.root_node):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        if node.type in (\"class_definition\", \"function_definition\"):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            name = node.child_by_field_name(\"name\").text.decode()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            yield path, name, node.start_point[0] + 1",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "repo_map = [s for p in python_files(\"app/\") for s in symbols(p)]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "issue = \"Tax is wrong on invoices above INR 1 lakh\"",
+        "steps": []
+      },
+      {
+        "text": "files = llm_rank(issue, sorted({p for p, _, _ in repo_map}))[:3]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "funcs = llm_rank(issue, [s for s in repo_map if s[0] in files])[:1]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "path, name, _ = funcs[0]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "node = find_function(parser.parse(read(path)).root_node, name)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "callers = find_references(path, name)       # LSP or ast-grep",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "context = [node.text.decode()] + [c.text for c in callers]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "patch = llm_edit(issue, context)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "src = read(path)",
+        "steps": []
+      },
+      {
+        "text": "new_src = src[:node.start_byte] + patch + src[node.end_byte:]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "assert not parser.parse(new_src).root_node.has_error   # re-parse",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "write(path, new_src)",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "assert run(\"pytest tests/test_billing.py\") == 0",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Build a repo map",
+        "text": "Parse every file with tree-sitter and keep only class and function names with their line numbers: 340 files become about 4,100 symbols."
+      },
+      {
+        "title": "Localize the file",
+        "text": "Given the issue text, the model ranks files from the map, not from full source. billing.py comes first."
+      },
+      {
+        "title": "Narrow to the function",
+        "text": "Inside billing.py it picks Invoice.apply_tax. The syntax tree gives its exact span: lines 42 to 57."
+      },
+      {
+        "title": "Add the immediate context",
+        "text": "Find-references returns two callers, one in export.py. Function plus callers is 56 lines, about 560 tokens, against 30,000 for the whole file."
+      },
+      {
+        "title": "Edit the node, then re-parse",
+        "text": "The patch replaces only that function’s bytes. Re-parsing confirms the file still has no syntax errors before anything is saved."
+      },
+      {
+        "title": "Run the tests",
+        "text": "The billing tests pass. The change touched 15 lines, and a reviewer can read the whole diff in a minute."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"150\" height=\"52\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"31\">Repo map</text><text class=\"sb\" x=\"83\" y=\"46\">340 files · 4,100 symbols</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl l a\" x=\"176\" y=\"10\" style=\"--d:0s\">Files ranked for the issue</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"176\" y=\"16\" width=\"176\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"30\" text-anchor=\"middle\">1  billing.py</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"176\" y=\"40\" width=\"176\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"54\" text-anchor=\"middle\">2  export.py</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"176\" y=\"64\" width=\"176\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"78\" text-anchor=\"middle\">3  tax_rules.py</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"100\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"56\" y=\"116\" text-anchor=\"middle\">billing.py</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M106 112L120 112\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx \" x=\"122\" y=\"100\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"176\" y=\"116\" text-anchor=\"middle\">class Invoice</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M232 112L246 112\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx acc\" x=\"248\" y=\"100\" width=\"104\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"116\" text-anchor=\"middle\">apply_tax()</text></g><g class=\"a\" style=\"--d:0.45s\"><rect class=\"bx pass\" x=\"248\" y=\"130\" width=\"104\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"144\" text-anchor=\"middle\">L42–L57</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw acc\" pathLength=\"1\" d=\"M300 150 C300 168 160 160 150 170\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"160\" width=\"142\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"79\" y=\"174\" text-anchor=\"middle\">Invoice.total() L88</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"184\" width=\"142\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"79\" y=\"198\" text-anchor=\"middle\">export.py to_csv() L12</text></g><text class=\"tl a\" x=\"226\" y=\"178\" style=\"text-anchor:end;--d:0.3s\">whole file</text><rect x=\"232\" y=\"169\" width=\"120\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"232\" y=\"169\" width=\"120\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.35s\"/><text class=\"tl a\" x=\"226\" y=\"198\" style=\"text-anchor:end;--d:0.4s\">3 nodes</text><rect x=\"232\" y=\"189\" width=\"120\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"232\" y=\"189\" width=\"2.24\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.45s\"/><text class=\"mono a\" text-anchor=\"middle\" style=\"text-anchor:middle;--d:0.55s\" x=\"292\" y=\"218\" style=\"--d:0.55s\">30,000 → 560 tokens</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"226\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"241\" text-anchor=\"middle\">re-parse: no errors</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"182\" y=\"226\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"241\" text-anchor=\"middle\">pytest: 12 passed</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Loads a few hundred tokens instead of whole files",
+      "Finds definitions and callers precisely, unlike text search",
+      "Edits replace exact nodes, so unrelated code is untouched",
+      "Re-parsing catches broken edits before tests run"
+    ],
+    "cons": [
+      "Dynamic code (reflection, metaprogramming) hides call paths",
+      "Grammars lag behind new language syntax",
+      "Too narrow a view misses side effects elsewhere",
+      "More tooling to build and maintain than plain file reads"
+    ],
+    "avoidWhen": [
+      "Small repositories where whole files fit comfortably in context",
+      "Languages or templates with no reliable parser"
+    ],
+    "tools": [
+      {
+        "name": "tree-sitter",
+        "type": "Open source",
+        "what": "Fast, error-tolerant parsers for many languages",
+        "url": "https://tree-sitter.github.io/tree-sitter/"
+      },
+      {
+        "name": "ast-grep",
+        "type": "Open source",
+        "what": "Structural search and rewrite with code-shaped patterns",
+        "url": "https://ast-grep.github.io"
+      },
+      {
+        "name": "Language Server Protocol",
+        "type": "Open standard",
+        "what": "Go-to-definition and find-references from language servers",
+        "url": "https://microsoft.github.io/language-server-protocol/"
+      },
+      {
+        "name": "Aider repo map",
+        "type": "Open source",
+        "what": "A ranked map of files and signatures sent to the model",
+        "url": "https://aider.chat/docs/repomap.html"
+      },
+      {
+        "name": "SWE-agent",
+        "type": "Open source (research)",
+        "what": "An agent interface with file viewers and search commands",
+        "url": "https://github.com/SWE-agent/SWE-agent"
+      },
+      {
+        "name": "Agentless",
+        "type": "Open source (research)",
+        "what": "Hierarchical localization: file, then function, then lines",
+        "url": "https://github.com/OpenAutoCoder/Agentless"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A bug report says tax is wrong on invoices above INR 1 lakh. The fault is in Invoice.apply_tax, a 16-line function in billing.py. It has two callers: Invoice.total() in the same file and to_csv() in export.py, 20 lines each. The fix changes rounding, so both callers must be checked. Code costs about 10 tokens per line, and the model’s first edit happens to leave a bracket unclosed.",
+    "controls": [
+      "Choose how the agent loads code: the whole file, a text search, or a syntax-tree lookup.",
+      "Drag the size of billing.py.",
+      "With the syntax-tree lookup, choose whether to add callers, and whether to re-parse edits before tests."
+    ],
+    "outputs": [
+      {
+        "name": "Share of a 128k context window",
+        "meaning": "Tokens loaded ÷ 128,000."
+      },
+      {
+        "name": "Relevant share",
+        "meaning": "Lines the fix needs ÷ lines loaded."
+      },
+      {
+        "name": "Both callers seen",
+        "meaning": "Whether to_csv() in export.py reached the model."
+      },
+      {
+        "name": "Broken first edit caught",
+        "meaning": "By an instant re-parse, or only when a test run fails."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "A complete fix needs both callers."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Whole file",
+        "expect": "3,000 lines load 30,000 tokens, 23% of the window, and only 1% is relevant. export.py is never read, so the fix is incomplete."
+      },
+      {
+        "k": "grep",
+        "name": "Text search",
+        "expect": "38 matches with 10 lines either side: 798 lines, 7,980 tokens, 7% relevant. Both callers are found, but among a lot of noise."
+      },
+      {
+        "k": "ast",
+        "name": "Syntax tree + callers",
+        "expect": "56 lines, 560 tokens, 100% relevant. Both callers are covered and re-parsing catches the broken edit at once."
+      },
+      {
+        "k": "narrow",
+        "name": "Too narrow",
+        "expect": "Only the 16-line function: 160 tokens and 100% relevant, but to_csv() is missed, so exported invoices stay wrong."
+      }
+    ],
+    "missions": [
+      {
+        "k": "lean",
+        "text": "Load under 1,000 tokens, cover both callers and catch the broken edit before the tests run.",
+        "hint": "Use the syntax-tree lookup with find-references and re-parsing."
+      },
+      {
+        "k": "trap",
+        "text": "Find a setup that looks efficient, under 500 tokens, but produces an incomplete fix.",
+        "hint": "Leave out the callers."
+      },
+      {
+        "k": "blowup",
+        "text": "Show why whole-file loading does not scale: make one file fill at least 25% of the context window.",
+        "hint": "25% of 128,000 is 32,000 tokens, which is 3,200 lines."
+      }
+    ],
+    "tools": [
+      {
+        "n": "tree-sitter",
+        "type": "Open source · parser generator",
+        "start": 2,
+        "prod": 3,
+        "best": "Fast, error-tolerant parsing of source code into syntax trees, for most popular languages.",
+        "ex": "Build a repo map of every class and function with its line range in a few seconds.",
+        "pros": [
+          "Parses incomplete or broken code",
+          "Bindings for Python, Rust, JavaScript and more"
+        ],
+        "cons": [
+          "Syntax only: no types or cross-file resolution",
+          "Queries take some learning"
+        ],
+        "url": "https://tree-sitter.github.io/tree-sitter/"
+      },
+      {
+        "n": "ast-grep",
+        "type": "Open source · CLI and library",
+        "start": 3,
+        "prod": 3,
+        "best": "Structural search and rewrite using patterns that look like code.",
+        "ex": "Find every call to apply_tax($X) across the repository and rewrite it to apply_tax($X, rounding=\"half_up\").",
+        "pros": [
+          "Patterns are readable code",
+          "Fast on large repositories"
+        ],
+        "cons": [
+          "Pattern matching, not full semantic analysis",
+          "Rewrites still need tests"
+        ],
+        "url": "https://ast-grep.github.io"
+      },
+      {
+        "n": "Language servers (LSP)",
+        "type": "Open standard · many implementations",
+        "start": 2,
+        "prod": 3,
+        "best": "Go-to-definition, find-references and symbol search with real type information.",
+        "ex": "Ask pyright for every reference to Invoice.apply_tax, including one reached through an alias.",
+        "pros": [
+          "Resolves imports, aliases and types",
+          "Same protocol across languages"
+        ],
+        "cons": [
+          "Servers are heavier to run headless",
+          "Quality varies by language"
+        ],
+        "url": "https://microsoft.github.io/language-server-protocol/"
+      },
+      {
+        "n": "Aider repo map",
+        "type": "Open source · coding assistant",
+        "start": 3,
+        "prod": 2,
+        "best": "A ranked, token-budgeted map of the repository’s files and signatures sent with each request.",
+        "ex": "Aider sends a 1,000-token map so the model can ask for exactly the files it needs.",
+        "pros": [
+          "Ready to use",
+          "Budgets the map to fit context"
+        ],
+        "cons": [
+          "Tied to Aider",
+          "Ranking can miss rarely referenced files"
+        ],
+        "url": "https://aider.chat/docs/repomap.html"
+      },
+      {
+        "n": "Agentless",
+        "type": "Research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Studying hierarchical localization: rank files, then classes and functions, then edit locations.",
+        "ex": "Reproduce its file → function → line localization on a handful of your own issues.",
+        "pros": [
+          "Simple, well-documented pipeline",
+          "Strong published results on SWE-bench"
+        ],
+        "cons": [
+          "Research code",
+          "Built around Python repositories"
+        ],
+        "url": "https://github.com/OpenAutoCoder/Agentless"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Structural search today",
+        "tool": "ast-grep"
+      },
+      {
+        "need": "Build your own repo map",
+        "tool": "tree-sitter"
+      },
+      {
+        "need": "Exact references across files",
+        "tool": "A language server"
+      }
+    ],
+    "goals": [
+      "Explain why a syntax tree localizes code better than grep",
+      "Calculate how many tokens a localized context needs",
+      "Design an edit loop that re-parses and tests every change"
+    ]
+  },
+  "practice": {
+    "scenario": "A bug report says tax is wrong on invoices above INR 1 lakh. Instead of loading the 3,000-line billing module, the agent uses a repo map to find Invoice.apply_tax, loads that function and its two callers, and changes 15 lines.",
+    "industries": [
+      {
+        "industry": "Software & IT services",
+        "use": "Coding agents working in large monorepos"
+      },
+      {
+        "industry": "Banking technology",
+        "use": "Small, safe changes to legacy core systems"
+      },
+      {
+        "industry": "Security",
+        "use": "Find every call site of a vulnerable function"
+      }
+    ],
+    "analogy": "Using a building's floor plan to walk straight to room 4B, instead of opening every door on every floor.",
+    "library": {
+      "name": "tree-sitter",
+      "what": "Fast, error-tolerant parsers for 100+ languages. Used by editors and by coding agents to build repo maps.",
+      "install": "pip install tree-sitter tree-sitter-python"
+    },
+    "samples": [
+      {
+        "file": "locate.py",
+        "language": "python",
+        "code": "import tree_sitter_python as tspython\nfrom tree_sitter import Language, Parser\n\nparser = Parser(Language(tspython.language()))\nsrc = open(\"billing.py\", \"rb\").read()\ntree = parser.parse(src)\n\ndef find_function(node, name):\n    if node.type == \"function_definition\":\n        if node.child_by_field_name(\"name\").text.decode() == name:\n            return node\n    for child in node.children:\n        if (hit := find_function(child, name)):\n            return hit\n\nfn = find_function(tree.root_node, \"apply_tax\")\nprint(fn.start_point[0] + 1, fn.end_point[0] + 1)   # line range, e.g. 42 57\nsnippet = src[fn.start_byte:fn.end_byte].decode()   # only this goes to the LLM"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A file has 3,000 lines at about 10 tokens each. The target function is 16 lines, and its two callers are 20 lines each. How many tokens does AST localization load?",
+    "answer": "(16 + 20 + 20) lines × 10 = 560 tokens, against 30,000 for the whole file: about 50× less context.",
+    "expected": {
+      "value": 560,
+      "tolerance": 5,
+      "label": "tokens ="
+    },
+    "interview": [
+      {
+        "question": "Why isn't grep enough for code localization?",
+        "answer": "Grep finds strings, not structure: it can't tell a definition from a call or a comment, misses renamed imports, and returns noisy matches. Syntax trees and language servers resolve symbols, scopes and references precisely."
+      },
+      {
+        "question": "What is a repo map?",
+        "answer": "A compact summary of a repository: files with their classes, functions and signatures (not bodies), often ranked by relevance, so the model can decide where to look without reading whole files."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Sending whole files to the model",
+        "fix": "Send the relevant nodes plus immediate context"
+      },
+      {
+        "mistake": "Editing text without re-parsing",
+        "fix": "Re-parse after every edit and run the tests"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "as01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A stack trace points to line 812 of a 5,000-line ledger.py, inside post_entry(). What should the agent load first?",
+      "options": [
+        "The whole file",
+        "The post_entry function node and its callers",
+        "Every file that mentions “ledger”",
+        "The last 100 lines of the file"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The tree gives the enclosing function exactly; callers show how its behaviour is used."
+    },
+    {
+      "id": "as02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A file has 4,000 lines at about 12 tokens each. The faulty function is 30 lines, with 3 callers of 15 lines each. How many tokens does AST localization load?",
+      "options": [
+        "900",
+        "540",
+        "48,000",
+        "360"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "(30 + 3 × 15) lines × 12 tokens = 75 × 12 = 900 tokens, against 48,000 for the whole file."
+    },
+    {
+      "id": "as03",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What can a syntax tree tell the agent that grep cannot? Select all that apply.",
+      "options": [
+        "Whether a match is a definition, a call or a comment",
+        "The exact start and end of a function",
+        "Which class a method belongs to",
+        "The runtime value of a variable"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Trees capture structure. Runtime values need execution or debugging."
+    },
+    {
+      "id": "as04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "The claims code dispatches events with getattr(handler, \"on_\" + event). What is the risk for AST-based localization?",
+      "options": [
+        "None: trees see every call",
+        "Static references miss this call path, so add text search, traces or tests",
+        "The parser will crash",
+        "Tokens will increase"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Dynamic dispatch builds names at runtime, so no static reference exists. Cover it with other signals."
+    },
+    {
+      "id": "as05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What is a repo map?",
+      "options": [
+        "A compact list of files with their classes and function signatures, not full bodies",
+        "A diagram of the network",
+        "A copy of every file",
+        "A list of contributors"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It lets the model decide where to look without reading whole files."
+    },
+    {
+      "id": "as06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A vulnerable deserialize() function must be found at every call site across 2,000 files. Which approach fits best?",
+      "options": [
+        "Read every file into the model",
+        "Structural search with ast-grep or find-references from a language server",
+        "Ask the model to guess",
+        "Search commit messages"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Structural search and references find calls precisely, including ones plain text search would confuse with comments."
+    },
+    {
+      "id": "as07",
+      "kind": "single",
+      "industry": "Legal tech",
+      "question": "After a model edit, re-parsing the file reports ERROR nodes. What should happen next?",
+      "options": [
+        "Save the file and let the tests find it",
+        "Reject the edit and ask the model to retry before writing anything",
+        "Delete the function",
+        "Ignore it: parsers are often wrong"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A syntax error is cheap to catch at parse time; there is no point running tests on a broken file."
+    },
+    {
+      "id": "as08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "In what order does Agentless-style hierarchical localization narrow down the fault?",
+      "options": [
+        "Lines, then functions, then files",
+        "Files, then classes or functions, then edit locations",
+        "Random sampling of lines",
+        "Tests, then commits"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Top-down narrowing keeps each step’s context small."
+    },
+    {
+      "id": "as09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which are good practices for structural edits by an agent? Select all that apply.",
+      "options": [
+        "Replace the node’s byte range rather than rewriting the file",
+        "Re-parse after every edit",
+        "Run the tests that cover the changed code",
+        "Let the model rewrite the whole file from memory"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Rewriting whole files invites unrelated changes. Node-level edits plus validation keep changes small and safe."
+    },
+    {
+      "id": "as10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "You fix rounding inside compute_brokerage(). Why load its callers as well?",
+      "options": [
+        "They may rely on the old behaviour and need changing too",
+        "To make the prompt longer",
+        "Because parsers need them",
+        "They are never relevant"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Too narrow a view misses side effects: a caller that rounds again would now double-round."
+    },
+    {
+      "id": "as11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "An agent reads a 2,500-line file (10 tokens per line) 8 times per task. Localization cuts each read to 600 tokens. At $3 per million input tokens, how much does it save per task?",
+      "options": [
+        "About $0.59",
+        "$0.60",
+        "About $0.06",
+        "About $5.86"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Whole file: 25,000 × 8 = 200,000 tokens = $0.60. Localized: 4,800 tokens ≈ $0.014. Saving ≈ $0.59."
+    },
+    {
+      "id": "as12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Why is tree-sitter popular for coding agents?",
+      "options": [
+        "It is fast, supports many languages and still produces a tree for code with syntax errors",
+        "It executes the code",
+        "It resolves types across the whole program",
+        "It replaces tests"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Error tolerance matters because agents often work on half-edited files."
+    },
+    {
+      "id": "as13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A legacy module is written in a language with no maintained parser. What is the sensible approach?",
+      "options": [
+        "Refuse the task",
+        "Fall back to text search and larger context, and lean harder on tests",
+        "Invent a grammar in the prompt",
+        "Assume there are no callers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "AST precision needs a parser. Without one, use coarser tools and stronger verification."
+    },
+    {
+      "id": "as14",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which can find the call sites of a function across a whole repository? Select all that apply.",
+      "options": [
+        "A language server’s find-references",
+        "ast-grep with a call pattern",
+        "Parsing only the current file with tree-sitter",
+        "Sorting files by size"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "References and repository-wide structural search cover all files; parsing one file only sees that file."
+    },
+    {
+      "id": "as15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A monorepo holds about 40 million tokens of code and the context window is 200,000. What should the agent see first?",
+      "options": [
+        "As many files as fit",
+        "A budgeted repo map of relevant files and signatures",
+        "Only the README",
+        "The newest commit"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A small ranked map lets the model choose where to look."
+    },
+    {
+      "id": "as16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Two classes each define apply_discount(). How does a syntax-tree approach avoid editing the wrong one?",
+      "options": [
+        "It uses the qualified name, such as Policy.apply_discount",
+        "It edits both",
+        "It picks the first match in the file",
+        "It asks the user every time"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Trees know which class each method belongs to, so names can be qualified."
+    },
+    {
+      "id": "as17",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "When does too narrow a view cause a broken fix? Select all that apply.",
+      "options": [
+        "A changed return type breaks callers in other modules",
+        "A config file read at runtime still has the old key",
+        "Renaming a local variable used only inside the function",
+        "A database migration is needed alongside the code change"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Side effects outside the node are the risk. A purely local rename is safe."
+    },
+    {
+      "id": "as18",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A repo map lists 1,200 files, 6 symbols per file on average, at about 12 tokens per signature. How big is the full map?",
+      "options": [
+        "86,400 tokens",
+        "7,200 tokens",
+        "14,400 tokens",
+        "864,000 tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,200 × 6 × 12 = 86,400 tokens, which is why maps are ranked and budgeted."
+    },
+    {
+      "id": "as19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What was a key idea behind SWE-agent?",
+      "options": [
+        "An agent–computer interface with a windowed file viewer, search commands and edits rejected if they break syntax",
+        "Training a new model from scratch",
+        "Removing all tools",
+        "Speculative decoding for code"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Designing the interface the agent uses, including a lint check on edits, improved results substantially."
+    },
+    {
+      "id": "as20",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which signals are good starting points for localizing a bug? Select all that apply.",
+      "options": [
+        "Frames in the stack trace",
+        "Names of the failing tests",
+        "Keywords and identifiers in the issue text",
+        "The number of stars on the repository"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Traces, failing tests and issue text all point at code. Popularity says nothing about the fault."
+    }
+  ]
+}

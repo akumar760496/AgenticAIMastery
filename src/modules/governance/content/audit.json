@@ -1,0 +1,817 @@
+{
+  "id": "audit",
+  "moduleSlug": "governance",
+  "name": "Audit Trails and Explainability",
+  "shortName": "Audit trails",
+  "question": "Can we show exactly why the agent decided what it did?",
+  "summary": "An audit trail records, for every decision, what the agent saw, which model and prompt versions ran, which rules and documents it used, which tools it called, what it decided with reason codes, and who reviewed or overrode it. Records go to append-only storage with hash chaining or write-once retention so tampering is detectable, with personal data masked or tokenised, and kept for the legal retention period. Explainability for agents means reason codes and a replayable trace, not just a feature-importance chart.",
+  "useCases": [
+    "Any decision a customer or regulator can challenge",
+    "KYC, credit, claims and complaints",
+    "Investigating incidents"
+  ],
+  "keyFacts": {
+    "label": "What each record needs",
+    "items": [
+      {
+        "term": "Input",
+        "detail": "document hash and extracted fields"
+      },
+      {
+        "term": "Versions",
+        "detail": "model, prompt and config"
+      },
+      {
+        "term": "Grounds",
+        "detail": "policy clauses and documents used"
+      },
+      {
+        "term": "Actions",
+        "detail": "tool calls and results"
+      },
+      {
+        "term": "Decision",
+        "detail": "outcome plus reason codes"
+      },
+      {
+        "term": "People",
+        "detail": "reviewer, override and why"
+      }
+    ]
+  },
+  "steps": [
+    "Define the questions an auditor will ask about a decision",
+    "Log the fields that answer each question, with versions",
+    "Write to append-only, hash-chained or write-once storage",
+    "Mask personal data and set retention to the legal period"
+  ],
+  "pitfalls": [
+    "Logging only the final answer",
+    "Logs editable by the team being audited",
+    "Raw Aadhaar or PAN numbers in logs"
+  ],
+  "tools": [
+    "OpenTelemetry GenAI traces (Panel 11)",
+    "Object storage with write-once retention (S3 Object Lock or equivalent)",
+    "Presidio for masking",
+    "SHAP or reason codes for scored models"
+  ],
+  "remember": "Every decision replayable, every record tamper-evident, no raw personal data.",
+  "caption": "Retention periods vary by rule; KYC records are commonly kept five years after the relationship ends.",
+  "comparison": {
+    "scope": "Every consequential decision",
+    "cost": 2,
+    "needs": "A logging schema and storage",
+    "best": "Logs that cannot be trusted"
+  },
+  "diagram": {
+    "file": "diagrams/audit.svg"
+  },
+  "lesson": {
+    "file": "decision_log.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def record(self, case_id, doc_bytes, fields, run, decision, reasons, reviewer):",
+        "steps": []
+      },
+      {
+        "text": "    entry = {",
+        "steps": []
+      },
+      {
+        "text": "        \"case_id\": case_id, \"ts\": now(),",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        \"input_sha256\": sha256(doc_bytes),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"fields\": mask_pii(fields),          # no raw Aadhaar or PAN",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        \"model\": run.model, \"prompt_version\": run.prompt_version,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"policy_clauses\": run.clauses_used,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"tool_calls\": run.tool_calls,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"decision\": decision, \"reason_codes\": reasons,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"reviewer\": reviewer,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"prev\": self.prev}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    entry[\"hash\"] = _hash(entry)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    self.store.append(entry)                 # write-once bucket",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    self.prev = entry[\"hash\"]",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def verify(entries):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return all(e[\"prev\"] == p[\"hash\"] for p, e in zip(entries, entries[1:]))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# retention: longest legal period that applies",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "What did it see?",
+        "text": "A hash of the uploaded document proves which file was read without storing it twice; the extracted fields show what the agent took from it."
+      },
+      {
+        "title": "Which system was it?",
+        "text": "Model and prompt versions. Without them, a replay cannot tell whether a later change caused the decision."
+      },
+      {
+        "title": "Why, and who?",
+        "text": "The policy clauses used, the tool calls and results, reason codes, and the reviewer. The disputed rejection turned out to be an address mismatch under a named clause."
+      },
+      {
+        "title": "Make edits detectable",
+        "text": "Each record carries the previous record’s hash and goes to write-once storage. Changing or deleting any record breaks the chain."
+      },
+      {
+        "title": "No raw personal data",
+        "text": "Mask identifiers in the log. The audit trail must not become the biggest store of Aadhaar numbers in the company."
+      },
+      {
+        "title": "Keep it long enough",
+        "text": "Timestamps, and retention set to the longest legal requirement; KYC records are commonly kept five years after the relationship ends."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">doc sha256: 9f2c…e1 · fields extracted</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"49\" text-anchor=\"middle\">model 2026-07</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"49\" text-anchor=\"middle\">prompt kyc-v14</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"62\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"77\" text-anchor=\"middle\">REJECT · ADDR_MISMATCH · clause 4.2 · reviewer R-17</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"94\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"109\" text-anchor=\"middle\">#1041</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"126\" y=\"94\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"109\" text-anchor=\"middle\">#1042</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"244\" y=\"94\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"298\" y=\"109\" text-anchor=\"middle\">#1043</text></g><text class=\"sb a\" x=\"8\" y=\"134\" style=\"text-anchor:start;--d:0.3s\">each links to the previous hash</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"142\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"157\" text-anchor=\"middle\">Aadhaar XXXX XXXX 3051 · PAN tokenised</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"189\" style=\"text-anchor:end;--d:0s\">kept 90 days</text><rect x=\"118\" y=\"179\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"179\" width=\"15\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"189\" style=\"text-anchor:start;--d:0.2s\">10% of cases</text><text class=\"tl a\" x=\"112\" y=\"211\" style=\"text-anchor:end;--d:0.1s\">kept 5 years</text><rect x=\"118\" y=\"201\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"201\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"211\" style=\"text-anchor:start;--d:0.30000000000000004s\">all cases</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"236\" style=\"text-anchor:middle;fill:var(--ink-2)\">sampled cases an inspector can still see</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Disputes answered with evidence",
+      "Incidents investigated quickly",
+      "Satisfies regulators’ record-keeping",
+      "Tamper evidence protects the firm too"
+    ],
+    "cons": [
+      "Logging schema design and upkeep",
+      "Storage and retention management",
+      "Masking must be reliable",
+      "Access to logs must itself be controlled"
+    ],
+    "avoidWhen": [
+      "Logging raw personal data “for completeness”",
+      "Mutable tables the team being audited can edit"
+    ],
+    "tools": [
+      {
+        "name": "OpenTelemetry GenAI conventions",
+        "type": "Open source",
+        "what": "Standard spans for model and tool calls",
+        "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+      },
+      {
+        "name": "Amazon S3 Object Lock",
+        "type": "Cloud service",
+        "what": "Write-once retention for records",
+        "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html"
+      },
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source",
+        "what": "Mask identifiers before logging",
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "name": "SHAP",
+        "type": "Open source",
+        "what": "Feature attributions for scored models",
+        "url": "https://shap.readthedocs.io"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source, cloud",
+        "what": "Traces with versions and scores",
+        "url": "https://langfuse.com/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A broker’s KYC agent makes 3 million decisions a year. An inspector will sample disputed cases from the last five years and ask eight questions about each: what the agent saw, which model and instructions ran, which rule applied, what it checked, what it decided and why, who signed off, and when. Design the decision record.",
+    "controls": [
+      "Tick the fields each record holds.",
+      "Choose the storage: an ordinary table, append-only with hash chaining, or write-once.",
+      "Choose retention and how personal data appears, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Auditor questions answered",
+        "meaning": "How many of the eight questions each record answers."
+      },
+      {
+        "name": "Sampled cases still on record",
+        "meaning": "Share of the inspector’s five-year sample still retained."
+      },
+      {
+        "name": "Tamper-evident",
+        "meaning": "Whether an edit or deletion would be detectable."
+      },
+      {
+        "name": "Raw personal data · storage",
+        "meaning": "Whether identifiers sit unmasked in logs, and the storage cost."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Outcome and time only",
+        "expect": "2 of 8 questions, 10% of cases retained, editable: cannot explain decisions."
+      },
+      {
+        "k": "full",
+        "name": "Every field, ordinary table",
+        "expect": "8 of 8 and all cases, but editable: complete but untrustworthy."
+      },
+      {
+        "k": "locked",
+        "name": "Locked but thin",
+        "expect": "Write-once and masked, but only 4 of 8 questions answered."
+      },
+      {
+        "k": "short",
+        "name": "Complete, one year",
+        "expect": "8 of 8 and tamper-evident, but only 45% of sampled cases survive."
+      }
+    ],
+    "missions": [
+      {
+        "k": "full",
+        "text": "Answer all eight questions for every sampled case, with tamper-evident records.",
+        "hint": "Fields, storage and retention all matter."
+      },
+      {
+        "k": "private",
+        "text": "Do it without raw personal data in the logs.",
+        "hint": "Mask or tokenise."
+      },
+      {
+        "k": "edit",
+        "text": "Show a complete record that an inspector still cannot trust.",
+        "hint": "Where is it stored?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenTelemetry GenAI conventions",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Standard spans for model calls, tool calls and agents.",
+        "ex": "Capture model and prompt versions on every decision span.",
+        "pros": [
+          "Vendor-neutral",
+          "Works with Panel 11 tracing"
+        ],
+        "cons": [
+          "Traces are not audit records by themselves",
+          "Needs masking"
+        ],
+        "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+      },
+      {
+        "n": "Amazon S3 Object Lock",
+        "type": "Cloud service",
+        "start": 3,
+        "prod": 3,
+        "best": "Write-once retention for decision records.",
+        "ex": "Lock KYC decision records for the legal retention period.",
+        "pros": [
+          "Enforced retention",
+          "Compliance mode"
+        ],
+        "cons": [
+          "Cloud-specific",
+          "Mistakes are hard to undo"
+        ],
+        "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html"
+      },
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Mask identifiers before they are logged.",
+        "ex": "Mask Aadhaar and PAN in extracted fields.",
+        "pros": [
+          "Customisable",
+          "Local"
+        ],
+        "cons": [
+          "Detection is not perfect",
+          "Needs tests"
+        ],
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "n": "SHAP",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Feature attributions for scored models behind reason codes.",
+        "ex": "Explain a fraud or credit score feeding the agent’s decision.",
+        "pros": [
+          "Well established",
+          "Model-agnostic"
+        ],
+        "cons": [
+          "Not an explanation for LLM text",
+          "Can be slow"
+        ],
+        "url": "https://shap.readthedocs.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "A customer disputes an AI decision",
+        "tool": "Replay it from the decision record"
+      },
+      {
+        "need": "Logs are in a normal database",
+        "tool": "Move to append-only, hash-chained or write-once storage"
+      },
+      {
+        "need": "Logs contain Aadhaar numbers",
+        "tool": "Mask before writing"
+      }
+    ],
+    "goals": [
+      "Design records that answer an auditor’s questions",
+      "Make records tamper-evident",
+      "Keep them long enough without raw personal data"
+    ]
+  },
+  "practice": {
+    "scenario": "A customer of a fictional broker complained through SEBI’s SCORES portal that the KYC agent had rejected their account for no reason. The firm’s logs held only “rejected” and a timestamp, so it could not show what the agent had seen or which rule it had applied. It now writes a hash-chained record for every decision: the document hash, extracted fields with Aadhaar masked, model and prompt versions, policy clauses used, tool results, reason codes and the reviewer. A replay showed an address mismatch, and the complaint was answered with evidence.",
+    "industries": [
+      {
+        "industry": "Stockbroking",
+        "use": "KYC decisions that customers can escalate to SEBI"
+      },
+      {
+        "industry": "Lending",
+        "use": "Credit decisions that need reason codes"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claim rejections reviewed by an ombudsman"
+      }
+    ],
+    "analogy": "An aircraft’s flight recorder: it records enough to reconstruct what happened, it is built so nobody can quietly edit it, and it is read after something goes wrong.",
+    "library": {
+      "name": "OpenTelemetry + write-once storage",
+      "what": "GenAI semantic conventions capture each model and tool call as spans; decision records go to object storage with write-once retention, such as S3 Object Lock.",
+      "install": "pip install opentelemetry-sdk"
+    },
+    "note": "Set retention to the longest legal requirement that applies. KYC records are commonly kept for five years after the relationship ends; confirm with compliance.",
+    "samples": [
+      {
+        "file": "decision_log.py",
+        "language": "python",
+        "code": "import hashlib, json\nfrom datetime import datetime, timezone\n\ndef _hash(obj) -> str:\n    return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()\n\nclass DecisionLog:\n    def __init__(self, store):\n        self.store = store                         # append-only, write-once bucket\n        self.prev = store.last_hash() or \"0\" * 64\n\n    def record(self, case_id, doc_bytes, fields, run, decision, reasons, reviewer=None):\n        entry = {\n            \"case_id\": case_id,\n            \"ts\": datetime.now(timezone.utc).isoformat(),\n            \"input_sha256\": hashlib.sha256(doc_bytes).hexdigest(),\n            \"fields\": mask_pii(fields),            # no raw Aadhaar or PAN\n            \"model\": run.model, \"prompt_version\": run.prompt_version,\n            \"policy_clauses\": run.clauses_used, \"tool_calls\": run.tool_calls,\n            \"decision\": decision, \"reason_codes\": reasons,\n            \"reviewer\": reviewer, \"prev\": self.prev}\n        entry[\"hash\"] = _hash(entry)\n        self.store.append(entry)\n        self.prev = entry[\"hash\"]\n        return entry[\"hash\"]\n\ndef verify(entries) -> bool:\n    \"\"\"Any edit or deletion breaks the chain.\"\"\"\n    prev = entries[0][\"prev\"]\n    for e in entries:\n        body = {k: v for k, v in e.items() if k != \"hash\"}\n        if e[\"prev\"] != prev or _hash(body) != e[\"hash\"]:\n            return False\n        prev = e[\"hash\"]\n    return True"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A broker’s KYC agent makes 3 million decisions a year. Each hash-chained decision record is 4 KB, and records are kept for 5 years. How much storage do the retained records need, in GB? (Use 1 GB = 1,000,000 KB.)",
+    "answer": "3,000,000 × 4 KB = 12 GB a year; over 5 years, 60 GB. That is small compared with the cost of being unable to explain one disputed decision; the design constraint is completeness and tamper evidence, not storage.",
+    "expected": {
+      "value": 60,
+      "tolerance": 0.5,
+      "label": "GB ="
+    },
+    "interview": [
+      {
+        "question": "What should an audit record for an AI decision contain?",
+        "answer": "Enough to replay the decision: a hash of the input and the extracted fields with personal data masked, the model and prompt versions, the documents and policy clauses used, tool calls and results, the decision and reason codes, the human reviewer and any override with its reason, and timestamps. Records should be append-only and tamper-evident."
+      },
+      {
+        "question": "How do you make LLM decisions explainable to a regulator?",
+        "answer": "Constrain the agent to produce structured reason codes tied to written policy clauses, log the evidence each code rests on, and keep a replayable trace with versions. For scored models, feature attributions such as SHAP can support the reason codes. A post-hoc narrative written by the model alone is not an explanation."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Logging only the outcome",
+        "fix": "Log inputs, versions, grounds, actions and people"
+      },
+      {
+        "mistake": "Mutable logs",
+        "fix": "Append-only storage with hash chaining or write-once retention"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "au01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What makes an audit log tamper-evident?",
+      "options": [
+        "Storing it in a spreadsheet",
+        "Hash-chaining records and write-once storage",
+        "Compressing it",
+        "Emailing it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Edits break the chain."
+    },
+    {
+      "id": "au02",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which belong in a KYC decision record? Select all that apply.",
+      "options": [
+        "Model and prompt versions",
+        "Reason codes tied to policy clauses",
+        "The full raw Aadhaar number",
+        "The engineer’s lunch order"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Versions and reasons; mask identifiers."
+    },
+    {
+      "id": "au03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why log model and prompt versions?",
+      "options": [
+        "To replay the decision with the system that made it",
+        "To save money",
+        "For marketing",
+        "They are not needed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A replay needs exact versions."
+    },
+    {
+      "id": "au04",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Logs are kept 90 days; an inspector samples cases from two years ago. Result?",
+      "options": [
+        "All available",
+        "Most cases cannot be shown",
+        "Logs regenerate",
+        "No issue"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retention must match the legal period."
+    },
+    {
+      "id": "au05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is a reason code?",
+      "options": [
+        "A short, structured reason tied to a written rule",
+        "A password",
+        "An error message",
+        "A model name"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Structured and traceable."
+    },
+    {
+      "id": "au06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A log stores raw Aadhaar and PAN numbers. What is the problem?",
+      "options": [
+        "None",
+        "The log becomes a large personal-data risk",
+        "It is too small",
+        "It is required"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Mask or tokenise."
+    },
+    {
+      "id": "au07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "How long are KYC records commonly kept in India?",
+      "options": [
+        "30 days",
+        "Five years after the relationship ends",
+        "One month after onboarding",
+        "Forever by default"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Commonly five years after the relationship ends; confirm with compliance."
+    },
+    {
+      "id": "au08",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which storage options help tamper evidence? Select all that apply.",
+      "options": [
+        "Append-only with hash chaining",
+        "Write-once object retention",
+        "An editable shared table",
+        "A local laptop file"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Append-only and write-once."
+    },
+    {
+      "id": "au09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A verify function checks each record’s own hash but not its link to the previous one. What goes undetected?",
+      "options": [
+        "Nothing",
+        "Deleting a whole record",
+        "Adding a field",
+        "Reading a record"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Chain links catch deletions."
+    },
+    {
+      "id": "au10",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Is a free-text explanation written by the model enough for a regulator?",
+      "options": [
+        "Yes",
+        "No: use reason codes tied to rules and a replayable trace",
+        "Only for small loans",
+        "Only in English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Structured, evidenced reasons."
+    },
+    {
+      "id": "au11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which standard captures model and tool calls as spans?",
+      "options": [
+        "OpenTelemetry GenAI semantic conventions",
+        "JPEG",
+        "SMTP",
+        "CSV"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "OTel GenAI conventions."
+    },
+    {
+      "id": "au12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Why hash the input document rather than store it again?",
+      "options": [
+        "To prove which file was read without duplicating it",
+        "It is faster to read",
+        "To encrypt it",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Integrity without duplication."
+    },
+    {
+      "id": "au13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Who should be able to edit audit records?",
+      "options": [
+        "Anyone on the team",
+        "Nobody: records are append-only",
+        "Only the model",
+        "Customers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Append-only."
+    },
+    {
+      "id": "au14",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "For a scored credit model behind an agent, which tool supports reason codes?",
+      "options": [
+        "SHAP feature attributions",
+        "A spell checker",
+        "A load balancer",
+        "A font"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Attributions support reasons."
+    },
+    {
+      "id": "au15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "3 million decisions a year at 4 KB each, kept 5 years: storage?",
+      "options": [
+        "6 GB",
+        "60 GB",
+        "600 GB",
+        "6 TB"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "12 GB a year × 5."
+    },
+    {
+      "id": "au16",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A customer complains through SCORES about a rejection. What lets you answer with evidence?",
+      "options": [
+        "A replayable decision record",
+        "A marketing email",
+        "The model card alone",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Replay the case."
+    },
+    {
+      "id": "au17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should an audit record capture about people?",
+      "options": [
+        "The reviewer, any override and its reason",
+        "Nothing",
+        "The reviewer’s home address",
+        "Customer passwords"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Who signed off and why."
+    },
+    {
+      "id": "au18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why keep traces and audit records distinct?",
+      "options": [
+        "Traces serve debugging; audit records are tamper-evident evidence with retention",
+        "They are identical",
+        "Traces are illegal",
+        "Audit records are optional"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Different purposes and guarantees."
+    },
+    {
+      "id": "au19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which question does the tool-call log answer?",
+      "options": [
+        "What did the agent check?",
+        "Which model ran?",
+        "Who approved?",
+        "When?"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tool calls and results."
+    },
+    {
+      "id": "au20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Access to the audit log itself should be…",
+      "options": [
+        "Open to everyone",
+        "Restricted and logged",
+        "Public",
+        "Disabled"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Logs are sensitive too."
+    }
+  ]
+}

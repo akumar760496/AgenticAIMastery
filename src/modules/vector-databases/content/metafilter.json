@@ -1,0 +1,913 @@
+{
+  "id": "metafilter",
+  "moduleSlug": "vector-databases",
+  "name": "Metadata Filtering",
+  "shortName": "Metadata filters",
+  "question": "Can I search by meaning and still respect hard facts?",
+  "summary": "Combine vector similarity with structured conditions on each chunk, such as date, product, region, document type or version, so the top k are the nearest chunks that also match. Where the filter runs matters: after the vector search (post-filtering), before it with an exact scan (pre-filtering), or inside the index walk with payload indexes (filtered ANN). Access control and multi-tenancy are a separate technique, and extracting filters from a user’s words belongs to agentic retrieval in RAG Pipelines.",
+  "useCases": [
+    "Questions scoped to a product, region, date range or document version",
+    "Catalogues and knowledge bases where a rare filter must still return a full top k",
+    "Replacing “please only use 2025 circulars” in the prompt with a guaranteed condition"
+  ],
+  "keyFacts": {
+    "label": "Key ideas",
+    "items": [
+      {
+        "term": "Selectivity",
+        "detail": "share of chunks that match the filter; 0.5% means 10,000 of 20 lakh"
+      },
+      {
+        "term": "Post-filtering",
+        "detail": "ANN top k first, then drop non-matching; expected survivors = k × selectivity"
+      },
+      {
+        "term": "Pre-filtering",
+        "detail": "find matching ids first, then score them exactly; cost grows with the matching count"
+      },
+      {
+        "term": "Filtered ANN",
+        "detail": "the filter is checked during the graph walk (Qdrant, Weaviate ACORN, pgvector iterative scans)"
+      },
+      {
+        "term": "Payload index",
+        "detail": "a keyword, number or date index on a field; lets the planner estimate cardinality"
+      },
+      {
+        "term": "Oversampling",
+        "detail": "fetch more candidates than k so enough survive a filter"
+      }
+    ]
+  },
+  "steps": [
+    "List the fields users filter on and store them as typed metadata at ingestion",
+    "Create payload or attribute indexes on those fields before the bulk load",
+    "Filter inside the vector query, not in application code after it",
+    "Measure recall@k and latency per selectivity band: broad, medium and rare filters"
+  ],
+  "pitfalls": [
+    "Post-filtering a top 10 with a rare filter returns few or no results",
+    "Pre-filtering a broad filter turns into a slow exact scan of most of the collection",
+    "Unindexed or inconsistent metadata (“MH” vs “Maharashtra”) silently drops matches"
+  ],
+  "tools": [
+    "Qdrant payload indexes",
+    "pgvector WHERE + iterative index scans",
+    "Pinecone metadata filters",
+    "Weaviate filters",
+    "Milvus scalar filters"
+  ],
+  "remember": "Filter inside the search, index what you filter, test the rare filters.",
+  "caption": "Illustrative: Suraksha General, a fictional insurer, with 20 lakh chunks. Expected survivors of a post-filter = 10 × selectivity.",
+  "comparison": {
+    "scope": "Inside the vector database",
+    "cost": 2,
+    "needs": "Queries scoped by date, product, region or version",
+    "best": "Post-filter recall collapse on rare filters"
+  },
+  "diagram": {
+    "file": "diagrams/metafilter.svg"
+  },
+  "lesson": {
+    "file": "filtered_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from qdrant_client import QdrantClient, models",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client = QdrantClient(url=\"http://localhost:6333\")",
+        "steps": []
+      },
+      {
+        "text": "C = \"suraksha_docs\"          # 2,000,000 chunks: wordings, circulars, claim notes",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for field, kind in [(\"product\", models.PayloadSchemaType.KEYWORD),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    (\"region\", models.PayloadSchemaType.KEYWORD),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    (\"doc_type\", models.PayloadSchemaType.KEYWORD),",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                    (\"effective_from\", models.PayloadSchemaType.DATETIME)]:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    client.create_payload_index(C, field_name=field, field_schema=kind)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client.upsert(C, points=[models.PointStruct(id=c.id, vector=c.vec,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    payload={\"product\": \"motor\", \"region\": \"MH\", \"doc_type\": \"circular\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "             \"version\": 3, \"effective_from\": \"2025-04-01T00:00:00Z\"})",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    for c in chunks])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "flt = models.Filter(must=[",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    models.FieldCondition(key=\"product\", match=models.MatchValue(value=\"motor\")),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    models.FieldCondition(key=\"region\", match=models.MatchValue(value=\"MH\")),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    models.FieldCondition(key=\"doc_type\", match=models.MatchValue(value=\"circular\")),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    models.FieldCondition(key=\"effective_from\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                          range=models.DatetimeRange(gte=\"2025-04-01T00:00:00Z\"))])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "res = client.query_points(C, query=qvec, query_filter=flt, limit=10,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                          search_params=models.SearchParams(hnsw_ef=128)).points",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "n = client.count(C, count_filter=flt, exact=False).count   # about 10,000",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# 0.5% of the collection: the planner scans those exactly via the payload index",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# the anti-pattern: top 10 first, filter afterwards",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "top = client.query_points(C, query=qvec, limit=10).points",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "kept = [p for p in top if p.payload[\"region\"] == \"MH\"]   # usually empty",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Index the fields you filter on",
+        "text": "Every field a query will filter on gets a payload index: keywords for product, region and document type, a datetime index for the effective date. Create them before the bulk upload, so the HNSW graph is built with the extra links that keep filtered walks connected."
+      },
+      {
+        "title": "Store metadata with every chunk",
+        "text": "Each chunk carries its structured facts as payload: motor, Maharashtra, circular, version 3, effective from 1 April 2025. Metadata that is missing or free text at ingestion cannot be filtered on later."
+      },
+      {
+        "title": "Write the filter as structure",
+        "text": "The filter is data, not words in the query: product = motor AND region = MH AND doc_type = circular AND effective_from ≥ 1 April 2025. Embedding “motor circulars for Maharashtra” only nudges similarity; a filter enforces it."
+      },
+      {
+        "title": "Filter inside the search",
+        "text": "query_filter goes with the query vector, so the engine checks the condition while it walks the graph and only matching chunks enter the top 10. hnsw_ef widens the candidate list when the filter is strict."
+      },
+      {
+        "title": "Let the planner use cardinality",
+        "text": "The filter matches about 10,000 of 20,00,000 chunks, or 0.5%. For a set that small, Qdrant's planner reads the matching ids from the payload index and scores them exactly: 10,000 distances, 100% recall, a few milliseconds."
+      },
+      {
+        "title": "Never filter after a small top-k",
+        "text": "The anti-pattern searches first and filters afterwards. With 0.5% of chunks matching, the global top 10 holds 10 × 0.005 = 0.05 matching chunks on average, so the list usually comes back empty. Measure recall per selectivity band, not only on unfiltered queries."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"--d:0s\">Payload indexes</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"35\" text-anchor=\"middle\">product · region · type</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"184\" y=\"20\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"35\" text-anchor=\"middle\">effective_from (date)</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"52\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"68\" text-anchor=\"middle\">chunk + {motor, MH, circular, v3, 2025-04-01}</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"86\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"102\" text-anchor=\"middle\">filter: motor ∧ MH ∧ circular ∧ date ≥ Apr 2025</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"120\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"136\" text-anchor=\"middle\">query vector</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M120 132L134 132\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"136\" y=\"120\" width=\"216\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"244\" y=\"136\" text-anchor=\"middle\">graph walk skips non-matching</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"156\" width=\"200\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"108\" y=\"172\" text-anchor=\"middle\">≈ 10,000 of 20,00,000 match</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M210 168L224 168\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"226\" y=\"156\" width=\"126\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"289\" y=\"172\" text-anchor=\"middle\">exact · 100%</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"194\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"93\" y=\"211\" text-anchor=\"middle\">top 10, then filter</text></g><text class=\"sb a\" x=\"186\" y=\"212\" style=\"--d:0.1s\">→ 0.05 kept on average</text><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"8\" y=\"228\" width=\"170\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"93\" y=\"245\" text-anchor=\"middle\">filter inside search</text></g><text class=\"sb a\" x=\"186\" y=\"246\" style=\"--d:0.3s\">→ 10 of 10 kept</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Answers respect hard facts: product, region, date and version",
+      "Filtering inside the search keeps a full, accurate top 10 even for rare filters",
+      "Payload indexes let the engine switch to an exact scan when the matching set is small",
+      "Fewer irrelevant chunks reach the prompt, so answers are shorter and cheaper"
+    ],
+    "cons": [
+      "Metadata must be clean and complete at ingestion time",
+      "Every filtered field needs an index, which costs memory and build time",
+      "Recall must be measured per selectivity band, not just overall",
+      "Very strict filters on engines without filter-aware indexes fall back to slow scans"
+    ],
+    "avoidWhen": [
+      "Queries rarely constrain structured fields (plain semantic search is enough)",
+      "The “filter” is fuzzy intent such as “recent-ish” or “about claims” (let ranking or a re-ranker handle it)"
+    ],
+    "tools": [
+      {
+        "name": "Qdrant",
+        "type": "Open source, managed cloud",
+        "what": "Payload indexes, filterable HNSW and a cardinality-based query planner",
+        "url": "https://qdrant.tech/documentation/concepts/filtering/"
+      },
+      {
+        "name": "pgvector",
+        "type": "Open source (Postgres extension)",
+        "what": "WHERE clauses with B-tree indexes, plus iterative index scans for filtered HNSW and IVFFlat",
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "name": "Pinecone",
+        "type": "Commercial, managed",
+        "what": "Metadata filters applied during the vector query",
+        "url": "https://docs.pinecone.io/guides/search/filter-by-metadata"
+      },
+      {
+        "name": "Weaviate",
+        "type": "Open source, managed cloud",
+        "what": "Filters built on an inverted index with pre-filtered HNSW and the ACORN strategy",
+        "url": "https://docs.weaviate.io/weaviate/concepts/filtering"
+      },
+      {
+        "name": "Milvus",
+        "type": "Open source, managed cloud (Zilliz)",
+        "what": "Boolean filter expressions with scalar indexes on fields",
+        "url": "https://milvus.io/docs/boolean.md"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Suraksha General, a fictional insurer, has 20 lakh chunks of policy wordings, circulars and claim notes in one vector index. A claims handler wants the 10 nearest chunks that also match a structured filter: all motor documents (50% of chunks), motor documents for Maharashtra (5%), or motor circulars for Maharashtra since April 2025 (0.5%). You choose where the filter runs and how many candidates the search fetches.",
+    "controls": [
+      "Choose the filter strategy: post-filter, pre-filter with an exact scan, or filtered ANN with a payload index.",
+      "Choose how selective the filter is: 50%, 5% or 0.5% of the chunks match.",
+      "Drag oversampling to fetch 10, 40, 200 or 1,000 candidates before the top 10 are chosen."
+    ],
+    "outputs": [
+      {
+        "name": "Chunks matching the filter",
+        "meaning": "How many of the 20 lakh chunks satisfy the filter."
+      },
+      {
+        "name": "Recall@10",
+        "meaning": "Share of the true filtered top 10 that the search returns."
+      },
+      {
+        "name": "Results returned",
+        "meaning": "How many of the 10 slots are filled. Post-filtering can return fewer than 10."
+      },
+      {
+        "name": "Latency",
+        "meaning": "Illustrative query time: an exact scan costs about 0.1 ms per 1,000 vectors; an HNSW query about 3 ms plus 0.01 ms per candidate."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Post-filter, no oversampling",
+        "expect": "50% filter, 10 candidates: only 5 of 10 results, recall@10 47%, 3.1 ms."
+      },
+      {
+        "k": "oversample",
+        "name": "Post-filter, 20× oversampling",
+        "expect": "5% filter, 200 candidates: 10 of 10 results, recall@10 99%, 5.0 ms."
+      },
+      {
+        "k": "brute",
+        "name": "Pre-filter a broad filter",
+        "expect": "50% filter: 10,00,000 exact distances, 10 of 10 results, 100% recall, but 102 ms."
+      },
+      {
+        "k": "filtered",
+        "name": "Filtered ANN",
+        "expect": "5% filter, 40 candidates: 10 of 10 results, recall@10 97%, 5.4 ms."
+      }
+    ],
+    "missions": [
+      {
+        "k": "tiny",
+        "text": "With the 0.5% filter, return a full 10 results at 99% recall or better, in 10 ms or less.",
+        "hint": "Few chunks match, so scoring them exactly is cheap: pre-filter, or let filtered ANN hand the query to its planner."
+      },
+      {
+        "k": "collapse",
+        "text": "Show post-filtering returning fewer than 3 results even with at least 4× oversampling.",
+        "hint": "Use post-filtering with the 5% or 0.5% filter and 40 or 200 candidates."
+      },
+      {
+        "k": "broad",
+        "text": "With the 50% filter, reach at least 95% recall with all 10 results in 10 ms or less.",
+        "hint": "Pre-filtering scans a million vectors here. Oversample a little, or filter inside the graph walk."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Qdrant",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Payload indexes on keyword, number and datetime fields, a filterable HNSW graph, and a planner that scores small matching sets exactly.",
+        "ex": "query_points with a Filter on product, region, doc_type and an effective_from DatetimeRange.",
+        "pros": [
+          "Filter-aware graph links",
+          "Cardinality-based planning"
+        ],
+        "cons": [
+          "Create payload indexes before the bulk load",
+          "Another service to run"
+        ],
+        "url": "https://qdrant.tech/documentation/concepts/filtering/"
+      },
+      {
+        "n": "pgvector",
+        "type": "Open source · Postgres extension",
+        "start": 3,
+        "prod": 3,
+        "best": "Filters are plain WHERE clauses with B-tree indexes; iterative index scans keep scanning HNSW or IVFFlat until enough rows pass.",
+        "ex": "SET hnsw.iterative_scan = relaxed_order, then WHERE product = 'motor' AND region = 'MH' ORDER BY embedding <=> $1 LIMIT 10.",
+        "pros": [
+          "Metadata stays in your relational tables",
+          "SQL joins and constraints"
+        ],
+        "cons": [
+          "Needs pgvector 0.8.0+ for iterative scans",
+          "Check plans with EXPLAIN ANALYZE"
+        ],
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "n": "Pinecone",
+        "type": "Commercial · managed",
+        "start": 3,
+        "prod": 3,
+        "best": "Metadata filters with $eq, $in, $gte and similar operators, applied during the vector query.",
+        "ex": "index.query(vector=q, top_k=10, filter={\"region\": {\"$eq\": \"MH\"}, \"year\": {\"$gte\": 2025}}).",
+        "pros": [
+          "Nothing to tune for filtered recall",
+          "Serverless scaling"
+        ],
+        "cons": [
+          "Metadata size limits per record",
+          "Managed only"
+        ],
+        "url": "https://docs.pinecone.io/guides/search/filter-by-metadata"
+      },
+      {
+        "n": "Weaviate",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Filters built from an inverted index and applied to HNSW search, with the ACORN strategy for restrictive filters.",
+        "ex": "collection.query.near_vector(q, limit=10, filters=Filter.by_property(\"region\").equal(\"MH\")).",
+        "pros": [
+          "Filter strategy is configurable",
+          "Hybrid search in the same query"
+        ],
+        "cons": [
+          "Mark filterable properties in the schema",
+          "Strategy defaults vary by version"
+        ],
+        "url": "https://docs.weaviate.io/weaviate/concepts/filtering"
+      },
+      {
+        "n": "Milvus",
+        "type": "Open source · managed cloud (Zilliz)",
+        "start": 2,
+        "prod": 3,
+        "best": "Boolean filter expressions on scalar fields, with scalar indexes to speed them up.",
+        "ex": "client.search(..., filter='product == \"motor\" and region == \"MH\"', limit=10).",
+        "pros": [
+          "Scales to billions of vectors",
+          "Rich expression syntax"
+        ],
+        "cons": [
+          "More components to operate",
+          "Scalar indexes are configured separately"
+        ],
+        "url": "https://milvus.io/docs/boolean.md"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Metadata already lives in Postgres",
+        "tool": "pgvector with WHERE and iterative scans"
+      },
+      {
+        "need": "Many rare filters on a large collection",
+        "tool": "Qdrant payload indexes"
+      },
+      {
+        "need": "No infrastructure to run",
+        "tool": "Pinecone metadata filters"
+      }
+    ],
+    "goals": [
+      "Explain why post-filtering a small top-k loses results as filters get rarer",
+      "Choose between pre-filtering, post-filtering and filtered ANN from the selectivity",
+      "Index the fields you filter on and test recall per selectivity band"
+    ]
+  },
+  "practice": {
+    "scenario": "Suraksha General, a fictional insurer, keeps 20 lakh chunks of policy wordings, IRDAI circulars and claim notes in Postgres with pgvector. A handler asks about motor own-damage rules for Maharashtra from April 2025. The query filters on product, region, document type and effective date inside the SQL, with a composite B-tree index on those columns and iterative HNSW scans switched on, so the top 10 are always ten matching chunks, even when only 0.5% of the table matches.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Policy wordings and circulars filtered by product, state and effective date before an answer is drafted"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "“Running shoes like this, size 9, in stock in Bengaluru” as similarity plus size, stock and city filters"
+      },
+      {
+        "industry": "Banking",
+        "use": "RBI master directions searched by meaning, restricted to the current version and a department"
+      }
+    ],
+    "analogy": "A library catalogue search that first narrows to the right shelf, language and edition, then asks the librarian for the closest books on that shelf, instead of taking the ten closest books in the building and throwing away those on the wrong shelf.",
+    "library": {
+      "name": "pgvector",
+      "what": "Postgres extension for vector search. Filters are ordinary WHERE clauses; since version 0.8.0, iterative index scans keep scanning the HNSW or IVFFlat index until enough rows pass the filter.",
+      "install": "pip install \"psycopg[binary]\" pgvector  # plus CREATE EXTENSION vector; in Postgres"
+    },
+    "note": "The embed() function is a stub for your embedding model. hnsw.iterative_scan needs pgvector 0.8.0 or later. With relaxed_order, rows can come back slightly out of distance order; re-sort in an outer query if exact order matters. For very selective filters the Postgres planner may use the B-tree index and score the matching rows exactly, which is pre-filtering; check with EXPLAIN ANALYZE.",
+    "samples": [
+      {
+        "file": "filtered_search.py",
+        "language": "python",
+        "code": "import datetime as dt\nimport psycopg\nfrom pgvector.psycopg import register_vector\n\nconn = psycopg.connect(\"dbname=suraksha\", autocommit=True)\nregister_vector(conn)\n\nconn.execute(\"\"\"\nCREATE INDEX IF NOT EXISTS chunks_emb_hnsw\n    ON chunks USING hnsw (embedding vector_cosine_ops);\nCREATE INDEX IF NOT EXISTS chunks_meta_idx\n    ON chunks (product, region, doc_type, effective_from);\n\"\"\")\n\ndef embed(text):\n    \"\"\"Stub: return a numpy float32 vector from your embedding model.\"\"\"\n    raise NotImplementedError\n\ndef search(question, product, region, doc_type, since, k=10):\n    qvec = embed(question)\n    with conn.transaction():\n        conn.execute(\"SET LOCAL hnsw.ef_search = 100\")\n        conn.execute(\"SET LOCAL hnsw.iterative_scan = relaxed_order\")\n        conn.execute(\"SET LOCAL hnsw.max_scan_tuples = 40000\")\n        return conn.execute(\"\"\"\n            SELECT id, title, embedding <=> %s AS distance\n            FROM chunks\n            WHERE product = %s AND region = %s\n              AND doc_type = %s AND effective_from >= %s\n            ORDER BY embedding <=> %s\n            LIMIT %s\"\"\",\n            (qvec, product, region, doc_type, since, qvec, k)).fetchall()\n\nrows = search(\"own-damage claim rules after flooding\", \"motor\", \"MH\",\n              \"circular\", dt.date(2025, 4, 1))\nfor row in rows:\n    print(row)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A search post-filters its ANN results by region. The region filter matches 2% of chunks, and filter values are spread evenly. How many candidates must the ANN search fetch so that, on average, 10 survive the filter?",
+    "answer": "Expected survivors = candidates × selectivity, so candidates = 10 ÷ 0.02 = 500. Fetching the usual 10 would leave 0.2 on average. At 0.2% selectivity you would need 5,000, which is why rare filters belong inside the search.",
+    "expected": {
+      "value": 500,
+      "tolerance": 1,
+      "label": "candidates ="
+    },
+    "interview": [
+      {
+        "question": "Pre-filtering, post-filtering or filtered ANN: how do you choose?",
+        "answer": "Look at selectivity. Post-filtering is only safe for broad filters and needs oversampling of about k ÷ selectivity. Pre-filtering with an exact scan is ideal when few items match, because scoring 10,000 vectors is cheap. Filtered ANN, where the index checks the filter during the graph walk, covers the middle and broad cases. Engines such as Qdrant choose between exact and graph search from the estimated cardinality, so index the filtered fields and test recall per band."
+      },
+      {
+        "question": "Why can filtered HNSW lose recall, and how do engines fix it?",
+        "answer": "A strict filter removes most nodes, so the graph walk can hit dead ends where no matching neighbour is linked. Engines add filter-aware links when payload indexes exist before indexing, explore two hops (Weaviate's ACORN), keep scanning until enough rows pass (pgvector iterative scans), or switch to an exact scan of the matching ids when the set is small."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Taking the top 10 and filtering in application code",
+        "fix": "Pass the filter into the vector query, or oversample by about 10 ÷ selectivity"
+      },
+      {
+        "mistake": "Filtering on fields with no index or with inconsistent values",
+        "fix": "Index every filtered field and normalise values such as “MH” and “Maharashtra” at ingestion"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mv01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer’s search takes the ANN top 10 and then keeps only motor circulars for Maharashtra, which are 0.5% of chunks. On average, how many results survive?",
+      "options": [
+        "5",
+        "0.5",
+        "0.05",
+        "10"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Expected survivors = k × selectivity = 10 × 0.005 = 0.05, so the list is usually empty."
+    },
+    {
+      "id": "mv02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace post-filters by “in stock in Pune”, which matches 4% of products. How many candidates must the ANN search fetch so that about 10 survive on average?",
+      "options": [
+        "40",
+        "100",
+        "250",
+        "2,500"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "10 ÷ 0.04 = 250 candidates. The rarer the filter, the more oversampling post-filtering needs."
+    },
+    {
+      "id": "mv03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s RBI circular search filters on department = “Payments”, which matches 30% of 5 lakh chunks. Which strategy is usually the poorest fit?",
+      "options": [
+        "Filtered ANN with a payload index",
+        "Pre-filtering with an exact scan of every matching chunk",
+        "Post-filtering with 5× oversampling",
+        "Pinecone metadata filters"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "30% of 5 lakh is 1,50,000 vectors to score exactly on every query. Broad filters suit filtered ANN or modest oversampling."
+    },
+    {
+      "id": "mv04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A filter matches 8,000 of 20 lakh chunks. Qdrant has a payload index on every filtered field. What is its planner likely to do?",
+      "options": [
+        "Walk the HNSW graph and hope enough nodes match",
+        "Read the matching ids from the payload index and score them exactly",
+        "Ignore the filter",
+        "Return an error for low cardinality"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "For a small matching set, an exact scan is cheap and gives 100% recall; the payload index supplies the cardinality estimate."
+    },
+    {
+      "id": "mv05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A UPI dispute knowledge base stores the state as “MH” on some chunks and “Maharashtra” on others. Queries filter on “MH”. What happens?",
+      "options": [
+        "Both match, because they mean the same thing",
+        "Chunks labelled “Maharashtra” are silently excluded",
+        "The query fails with an error",
+        "The embedding model fixes it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Filters are exact conditions. Normalise metadata values at ingestion."
+    },
+    {
+      "id": "mv06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital’s guideline search should use only the current version of each protocol. What is the most reliable way?",
+      "options": [
+        "Add “use the latest version” to the prompt",
+        "Store version or is_current as metadata and filter on it in the vector query",
+        "Embed the version number into the text",
+        "Re-rank by date after retrieval"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A structured filter guarantees the condition; prompt text and embeddings only encourage it."
+    },
+    {
+      "id": "mv07",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are good candidates for metadata filters in a policy-wording search? Select all that apply.",
+      "options": [
+        "Product line, such as motor or health",
+        "Effective date of the wording",
+        "How friendly the wording sounds",
+        "State or region"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Filters work on hard, structured facts. Tone is fuzzy and belongs to ranking, not filtering."
+    },
+    {
+      "id": "mv08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "With pgvector 0.8, a filtered HNSW query returns only 3 rows for LIMIT 10. Which setting keeps scanning the index until enough rows pass the WHERE clause?",
+      "options": [
+        "hnsw.iterative_scan",
+        "ivfflat.lists",
+        "maintenance_work_mem",
+        "hnsw.m"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Iterative index scans (strict_order or relaxed_order) continue the scan until enough filtered rows are found, up to max_scan_tuples."
+    },
+    {
+      "id": "mv09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why should Qdrant payload indexes be created before a large bulk upload rather than after?",
+      "options": [
+        "Uploads are rejected without them",
+        "The HNSW graph can then be built with extra links that keep filtered searches connected",
+        "Indexes cannot be created later",
+        "It halves the vector size"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Qdrant builds filter-aware links when payload indexes exist at indexing time; adding them later misses that benefit until reindexing."
+    },
+    {
+      "id": "mv10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A SEBI-circular assistant embeds the query “circulars from 2025 on margin”. Results include 2019 circulars. What is missing?",
+      "options": [
+        "A larger model",
+        "A structured date filter instead of relying on the words “from 2025”",
+        "A higher temperature",
+        "More chunks per document"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Embeddings blur dates. A range filter on the issue date enforces it."
+    },
+    {
+      "id": "mv11",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which signs suggest post-filtering is hurting recall? Select all that apply.",
+      "options": [
+        "Rare filters return fewer than k results",
+        "Recall is fine on unfiltered queries but poor on filtered ones",
+        "Latency rises steadily with collection size for all queries",
+        "Raising the candidate count fills the empty slots"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Short lists on rare filters, a gap between filtered and unfiltered recall, and relief from oversampling all point to post-filtering."
+    },
+    {
+      "id": "mv12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Suraksha General pre-filters exactly. Scoring costs about 0.1 ms per 1,000 vectors. A filter matches 50% of 20 lakh chunks. About how long does the scan take?",
+      "options": [
+        "1 ms",
+        "10 ms",
+        "100 ms",
+        "1,000 ms"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "10,00,000 vectors × 0.1 ms per 1,000 = 100 ms. Broad filters make exact pre-filtering slow."
+    },
+    {
+      "id": "mv13",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A citizen-services search must show only schemes for the user’s state and must never mix in other departments’ internal notes. Which part belongs to metadata filtering, and which to a separate control?",
+      "options": [
+        "Both are the same filter",
+        "State is a relevance filter; blocking internal notes is access control and needs its own enforcement",
+        "Neither needs filters",
+        "State needs access control; internal notes need a re-ranker"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Relevance filters narrow results; permissions and tenancy are a security boundary with their own design and tests."
+    },
+    {
+      "id": "mv14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A Weaviate collection has a very restrictive filter and filtered HNSW recall drops. Which strategy targets this case?",
+      "options": [
+        "ACORN, which explores two-hop neighbours when direct ones are filtered out",
+        "Lowering ef",
+        "Removing the filter",
+        "Switching to BM25 only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ACORN keeps the graph walk connected when most neighbours fail the filter."
+    },
+    {
+      "id": "mv15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A search filters on merchant_category with 12 possible values but has no index on that field. What is the likely effect?",
+      "options": [
+        "None: filters never need indexes",
+        "Each query checks the field on far more records than needed, adding latency and hurting planning",
+        "Recall rises",
+        "The field is ignored"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unindexed filter fields force slow checks and prevent the engine from estimating cardinality."
+    },
+    {
+      "id": "mv16",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A clinical-note search post-filters by ward. Which fixes restore a full top 10 for rare wards? Select all that apply.",
+      "options": [
+        "Pass the filter into the vector query",
+        "Oversample candidates by about 10 ÷ selectivity",
+        "Pre-filter and score the matching notes exactly when there are few",
+        "Lower the top-k to 5"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Filter inside the search, oversample enough, or scan the small matching set exactly. A smaller k just hides the problem."
+    },
+    {
+      "id": "mv17",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An NBFC filters loan-policy chunks by product and version. Recall is 98% on broad filters and 40% on rare ones. What should the evaluation report?",
+      "options": [
+        "Only the overall average",
+        "Recall and latency per selectivity band: broad, medium and rare",
+        "Only unfiltered recall",
+        "Token cost only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Filter strategies fail differently by selectivity, so an average hides the rare-filter collapse."
+    },
+    {
+      "id": "mv18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A filter matches 5% of chunks. Post-filtering fetches 40 candidates. How many results survive on average?",
+      "options": [
+        "2",
+        "4",
+        "10",
+        "0.5"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "40 × 0.05 = 2 of the 10 slots filled."
+    },
+    {
+      "id": "mv19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which statement about Pinecone metadata filters is accurate?",
+      "options": [
+        "They are applied during the vector query, so results match the filter",
+        "They are applied only after results reach your application",
+        "They work only on vector values",
+        "They require a separate SQL database"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pinecone applies metadata filters inside the query using operators such as $eq, $in and $gte."
+    },
+    {
+      "id": "mv20",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank moves from post-filtering to filtered ANN with payload indexes. What else should the team do? Select all that apply.",
+      "options": [
+        "Normalise metadata values at ingestion",
+        "Re-measure recall per selectivity band",
+        "Remove the date field to save memory",
+        "Check that every filtered field has an index"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Clean values, indexed fields and per-band measurement make filtered search trustworthy."
+    }
+  ]
+}

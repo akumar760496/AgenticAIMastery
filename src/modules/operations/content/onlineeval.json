@@ -1,0 +1,864 @@
+{
+  "id": "onlineeval",
+  "moduleSlug": "operations",
+  "name": "Online Evals and Drift Alerts",
+  "shortName": "Online evals",
+  "question": "Is quality slipping on live traffic right now?",
+  "summary": "Score live traffic continuously: cheap deterministic checks on every trace, and an LLM judge on a small random sample. Track the scores and the input distribution over time windows, and alert when a score falls below a threshold or the inputs drift. Online evals catch what offline suites cannot: new user behaviour, provider changes and data drift.",
+  "useCases": [
+    "Any production agent whose inputs or dependencies change over time",
+    "Quality that users notice before dashboards do",
+    "Offline eval sets that were written months ago"
+  ],
+  "keyFacts": {
+    "label": "Signals",
+    "items": [
+      {
+        "term": "Deterministic checks",
+        "detail": "schema valid, citation present, no PII leaked: run on every trace"
+      },
+      {
+        "term": "Sampled judge",
+        "detail": "an LLM judge on 1–5% of traces, calibrated as in Panel 1"
+      },
+      {
+        "term": "User signals",
+        "detail": "thumbs down, escalations to a human, repeat questions"
+      },
+      {
+        "term": "Alert rule",
+        "detail": "metric, window, threshold and a minimum sample size"
+      },
+      {
+        "term": "Input drift",
+        "detail": "population stability index: under 0.1 stable, 0.1–0.25 moderate, over 0.25 significant"
+      },
+      {
+        "term": "Feedback loop",
+        "detail": "failed live traces become new offline test cases"
+      }
+    ]
+  },
+  "steps": [
+    "Run cheap checks on every trace and a judge on a random sample",
+    "Aggregate scores in windows with a minimum sample size",
+    "Alert on a threshold below the baseline, tuned for few false alarms",
+    "Turn every confirmed failure into an offline test case"
+  ],
+  "pitfalls": [
+    "A window too small to be stable: alerts fire on noise and get ignored",
+    "A judge nobody calibrated against human labels",
+    "Alerting on averages only, so a failing segment is hidden by the rest"
+  ],
+  "tools": [
+    "Langfuse evaluators",
+    "Arize Phoenix",
+    "LangSmith online evaluators",
+    "Braintrust",
+    "Evidently",
+    "Datadog LLM Observability"
+  ],
+  "remember": "Check everything cheaply, judge a sample, alert on windows.",
+  "caption": "Illustrative: a daily judge pass rate on a 2% sample falls from about 92% to 86% after day 7.",
+  "comparison": {
+    "scope": "Quality dropping on live traffic",
+    "cost": 2,
+    "needs": "Sampling, a judge, alert rules",
+    "best": "Noisy alerts that everyone ignores"
+  },
+  "diagram": {
+    "file": "diagrams/onlineeval.svg"
+  },
+  "lesson": {
+    "file": "online_eval.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import math, random",
+        "steps": []
+      },
+      {
+        "text": "from datetime import timedelta",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "JUDGE_RATE, WINDOW, MIN_N, MAX_DROP = 0.02, timedelta(hours=6), 200, 0.04",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_trace(t):",
+        "steps": []
+      },
+      {
+        "text": "    store(t.id, \"schema_ok\", is_valid_json(t.output))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    store(t.id, \"cited\", \"[source:\" in t.output)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if random.random() < JUDGE_RATE:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        store(t.id, \"judge_pass\", judge(t.input, t.output))  # calibrated",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def check(now):",
+        "steps": []
+      },
+      {
+        "text": "    s = scores(\"judge_pass\", since=now - WINDOW)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if len(s) < MIN_N:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return                                    # too few to trust",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    rate, base = sum(s) / len(s), baseline(\"judge_pass\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if base - rate > MAX_DROP:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        page(f\"judge pass {rate:.1%} vs {base:.1%}\", examples=failing(s))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    ref, cur = intent_mix(days=28), intent_mix(since=now - WINDOW)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    psi = sum((cur.get(k, 1e-6) - p) * math.log(cur.get(k, 1e-6) / p)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "              for k, p in ref.items())",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if psi > 0.25:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        page(f\"input drift: PSI {psi:.2f}\")",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Choose rate, window and threshold",
+        "text": "Judge 2% of traffic, aggregate over 6 hours, require at least 200 judged answers, and alert on a drop of more than 4 points. These four numbers decide how noisy and how fast the alert is."
+      },
+      {
+        "title": "Cheap checks on every trace",
+        "text": "Format and citation checks cost nothing, so they run on every answer and catch hard failures at once."
+      },
+      {
+        "title": "Judge a random sample",
+        "text": "A calibrated LLM judge scores about 1 answer in 50. Random sampling keeps the estimate unbiased; judging everything would cost fifty times more."
+      },
+      {
+        "title": "Aggregate in a window",
+        "text": "Over 6 hours, 2% of 12,500 answers gives 250 judgements: enough for a standard error of about 1.7 points."
+      },
+      {
+        "title": "Alert with examples",
+        "text": "If the pass rate is more than 4 points below baseline, page someone, with links to failing traces so triage starts from evidence."
+      },
+      {
+        "title": "Watch the inputs too",
+        "text": "Compare this window’s intent mix with the last 28 days using the population stability index. Above 0.25 the inputs have shifted, even if scores have not moved yet."
+      }
+    ],
+    "sceneHeight": 258,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"49\" y=\"21\" text-anchor=\"middle\">2% judged</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"96\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"137\" y=\"21\" text-anchor=\"middle\">6 h window</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx soft\" x=\"184\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"225\" y=\"21\" text-anchor=\"middle\">n ≥ 200</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"272\" y=\"6\" width=\"82\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"313\" y=\"21\" text-anchor=\"middle\">drop > 4 pts</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<rect class=\"a\" x=\"10\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0s\"/><rect class=\"a\" x=\"29\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.02s\"/><rect class=\"a\" x=\"48\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.04s\"/><rect class=\"a\" x=\"67\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.06s\"/><rect class=\"a\" x=\"86\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.08s\"/><rect class=\"a\" x=\"105\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.1s\"/><rect class=\"a\" x=\"124\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.12s\"/><rect class=\"a\" x=\"143\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.14s\"/><rect class=\"a\" x=\"162\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.16s\"/><rect class=\"a\" x=\"181\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.18s\"/><rect class=\"a\" x=\"200\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.2s\"/><rect class=\"a\" x=\"219\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--fail-soft);stroke:var(--fail);--d:0.22s\"/><rect class=\"a\" x=\"238\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.24s\"/><rect class=\"a\" x=\"257\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.26s\"/><rect class=\"a\" x=\"276\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.28s\"/><rect class=\"a\" x=\"295\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.3s\"/><rect class=\"a\" x=\"314\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.32s\"/><rect class=\"a\" x=\"333\" y=\"40\" width=\"14\" height=\"14\" rx=\"3\" style=\"fill:var(--pass-soft);stroke:var(--pass);--d:0.34s\"/><text class=\"sb a\" x=\"8\" y=\"70\" style=\"text-anchor:start;--d:0.4s\">format and citation checks on every answer</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<circle class=\"a\" cx=\"112\" cy=\"47\" r=\"11\" style=\"fill:none;stroke:var(--accent);stroke-width:1.6;--d:0s\"/><circle class=\"a\" cx=\"283\" cy=\"47\" r=\"11\" style=\"fill:none;stroke:var(--accent);stroke-width:1.6;--d:0.1s\"/><text class=\"sb a\" x=\"8\" y=\"84\" style=\"text-anchor:start;--d:0.2s\">about 1 in 50 goes to the judge</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"94\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"109\" text-anchor=\"middle\">6 h · 12,500 answers · 250 judged · SE ≈ 1.7 pts</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"135\" style=\"text-anchor:end;--d:0s\">baseline</text><rect x=\"118\" y=\"125\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"125\" width=\"174.8\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"135\" style=\"text-anchor:start;--d:0.2s\">92%</text><text class=\"tl a\" x=\"112\" y=\"155\" style=\"text-anchor:end;--d:0.1s\">last 6 h</text><rect x=\"118\" y=\"145\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"145\" width=\"163.4\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"155\" style=\"text-anchor:start;--d:0.30000000000000004s\">86%</text><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx fail\" x=\"8\" y=\"166\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"181\" text-anchor=\"middle\">page on-call · with 35 failing traces</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"206\" style=\"text-anchor:start;--d:0s\">Intent mix: 28 days vs this window</text><text class=\"sb a\" x=\"8\" y=\"222\" style=\"text-anchor:start;--d:0.05s\">claims</text><rect class=\"a\" x=\"52\" y=\"213\" width=\"60\" height=\"6\" rx=\"3\" style=\"fill:var(--rule-strong);--d:0.1s\"/><rect class=\"a\" x=\"52\" y=\"221\" width=\"33.6\" height=\"6\" rx=\"3\" style=\"fill:var(--warn);--d:0.15s\"/><text class=\"sb a\" x=\"126\" y=\"222\" style=\"text-anchor:start;--d:0.05s\">policy</text><rect class=\"a\" x=\"170\" y=\"213\" width=\"36\" height=\"6\" rx=\"3\" style=\"fill:var(--rule-strong);--d:0.1s\"/><rect class=\"a\" x=\"170\" y=\"221\" width=\"36\" height=\"6\" rx=\"3\" style=\"fill:var(--warn);--d:0.15s\"/><text class=\"sb a\" x=\"244\" y=\"222\" style=\"text-anchor:start;--d:0.05s\">other</text><rect class=\"a\" x=\"288\" y=\"213\" width=\"24\" height=\"6\" rx=\"3\" style=\"fill:var(--rule-strong);--d:0.1s\"/><rect class=\"a\" x=\"288\" y=\"221\" width=\"50.4\" height=\"6\" rx=\"3\" style=\"fill:var(--warn);--d:0.15s\"/><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"352\" y=\"248\" style=\"text-anchor:end;fill:var(--warn)\">PSI 0.29 > 0.25: inputs drifted</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Catches drops that offline suites never see",
+      "Early warning before users complain",
+      "Failing live traces become new test cases",
+      "Sampling keeps judge costs small"
+    ],
+    "cons": [
+      "Judges need calibration and cost money",
+      "Thresholds need tuning to avoid noise",
+      "Delayed signals: windows trade speed for stability",
+      "Segment-level problems hide in global averages"
+    ],
+    "avoidWhen": [
+      "Replacing the offline suite: online evals complement it, they do not gate releases",
+      "Judging traffic you are not allowed to send to another model provider"
+    ],
+    "tools": [
+      {
+        "name": "Langfuse evaluators",
+        "type": "Open source, cloud",
+        "what": "LLM-as-a-judge and scores on sampled traces",
+        "url": "https://langfuse.com/docs/evaluation/overview"
+      },
+      {
+        "name": "Arize Phoenix",
+        "type": "Open source",
+        "what": "Online evals and drift views on traces",
+        "url": "https://arize.com/docs/phoenix"
+      },
+      {
+        "name": "LangSmith online evaluators",
+        "type": "Commercial (LangChain)",
+        "what": "Rules that score sampled production runs",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Braintrust",
+        "type": "Commercial",
+        "what": "Online scoring with the same scorers as offline evals",
+        "url": "https://www.braintrust.dev/docs"
+      },
+      {
+        "name": "Evidently",
+        "type": "Open source",
+        "what": "Data and prediction drift reports and tests",
+        "url": "https://docs.evidentlyai.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An EdTech homework-help agent answers 50,000 questions a day with a judge pass rate of about 92%. On day 8 the pass rate really drops to 86%. Tune the judge sample rate, the alert window and the threshold so the alert is quiet on normal days, quick on bad ones and affordable.",
+    "controls": [
+      "Pick the judge sample rate: 0.5%, 1%, 2% or 5% of answers.",
+      "Pick the alert window: 1, 6 or 24 hours.",
+      "Pick the threshold: alert when the pass rate is more than 2, 4, 6 or 8 points below baseline."
+    ],
+    "outputs": [
+      {
+        "name": "Judged answers per window",
+        "meaning": "How many judgements each window holds, and the resulting noise (standard error)."
+      },
+      {
+        "name": "False alerts per week",
+        "meaning": "Expected pages on normal days, from noise alone."
+      },
+      {
+        "name": "Chance each window catches the drop",
+        "meaning": "Probability one window flags the real 6-point drop, and the expected delay."
+      },
+      {
+        "name": "Judge cost per day",
+        "meaning": "Judged answers × ₹0.40."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "0.5%, 1 hour, 2 points",
+        "expect": "About 10 judgements a window: 68 false alerts a week."
+      },
+      {
+        "k": "tuned",
+        "name": "2%, 6 hours, 4 points",
+        "expect": "250 a window: 0.28 false alerts a week, the drop caught in about 7.3 h, ₹400 a day."
+      },
+      {
+        "k": "heavy",
+        "name": "5%, 1 hour, 4 points",
+        "expect": "104 a window: still 11 false alerts a week, and ₹1,000 a day."
+      },
+      {
+        "k": "slow",
+        "name": "0.5%, 24 hours, 8 points",
+        "expect": "No false alerts, but the drop takes about 5.5 days to catch."
+      }
+    ],
+    "missions": [
+      {
+        "k": "quiet",
+        "text": "Fewer than 1 false alert a week, and a real drop caught within 12 hours.",
+        "hint": "Bigger windows and more judgements cut noise; the threshold must stay below the 6-point drop."
+      },
+      {
+        "k": "cheap",
+        "text": "Do the same for ₹400 a day or less.",
+        "hint": "2% judging with a 6-hour window and a 4-point threshold is enough."
+      },
+      {
+        "k": "blind",
+        "text": "Find a setting with almost no false alerts (under 0.1 a week) that takes two days or more to catch the drop.",
+        "hint": "Make the threshold as large as the drop, or larger, with a long window."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Langfuse evaluators",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "LLM-as-a-judge and custom scores on sampled production traces.",
+        "ex": "Score 2% of homework answers for correctness and chart the score by day and by subject.",
+        "pros": [
+          "Scores sit next to traces",
+          "Same evaluators offline and online"
+        ],
+        "cons": [
+          "Judge costs are yours",
+          "Alerting needs your own rules or exports"
+        ],
+        "url": "https://langfuse.com/docs/evaluation/overview"
+      },
+      {
+        "n": "Arize Phoenix",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Evals and drift views on traces, self-hosted.",
+        "ex": "Compare embedding clusters of this week’s questions with last month’s.",
+        "pros": [
+          "Drift and eval views together",
+          "Free to self-host"
+        ],
+        "cons": [
+          "Enterprise features in the paid platform",
+          "Alerting is limited"
+        ],
+        "url": "https://arize.com/docs/phoenix"
+      },
+      {
+        "n": "LangSmith online evaluators",
+        "type": "Commercial · LangChain",
+        "start": 3,
+        "prod": 3,
+        "best": "Rules that sample and score production runs automatically.",
+        "ex": "Run a groundedness judge on 5% of runs tagged production.",
+        "pros": [
+          "Configure without code",
+          "Feeds datasets for offline evals"
+        ],
+        "cons": [
+          "Commercial service",
+          "Best inside LangChain"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Braintrust",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Online scoring with the same scorers used in offline experiments.",
+        "ex": "Reuse the offline factuality scorer on live traffic and alert on its weekly trend.",
+        "pros": [
+          "One scorer set for both",
+          "Good experiment views"
+        ],
+        "cons": [
+          "Commercial service",
+          "Data leaves your environment unless self-hosted"
+        ],
+        "url": "https://www.braintrust.dev/docs"
+      },
+      {
+        "n": "Evidently",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Data drift and quality reports and test suites.",
+        "ex": "A daily job compares the intent mix with the last 28 days and fails on large drift.",
+        "pros": [
+          "Many drift statistics",
+          "Runs anywhere in Python"
+        ],
+        "cons": [
+          "Not LLM-trace aware by itself",
+          "You wire up alerts"
+        ],
+        "url": "https://docs.evidentlyai.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want judge scores next to my traces",
+        "tool": "Langfuse evaluators or LangSmith online evaluators"
+      },
+      {
+        "need": "I want input-drift reports",
+        "tool": "Evidently or Arize Phoenix"
+      },
+      {
+        "need": "I want the same scorers offline and online",
+        "tool": "Braintrust or Langfuse"
+      }
+    ],
+    "goals": [
+      "Balance false alerts against detection delay",
+      "See how sample size sets the noise floor",
+      "Keep the judge affordable with sampling"
+    ]
+  },
+  "practice": {
+    "scenario": "An EdTech company’s homework-help agent answers 50,000 questions a day. Every answer gets cheap checks: valid format, a cited source, no personal data. A calibrated LLM judge scores a random 2% sample. When the 6-hour judge pass rate falls 4 points below its baseline with at least 200 judged answers, the on-call engineer is paged.",
+    "industries": [
+      {
+        "industry": "EdTech",
+        "use": "Judge a sample of explanations for correctness; alert when the pass rate drops"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Track resolution, escalation and thumbs-down rates per intent in live windows"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Watch for input drift when a new product line changes the mix of claims"
+      }
+    ],
+    "analogy": "A factory quality inspector. Every item gets a quick visual check; a few from each batch go to the lab.",
+    "library": {
+      "name": "Langfuse",
+      "what": "Open-source LLM observability with traces, scores, datasets and LLM-as-a-judge evaluators that can run on sampled production traces.",
+      "install": "pip install langfuse"
+    },
+    "note": "Scoring in your observability tool keeps scores next to the traces, so an alert links straight to failing examples.",
+    "samples": [
+      {
+        "file": "online_eval.py",
+        "language": "python",
+        "code": "import math, random\nfrom langfuse import get_client\n\nlangfuse = get_client()\nJUDGE_RATE = 0.02\n\ndef on_answer(trace_id: str, question: str, answer: str):\n    langfuse.create_score(trace_id=trace_id, name=\"has_citation\",\n                          value=1.0 if \"[source:\" in answer else 0.0)\n    if random.random() < JUDGE_RATE:                       # judge a random sample\n        verdict = judge(question, answer)                  # your calibrated LLM judge\n        langfuse.create_score(trace_id=trace_id, name=\"judge_pass\",\n                              value=1.0 if verdict else 0.0)\n\ndef psi(expected: dict, actual: dict, eps=1e-6) -> float:\n    \"\"\"Population stability index between two category distributions.\"\"\"\n    return sum((actual.get(k, eps) - e) * math.log(actual.get(k, eps) / e)\n               for k, e in expected.items())\n\ndef should_page(pass_rate, baseline, n, min_n=200, max_drop=0.04):\n    return n >= min_n and baseline - pass_rate > max_drop"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Your agent answers 50,000 questions a day, evenly over 24 hours. A judge scores a random 2% sample. How many judged answers fall in one 6-hour alert window?",
+    "answer": "50,000 ÷ 24 × 6 = 12,500 answers per window; 2% of that is 250 judged answers. With a 92% pass rate the standard error is about √(0.92 × 0.08 ÷ 250) ≈ 1.7 points, so a 4-point threshold is about 2.3 standard errors.",
+    "expected": {
+      "value": 250,
+      "tolerance": 1,
+      "label": "judged answers ="
+    },
+    "interview": [
+      {
+        "question": "How is an online eval different from the offline suite?",
+        "answer": "The offline suite runs fixed test cases before a release; online evals score real traffic after it, continuously. Online evals catch new user behaviour, provider changes and drift the test set never covered, and their failures should be added back to the offline suite."
+      },
+      {
+        "question": "How do you stop drift alerts from becoming noise?",
+        "answer": "Use windows large enough for stable estimates, a minimum sample size, thresholds set from the metric’s normal variation, and alerts per important segment rather than only a global average. Review every alert and retune rules that fire without a real problem."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Alerting on every dip in a 15-minute window",
+        "fix": "Use a window and minimum sample large enough to be stable"
+      },
+      {
+        "mistake": "Running the judge on 100% of traffic",
+        "fix": "Check everything cheaply and judge a random sample"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "oe01",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A homework-help agent answers 40,000 questions a day, evenly spread. A judge scores 1% of them. How many judged answers fall in a 12-hour window?",
+      "options": [
+        "100",
+        "200",
+        "400",
+        "4,800"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40,000 ÷ 24 × 12 = 20,000 answers; 1% is 200."
+    },
+    {
+      "id": "oe02",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "In that setup, each judgement costs ₹0.50. What does judging cost per day?",
+      "options": [
+        "₹20",
+        "₹200",
+        "₹400",
+        "₹2,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1% of 40,000 is 400 judgements × ₹0.50 = ₹200 a day."
+    },
+    {
+      "id": "oe03",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "A window has 400 judged answers with a 90% pass rate. Roughly what is the standard error of the pass rate?",
+      "options": [
+        "0.5 points",
+        "1.5 points",
+        "3 points",
+        "10 points"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "√(0.9 × 0.1 ÷ 400) = √0.000225 = 0.015, or 1.5 points."
+    },
+    {
+      "id": "oe04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Offline evals pass, but claims staff report worse summaries. Which is the most useful next step?",
+      "options": [
+        "Rerun the same offline suite",
+        "Score a sample of live traffic and compare it with the baseline",
+        "Increase the model temperature",
+        "Remove the judge"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The offline suite may not reflect today’s inputs; live scoring shows what users actually get."
+    },
+    {
+      "id": "oe05",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "Which checks are cheap enough to run on every production answer? Select all that apply.",
+      "options": [
+        "Output matches the JSON schema",
+        "A required citation marker is present",
+        "An LLM judge grades helpfulness",
+        "A human reviews the answer"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Deterministic checks cost almost nothing; judges and humans are for samples."
+    },
+    {
+      "id": "oe06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An alert on a 15-minute window fires several times a week with nothing wrong. What is the most likely cause?",
+      "options": [
+        "The judge is too strict",
+        "The window holds too few judgements, so noise crosses the threshold",
+        "The baseline is too low",
+        "The traces are missing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Small samples have large standard errors; widen the window or require a minimum sample."
+    },
+    {
+      "id": "oe07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The intent mix moves from {returns 60%, orders 40%} to {returns 40%, orders 60%}. Using PSI = Σ (actual − expected) × ln(actual ÷ expected), roughly what is the PSI?",
+      "options": [
+        "0.04",
+        "0.16",
+        "0.41",
+        "1.60"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each term is 0.2 × ln(1.5) ≈ 0.081, so PSI ≈ 0.16: a moderate shift."
+    },
+    {
+      "id": "oe08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A common rule of thumb reads PSI above which value as a significant distribution shift?",
+      "options": [
+        "0.01",
+        "0.05",
+        "0.25",
+        "2.5"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Under 0.1 is usually stable, 0.1 to 0.25 moderate, above 0.25 significant."
+    },
+    {
+      "id": "oe09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A health-information agent’s judge is being set up for online scoring. What should be true before its scores drive alerts? Select all that apply.",
+      "options": [
+        "It has been calibrated against human labels",
+        "Its sample is random, not hand-picked",
+        "It scores 100% of traffic",
+        "It uses the same model as the agent"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A calibrated judge on a random sample gives unbiased, trustworthy estimates."
+    },
+    {
+      "id": "oe10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why alert on scores per important segment, such as intent or language, and not only on the global average?",
+      "options": [
+        "Averages are harder to compute",
+        "A failing segment can hide inside a healthy average",
+        "Segments are cheaper to judge",
+        "Global averages are not allowed"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A 20-point drop in a 10% segment moves the average only 2 points."
+    },
+    {
+      "id": "oe11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An online eval confirms that a set of claim types now fails. What should happen to those cases?",
+      "options": [
+        "Delete them from the traces",
+        "Add them to the offline eval suite",
+        "Retrain the judge on them",
+        "Ignore them once the alert clears"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Failing live cases make the offline suite more representative for the next release."
+    },
+    {
+      "id": "oe12",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A brokerage wants faster detection without more false alerts. Which changes help? Select all that apply.",
+      "options": [
+        "Judge a larger sample, so each window is more precise",
+        "Use a window long enough for a stable estimate but short enough to react",
+        "Lower the threshold to 0.5 points",
+        "Alert on every single failed answer"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "More judgements and a well-chosen window reduce noise; tiny thresholds and per-answer alerts increase it."
+    },
+    {
+      "id": "oe13",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "With a 24-hour window and an 8-point threshold, false alerts vanish, but a real 6-point drop takes days to catch. Why?",
+      "options": [
+        "The judge is broken",
+        "The threshold is larger than the drop, so each window rarely crosses it",
+        "Windows cannot be 24 hours",
+        "The sample is too large"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A threshold above the true drop means only noisy windows cross it, so detection is slow."
+    },
+    {
+      "id": "oe14",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "What does an online eval add that user thumbs-down signals alone do not?",
+      "options": [
+        "Nothing; thumbs-down is enough",
+        "A consistent, unbiased quality estimate, since few users click and those who do are not typical",
+        "Lower cost than thumbs-down",
+        "Faster model responses"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Feedback is sparse and self-selected; a sampled judge measures quality systematically."
+    },
+    {
+      "id": "oe15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in an alert rule for online evals? Select all that apply.",
+      "options": [
+        "The metric and the window",
+        "A threshold relative to baseline and a minimum sample size",
+        "The model’s temperature",
+        "The prompt’s word count"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Metric, window, threshold and minimum sample define when a page is justified."
+    },
+    {
+      "id": "oe16",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A logistics agent’s judge pass rate is steady, but PSI on request types jumps to 0.31 after a new customer onboards. What is the best reading?",
+      "options": [
+        "Nothing to act on because scores are fine",
+        "Inputs have shifted significantly; check quality on the new request types before it shows in the average",
+        "The judge is miscalibrated",
+        "The trace exporter is broken"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Drift often precedes a quality drop on the new kinds of request."
+    },
+    {
+      "id": "oe17",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "A support team judges 100% of traffic with an LLM judge. What is the main downside?",
+      "options": [
+        "It becomes less accurate",
+        "The cost scales with all traffic, when a random sample would estimate quality almost as well",
+        "It breaks the traces",
+        "It removes the need for a baseline"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sampling gives nearly the same estimate at a small fraction of the cost."
+    },
+    {
+      "id": "oe18",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which could explain a drop in live quality while offline evals still pass? Select all that apply.",
+      "options": [
+        "Users started asking kinds of questions missing from the test set",
+        "The provider changed the snapshot behind an alias",
+        "The offline suite ran after the change and caught it",
+        "The judge was recalibrated upward"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "New inputs and silent model changes both escape a fixed, earlier offline run."
+    },
+    {
+      "id": "oe19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where should an online-eval page link to, so triage starts fast?",
+      "options": [
+        "The judge’s source code",
+        "The failing traces behind the drop",
+        "The model provider’s homepage",
+        "The last release notes only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Linking to failing examples lets the engineer see what broke immediately."
+    },
+    {
+      "id": "oe20",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which settings reduce judge cost without making the alert blind? Select all that apply.",
+      "options": [
+        "Sample a fixed percentage chosen for enough judgements per window",
+        "Run cheap deterministic checks on everything and the judge only on a sample",
+        "Judge only answers that users already liked",
+        "Stop judging on weekends"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A sized sample plus cheap checks keeps cost low and coverage honest; biased or gapped sampling does not."
+    }
+  ]
+}

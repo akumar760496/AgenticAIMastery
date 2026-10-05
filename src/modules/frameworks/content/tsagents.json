@@ -1,0 +1,810 @@
+{
+  "id": "tsagents",
+  "moduleSlug": "frameworks",
+  "name": "TypeScript Agents: Vercel AI SDK and Mastra",
+  "shortName": "TypeScript agents",
+  "question": "How do I build agents in TypeScript, next to my web app?",
+  "summary": "Many product teams work in TypeScript, and their agents live inside Next.js or Node services. The Vercel AI SDK is the common base: generateText and streamText run the tool loop with a step limit, tools are defined with Zod schemas, streaming UI hooks such as useChat render tokens and tool calls, and one line switches between model providers. Mastra builds on it with agents, workflows that can suspend for a human and resume later from storage, memory, RAG helpers and evals. LangGraph, the OpenAI Agents SDK, the Claude Agent SDK and Google ADK also have TypeScript versions; this tab is for teams who want a TypeScript-first stack.",
+  "useCases": [
+    "Agents embedded in Next.js or Node products",
+    "Streaming chat and generative UI in the browser",
+    "Teams that want to switch model providers freely"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "tool()",
+        "detail": "description, Zod inputSchema and execute"
+      },
+      {
+        "term": "generateText / streamText",
+        "detail": "the tool loop, bounded by stopWhen: stepCountIs(n)"
+      },
+      {
+        "term": "Providers",
+        "detail": "@ai-sdk/anthropic, openai, google and others behind one API"
+      },
+      {
+        "term": "useChat",
+        "detail": "React hook that streams messages and tool calls"
+      },
+      {
+        "term": "Mastra workflows",
+        "detail": "steps that suspend for approval and resume from storage"
+      },
+      {
+        "term": "Mastra memory and evals",
+        "detail": "conversation memory, RAG helpers and scorers"
+      }
+    ]
+  },
+  "steps": [
+    "Define tools with Zod schemas and clear descriptions",
+    "Run generateText or streamText with a step limit",
+    "Stream to the UI with useChat, or run in a Node worker",
+    "Move multi-day approvals into a Mastra workflow with suspend and resume"
+  ],
+  "pitfalls": [
+    "Running long agent loops inside a serverless request with a short timeout",
+    "Blocking a request for a human approval that may take hours",
+    "Trusting Zod validation as proof the arguments are correct"
+  ],
+  "tools": [
+    "Vercel AI SDK (ai)",
+    "@ai-sdk provider packages",
+    "Mastra",
+    "AI SDK UI (useChat)",
+    "LangGraph.js, OpenAI Agents JS"
+  ],
+  "remember": "Zod-typed tools, a step limit, stream to the UI; Mastra when runs must pause.",
+  "caption": "TypeScript only.",
+  "comparison": {
+    "scope": "Agents inside TypeScript web products",
+    "cost": 1,
+    "needs": "TypeScript",
+    "best": "Long runs inside short request timeouts"
+  },
+  "diagram": {
+    "file": "diagrams/tsagents.svg"
+  },
+  "lesson": {
+    "file": "upiAgent.ts",
+    "language": "typescript",
+    "code": [
+      {
+        "text": "import { generateText, tool, stepCountIs } from \"ai\";",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "import { anthropic } from \"@ai-sdk/anthropic\";",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "import { z } from \"zod\";",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "const getTransaction = tool({",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "  description: \"Look up a UPI transaction by its 12-digit UTR\",",
+        "steps": []
+      },
+      {
+        "text": "  inputSchema: z.object({ utr: z.string().regex(/^\\d{12}$/) }),",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "  execute: async ({ utr }) => bank.transactions.get(utr),",
+        "steps": []
+      },
+      {
+        "text": "});",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "const raiseDispute = tool({",
+        "steps": []
+      },
+      {
+        "text": "  description: \"Raise a dispute for a failed UPI payment\",",
+        "steps": []
+      },
+      {
+        "text": "  inputSchema: z.object({ utr: z.string(), reason: z.string() }),",
+        "steps": []
+      },
+      {
+        "text": "  execute: async (args) =>",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    (await approvals.request(args)) ? disputes.create(args) : \"Rejected by reviewer.\",",
+        "steps": []
+      },
+      {
+        "text": "});",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "const { text, steps } = await generateText({",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "  model: anthropic(\"claude-sonnet-4-5\"),",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "  system: SYSTEM, prompt: QUESTION,",
+        "steps": []
+      },
+      {
+        "text": "  tools: { getTransaction, raiseDispute },",
+        "steps": []
+      },
+      {
+        "text": "  stopWhen: stepCountIs(8),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "});",
+        "steps": []
+      },
+      {
+        "text": "console.log(text, steps.length);       // streamText + useChat for the UI",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "One package for the loop",
+        "text": "The ai package runs the model, the tools and the loop. Provider packages plug in underneath."
+      },
+      {
+        "title": "Tools with Zod schemas",
+        "text": "Each tool has a description, a Zod input schema and an execute function. The schema becomes the JSON schema the model sees, and arguments are validated before execute runs."
+      },
+      {
+        "title": "A bounded loop",
+        "text": "generateText keeps calling tools until the model answers or stopWhen ends it: here at 8 steps."
+      },
+      {
+        "title": "Gate the risky tool",
+        "text": "This approval blocks the call. For approvals that take hours, a Mastra workflow suspends the run, stores its state and resumes when the reviewer answers."
+      },
+      {
+        "title": "Switch providers in one line",
+        "text": "Swap anthropic() for openai() or google(); the tools and loop stay the same."
+      },
+      {
+        "title": "Stream it to users",
+        "text": "In a Next.js route, streamText plus the useChat hook shows tokens and tool calls as they happen. About 24 lines for the same agent."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">import { generateText, tool } from \"ai\"</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"36\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"51\" text-anchor=\"middle\">inputSchema: z.object</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"36\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"51\" text-anchor=\"middle\">execute()</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"66\" width=\"344\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"81\">generateText</text><text class=\"sb\" x=\"180\" y=\"96\">stopWhen: stepCountIs(8)</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">long approval → Mastra workflow suspend/resume</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"140\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"155\" text-anchor=\"middle\">anthropic()</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"140\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"155\" text-anchor=\"middle\">openai()</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"140\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"155\" text-anchor=\"middle\">google()</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"183\" style=\"text-anchor:end;--d:0s\">lines</text><rect x=\"118\" y=\"173\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"173\" width=\"116.12903225806451\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"183\" style=\"text-anchor:start;--d:0.2s\">24</text><text class=\"sb a\" x=\"8\" y=\"210\" style=\"text-anchor:start;--d:0.2s\">streamText + useChat for a live UI</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Agents live in the same TypeScript codebase as the product",
+      "Zod gives typed, validated tool inputs and outputs",
+      "Streaming UI hooks out of the box",
+      "Provider switching in one line"
+    ],
+    "cons": [
+      "Serverless timeouts limit long runs",
+      "Durable workflows need Mastra or another engine",
+      "Smaller agent ecosystem than Python for ML tooling",
+      "Fast-moving APIs between major versions"
+    ],
+    "avoidWhen": [
+      "Python-heavy data and ML teams",
+      "Long batch agents with no web front end"
+    ],
+    "tools": [
+      {
+        "name": "Vercel AI SDK",
+        "type": "Open source · Vercel",
+        "what": "generateText, streamText, tools, UI hooks, many providers",
+        "url": "https://ai-sdk.dev/docs"
+      },
+      {
+        "name": "Mastra",
+        "type": "Open source",
+        "what": "Agents, workflows with suspend/resume, memory, RAG and evals in TypeScript",
+        "url": "https://mastra.ai/docs"
+      },
+      {
+        "name": "LangGraph.js",
+        "type": "Open source · LangChain",
+        "what": "Durable graphs with checkpointers in TypeScript",
+        "url": "https://langchain-ai.github.io/langgraphjs/"
+      },
+      {
+        "name": "OpenAI Agents SDK (JS)",
+        "type": "Open source · OpenAI",
+        "what": "Handoffs, guardrails and tracing in TypeScript",
+        "url": "https://openai.github.io/openai-agents-js/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kosha Pay, a fictional UPI app with a TypeScript web team, is choosing how to build its dispute agent. Set the team’s needs and constraints and see where a TypeScript-first stack (Vercel AI SDK with Mastra) ranks.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "TypeScript, committed to Claude",
+        "expect": "Top pick: Claude Agent SDK. TypeScript stack ranks 2."
+      },
+      {
+        "k": "web",
+        "name": "TypeScript web app, typed and fast",
+        "expect": "Top pick: Vercel AI SDK / Mastra."
+      },
+      {
+        "k": "tsdurable",
+        "name": "TypeScript, long durable cases",
+        "expect": "Top pick: LangGraph. TypeScript stack ranks 2."
+      },
+      {
+        "k": "python",
+        "name": "Python team",
+        "expect": "Top pick: Pydantic AI. TypeScript stack is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make the TypeScript stack the top pick.",
+        "hint": "It needs TypeScript, and shines on typed tools and fast prototypes."
+      },
+      {
+        "k": "any",
+        "text": "Make it top while you must switch providers and typed outputs are essential.",
+        "hint": "Provider switching is one line."
+      },
+      {
+        "k": "out",
+        "text": "Get it ruled out.",
+        "hint": "Pick another language."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Vercel AI SDK",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Typed tools, streaming, many providers.",
+        "ex": "The dispute agent in a Next.js route.",
+        "pros": [
+          "Light",
+          "Streaming UI hooks"
+        ],
+        "cons": [
+          "Durability needs more"
+        ],
+        "url": "https://ai-sdk.dev/docs"
+      },
+      {
+        "n": "Mastra",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Agents, workflows, memory, evals in TypeScript.",
+        "ex": "Suspend a dispute for approval, resume later.",
+        "pros": [
+          "Suspend/resume",
+          "Batteries included"
+        ],
+        "cons": [
+          "Young, fast-moving"
+        ],
+        "url": "https://mastra.ai/docs"
+      },
+      {
+        "n": "LangGraph.js",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Durable graphs in TypeScript.",
+        "ex": "Multi-day cases with checkpoints.",
+        "pros": [
+          "Checkpointers",
+          "Replay"
+        ],
+        "cons": [
+          "More concepts"
+        ],
+        "url": "https://langchain-ai.github.io/langgraphjs/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Agent inside a Next.js app",
+        "tool": "Vercel AI SDK"
+      },
+      {
+        "need": "Runs that pause for approval",
+        "tool": "Mastra workflows"
+      },
+      {
+        "need": "Heavy durable graphs",
+        "tool": "LangGraph.js"
+      }
+    ],
+    "goals": [
+      "Build a typed tool loop in TypeScript",
+      "Stream agent output to a web UI",
+      "Know when to add Mastra workflows"
+    ]
+  },
+  "practice": {
+    "scenario": "Kosha Pay, a fictional UPI app, has a Next.js web team and no Python service. It builds the dispute agent with the Vercel AI SDK: two Zod-typed tools, generateText with an 8-step limit, and streamText with useChat so customers see progress live. Disputes needing a reviewer for hours move into a Mastra workflow that suspends, stores its state and resumes on approval. Switching model providers for a cost test took one line.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Dispute and refund helpers inside the web app"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Order-status agents in a Next.js storefront"
+      },
+      {
+        "industry": "SaaS",
+        "use": "In-product copilots with streaming UI"
+      }
+    ],
+    "analogy": "Adding a smart assistant to the shop counter you already run, instead of opening a second shop next door in a different language.",
+    "library": {
+      "name": "Vercel AI SDK",
+      "what": "The ai package plus provider packages; tools with Zod schemas and a bounded loop.",
+      "install": "npm install ai @ai-sdk/anthropic zod"
+    },
+    "note": "APIs shown are AI SDK v5 style; check the docs for your version. bank, approvals and disputes stand for your own services.",
+    "samples": [
+      {
+        "file": "route.ts",
+        "language": "typescript",
+        "code": "import { streamText, tool, stepCountIs } from \"ai\";\nimport { anthropic } from \"@ai-sdk/anthropic\";\nimport { z } from \"zod\";\n\nexport async function POST(req: Request) {\n  const { messages } = await req.json();\n  const result = streamText({\n    model: anthropic(\"claude-sonnet-4-5\"),\n    system: \"You help customers with failed UPI payments.\",\n    messages,\n    tools: {\n      getTransaction: tool({\n        description: \"Look up a UPI transaction by UTR\",\n        inputSchema: z.object({ utr: z.string().regex(/^\\d{12}$/) }),\n        execute: async ({ utr }) => ({ utr, status: \"debited_not_credited\", amount: 2450 }),\n      }),\n    },\n    stopWhen: stepCountIs(8),\n  });\n  return result.toUIMessageStreamResponse();\n}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent route uses stopWhen: stepCountIs(8) and each step averages 1.2 s. What is the worst-case time in seconds before the step limit stops it?",
+    "answer": "8 × 1.2 = 9.6 s, close to common serverless limits; long cases belong in a workflow that can suspend.",
+    "expected": {
+      "value": 9.6,
+      "tolerance": 0.1,
+      "label": "seconds ="
+    },
+    "interview": [
+      {
+        "question": "How would you build an agent inside a Next.js product?",
+        "answer": "Use the Vercel AI SDK: tools with Zod schemas, streamText with a step limit in a route handler, and useChat in the UI. Move approvals that take hours into a Mastra or LangGraph.js workflow that suspends and resumes."
+      },
+      {
+        "question": "Why not block a request waiting for a human?",
+        "answer": "Serverless requests time out and hold resources; suspend the run, store state and resume when the reviewer answers."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Long loops inside a short serverless request",
+        "fix": "Bound the steps, or run in a worker or workflow"
+      },
+      {
+        "mistake": "Blocking on human approval",
+        "fix": "Suspend and resume from storage"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tx01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What defines a tool’s inputs in the Vercel AI SDK?",
+      "options": [
+        "A Zod schema",
+        "A YAML file",
+        "A SQL table",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "inputSchema."
+    },
+    {
+      "id": "tx02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What bounds the tool loop?",
+      "options": [
+        "stopWhen: stepCountIs(n)",
+        "temperature",
+        "maxTokens only",
+        "A cron job"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Step limit."
+    },
+    {
+      "id": "tx03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which hook streams chat in React?",
+      "options": [
+        "useChat",
+        "useEffect",
+        "useMemo",
+        "useRef"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "AI SDK UI."
+    },
+    {
+      "id": "tx04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How do you switch model providers?",
+      "options": [
+        "Change the model line",
+        "Rewrite every tool",
+        "Change databases",
+        "Impossible"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Provider packages."
+    },
+    {
+      "id": "tx05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An approval may take hours. Best place?",
+      "options": [
+        "A workflow that suspends and resumes",
+        "Block the HTTP request",
+        "A while loop",
+        "Skip approval"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Mastra workflows."
+    },
+    {
+      "id": "tx06",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "What does Mastra add on top of the AI SDK? Select all that apply.",
+      "options": [
+        "Workflows with suspend/resume",
+        "Memory",
+        "Evals",
+        "A GPU"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Batteries included."
+    },
+    {
+      "id": "tx07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "8 steps × 1.2 s is?",
+      "options": [
+        "9.6 s",
+        "8 s",
+        "1.2 s",
+        "96 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Worst case."
+    },
+    {
+      "id": "tx08",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Zod validation proves arguments are?",
+      "options": [
+        "Well-formed, not necessarily correct",
+        "Always correct",
+        "Encrypted",
+        "Signed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Still check business rules."
+    },
+    {
+      "id": "tx09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which frameworks also have TypeScript versions?",
+      "options": [
+        "LangGraph, OpenAI Agents SDK",
+        "Only Pydantic AI",
+        "None",
+        "CrewAI only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Several do."
+    },
+    {
+      "id": "tx10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A Python-only data team should probably?",
+      "options": [
+        "Pick a Python framework",
+        "Rewrite in TypeScript",
+        "Avoid agents",
+        "Use Excel"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Language fit."
+    },
+    {
+      "id": "tx11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "streamText returns?",
+      "options": [
+        "A stream of tokens and tool events",
+        "A PDF",
+        "A database row",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "For live UI."
+    },
+    {
+      "id": "tx12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A serverless function times out at 10 s. Risk for agents?",
+      "options": [
+        "Long loops get cut off",
+        "None",
+        "Faster runs",
+        "More memory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Bound or move to workers."
+    },
+    {
+      "id": "tx13",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Good uses of a TypeScript agent stack? Select all that apply.",
+      "options": [
+        "Agents inside Next.js apps",
+        "Streaming chat UIs",
+        "Provider switching",
+        "Training models"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Not training."
+    },
+    {
+      "id": "tx14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Lines for the same dispute agent here?",
+      "options": [
+        "About 24",
+        "About 240",
+        "About 4",
+        "About 2,400"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Compact."
+    },
+    {
+      "id": "tx15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Where is state kept when a Mastra workflow suspends?",
+      "options": [
+        "In configured storage",
+        "In the browser tab",
+        "Nowhere",
+        "In the prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Resumable."
+    },
+    {
+      "id": "tx16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which package holds the Anthropic provider?",
+      "options": [
+        "@ai-sdk/anthropic",
+        "zod",
+        "react",
+        "next"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Provider package."
+    },
+    {
+      "id": "tx17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Top risk of this stack?",
+      "options": [
+        "Long runs inside short request timeouts",
+        "Too slow to prototype",
+        "No TypeScript",
+        "No streaming"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Plan durability."
+    },
+    {
+      "id": "tx18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What does execute do in a tool?",
+      "options": [
+        "Runs your code with validated arguments",
+        "Trains the model",
+        "Streams UI",
+        "Signs requests"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Your function."
+    },
+    {
+      "id": "tx19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Step limit 5 at 2 s per step: worst case?",
+      "options": [
+        "10 s",
+        "7 s",
+        "2.5 s",
+        "25 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "5 × 2."
+    },
+    {
+      "id": "tx20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Should approvals block a web request for hours?",
+      "options": [
+        "No, suspend and resume",
+        "Yes",
+        "Only on Fridays",
+        "Only in production"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Use workflows."
+    }
+  ]
+}

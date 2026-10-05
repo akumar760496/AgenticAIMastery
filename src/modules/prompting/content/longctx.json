@@ -1,0 +1,839 @@
+{
+  "id": "longctx",
+  "moduleSlug": "prompting",
+  "name": "Long-Context Prompting",
+  "shortName": "Long context",
+  "question": "How do I get reliable answers from a very long prompt?",
+  "summary": "How to prompt when the input is hundreds of pages: documents first, each wrapped in tags with its source, the question and instructions last, and a request to quote the relevant passages before answering. Long prompts are slow and expensive, so the shared prefix is cached, and retrieval is still the better choice when questions need only a few passages. Models also attend less reliably to the middle of very long inputs, so test on real multi-hop questions, not just needle-in-a-haystack checks.",
+  "useCases": [
+    "Questions that span many parts of one long file: a loan bundle, a contract set, an annual report",
+    "Analysts asking many questions over the same documents",
+    "Multi-hop questions that retrieval of a few chunks tends to miss"
+  ],
+  "keyFacts": {
+    "label": "What to get right",
+    "items": [
+      {
+        "term": "Documents first",
+        "detail": "long inputs at the top, the question at the end"
+      },
+      {
+        "term": "Tagged documents",
+        "detail": "each document in tags with source, date and page range"
+      },
+      {
+        "term": "Quote first",
+        "detail": "ask for the relevant quotes, then the answer from them"
+      },
+      {
+        "term": "Prompt caching",
+        "detail": "cache the shared prefix so later questions cost a fraction"
+      },
+      {
+        "term": "Lost in the middle",
+        "detail": "facts buried mid-context are found less reliably"
+      },
+      {
+        "term": "Stuff or retrieve",
+        "detail": "compare accuracy and cost against retrieving the top chunks"
+      }
+    ]
+  },
+  "steps": [
+    "Put long documents at the top, each in tags with its source and pages",
+    "Put the question and instructions at the end",
+    "Ask for the relevant quotes first, then an answer based only on them",
+    "Cache the document prefix, and compare with retrieval on your own multi-hop questions"
+  ],
+  "pitfalls": [
+    "Question at the top of 2,00,000 tokens of documents",
+    "Paying full input price for the same documents on every question",
+    "Trusting a needle-in-a-haystack score as proof of multi-hop reasoning"
+  ],
+  "tools": [
+    "Anthropic prompt caching",
+    "OpenAI prompt caching",
+    "Gemini context caching",
+    "LangChain / LlamaIndex document loaders"
+  ],
+  "remember": "Documents first, question last, quotes before answers.",
+  "caption": "Illustrative: Kosh Finance, a fictional NBFC, asks 50 questions over a 400-page loan bundle.",
+  "comparison": {
+    "scope": "Prompt layout for long inputs",
+    "cost": 3,
+    "needs": "Long documents, many questions",
+    "best": "Cost and latency per call"
+  },
+  "diagram": {
+    "file": "diagrams/longctx.svg"
+  },
+  "lesson": {
+    "file": "long_context_qa.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "docs = \"\\n\".join(",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    f'<document index=\"{i}\" source=\"{d.name}\" pages=\"{d.pages}\">\\n{d.text}\\n</document>'",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    for i, d in enumerate(bundle, start=1))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(question):",
+        "steps": []
+      },
+      {
+        "text": "    msg = client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=\"claude-sonnet-5\", max_tokens=1500,",
+        "steps": []
+      },
+      {
+        "text": "        system=[{\"type\": \"text\", \"text\": \"You answer questions about a loan file.\"}],",
+        "steps": []
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\": [",
+        "steps": []
+      },
+      {
+        "text": "            {\"type\": \"text\", \"text\": f\"<documents>\\n{docs}\\n</documents>\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "             \"cache_control\": {\"type\": \"ephemeral\"}},",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            {\"type\": \"text\", \"text\":",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "             \"First copy the clauses that matter into <quotes>, with document \"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "             \"index and page. Then answer in <answer> using only those quotes. \"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "             \"If they do not settle it, say so.\\n\\n\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "             f\"Question: {question}\"}]}])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return msg",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "out = ask(\"Which prepayment charge applies after the 2025 addendum?\")",
+        "steps": []
+      },
+      {
+        "text": "print(out.usage.cache_read_input_tokens, out.usage.input_tokens)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "check_quotes_exist(out, bundle)          # every quote must be found verbatim",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "compare_on_eval(ask, retrieve_then_ask, eval_questions)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Put the documents first, tagged",
+        "text": "Each document goes in its own tags with its source file and page range, all above the question. The model can then say where a fact came from."
+      },
+      {
+        "title": "Ask the question last",
+        "text": "A question placed after the documents is answered noticeably better than one placed before 2,50,000 tokens of text."
+      },
+      {
+        "title": "Quote before answering",
+        "text": "The model first copies the clauses that matter into quotes, then answers from them alone. It cuts through the noise and leaves evidence you can check."
+      },
+      {
+        "title": "Cache the document prefix",
+        "text": "Marking the documents for caching means the next 49 questions read them from cache at about a tenth of the input price, and much faster."
+      },
+      {
+        "title": "Check the quotes exist",
+        "text": "Code confirms each quote appears in the cited document. A quote that cannot be found flags an invented clause."
+      },
+      {
+        "title": "Compare with retrieval",
+        "text": "On your own questions, measure stuffing against retrieving the top chunks. Here stuffing wins on multi-hop questions; retrieval is cheaper for single facts."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"23\" text-anchor=\"middle\"><document index=1 source=agreement.pdf pages=1-120></text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"8\" y=\"34\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"49\" text-anchor=\"middle\"><document index=3 source=addendum_2025.pdf></text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"64\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"80\" text-anchor=\"middle\">Question: which prepayment charge applies now?</text></g><text class=\"tl l a\" x=\"8\" y=\"104\" style=\"--d:0.2s\">question last: +8 points on this set</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"112\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"128\" text-anchor=\"middle\"><quotes> doc 1 p.44 §7.2 … doc 3 p.2 §1 …</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"8\" y=\"140\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"156\" text-anchor=\"middle\"><answer> 2% on the outstanding principal …</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"172\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"188\" text-anchor=\"middle\">first call ₹62.5</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"172\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"188\" text-anchor=\"middle\">next calls ≈ ₹6.3</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"202\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"217\" text-anchor=\"middle\">every quote found verbatim ✓</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"232\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"248\" text-anchor=\"middle\">stuff + quotes 89% · retrieve top 20: 76%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Handles questions that span many distant parts of a file",
+      "Quotes make answers checkable",
+      "Caching makes repeated questions over the same documents cheap",
+      "No chunking or index to build for a one-off analysis"
+    ],
+    "cons": [
+      "The first call is slow and expensive",
+      "Recall of facts buried mid-context is less reliable",
+      "Context limits cap how much fits",
+      "Every question pays for all the text unless cached"
+    ],
+    "avoidWhen": [
+      "Most questions need one or two passages from a large, changing corpus (use retrieval)",
+      "A single short answer per document set, where caching cannot pay off"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic prompt caching",
+        "type": "API feature (Anthropic)",
+        "what": "Cache a long prefix and read it back at a fraction of the price",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching"
+      },
+      {
+        "name": "Anthropic long-context tips",
+        "type": "Documentation (Anthropic)",
+        "what": "Documents at the top, XML tags, quotes before answers",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips"
+      },
+      {
+        "name": "OpenAI prompt caching",
+        "type": "API feature (OpenAI)",
+        "what": "Automatic caching of repeated prompt prefixes",
+        "url": "https://platform.openai.com/docs/guides/prompt-caching"
+      },
+      {
+        "name": "Gemini context caching",
+        "type": "API feature (Google)",
+        "what": "Explicit caches for large, reused contexts",
+        "url": "https://ai.google.dev/gemini-api/docs/caching"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Kosh Finance, a fictional NBFC, asks 50 questions over a 400-page loan bundle of about 2,50,000 tokens: 30 single facts and 20 multi-hop questions that need clauses from two or more documents. Input costs about ₹0.25 per 1,000 tokens, and cached reads cost a tenth.",
+    "controls": [
+      "Choose the approach: the whole bundle, the top 20 retrieved chunks, or the whole bundle with quotes first.",
+      "Choose whether the question goes before or after the documents.",
+      "Switch on prompt caching and document tags."
+    ],
+    "outputs": [
+      {
+        "name": "Accuracy",
+        "meaning": "Correct answers out of 50, split into single facts and multi-hop questions."
+      },
+      {
+        "name": "Cost per question",
+        "meaning": "Averaged over the 50 questions, with caching if it is on."
+      },
+      {
+        "name": "Time to answer",
+        "meaning": "Seconds per question."
+      },
+      {
+        "name": "Right clause cited",
+        "meaning": "Share of correct answers that name the right document and page."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Whole bundle, no cache",
+        "expect": "About 80% accurate at ₹62.5 a question and 20 s; 60% cite the right clause."
+      },
+      {
+        "k": "retrieve",
+        "name": "Top 20 chunks",
+        "expect": "About 76%: single facts 90%, multi-hop 56%; ₹2.5 and 3 s."
+      },
+      {
+        "k": "quote",
+        "name": "Quotes first, cached, tagged",
+        "expect": "About 89%: multi-hop 85%; ₹8.4 and 8 s; 90% cite the right clause."
+      },
+      {
+        "k": "cached",
+        "name": "Whole bundle, cached",
+        "expect": "About 80% as before, but ₹7.4 and 6 s."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach 88% accuracy for ₹10 or less a question, with 85% of answers citing the right clause.",
+        "hint": "Quotes first, a cached prefix and tagged documents."
+      },
+      {
+        "k": "order",
+        "text": "Show what happens when the question sits above 2,50,000 tokens of documents.",
+        "hint": "Put the question before the documents with the whole bundle in the prompt."
+      },
+      {
+        "k": "multi",
+        "text": "Show why retrieving a few chunks struggles with multi-hop questions.",
+        "hint": "Choose retrieval of the top 20 chunks."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic prompt caching",
+        "type": "API feature · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Caching a long document prefix across many questions.",
+        "ex": "cache_control on the documents block; later questions read it from cache.",
+        "pros": [
+          "Large saving on repeated prefixes",
+          "Faster time to first token"
+        ],
+        "cons": [
+          "Cache lifetime is limited",
+          "The prefix must be identical"
+        ],
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching"
+      },
+      {
+        "n": "OpenAI prompt caching",
+        "type": "API feature · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Automatic discounts on repeated prompt prefixes.",
+        "ex": "Keep the documents at the start of every request so the prefix matches.",
+        "pros": [
+          "No code change",
+          "Works on long prompts automatically"
+        ],
+        "cons": [
+          "Less control over what is cached"
+        ],
+        "url": "https://platform.openai.com/docs/guides/prompt-caching"
+      },
+      {
+        "n": "Gemini context caching",
+        "type": "API feature · Google",
+        "start": 2,
+        "prod": 3,
+        "best": "Explicit caches for very large, reused contexts.",
+        "ex": "Create a cache for the loan bundle and reference it in each question.",
+        "pros": [
+          "Very long contexts",
+          "Explicit lifetime control"
+        ],
+        "cons": [
+          "Storage charged by time"
+        ],
+        "url": "https://ai.google.dev/gemini-api/docs/caching"
+      },
+      {
+        "n": "LlamaIndex",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Loading documents with metadata, and comparing long-context against retrieval.",
+        "ex": "Load PDFs with page metadata, then run both pipelines on the same questions.",
+        "pros": [
+          "Many loaders",
+          "Easy side-by-side comparison"
+        ],
+        "cons": [
+          "Another framework to learn"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Many questions over one file",
+        "tool": "Long context with a cached prefix"
+      },
+      {
+        "need": "Large, changing corpus",
+        "tool": "Retrieval"
+      },
+      {
+        "need": "Answers must be checkable",
+        "tool": "Quotes before the answer"
+      }
+    ],
+    "goals": [
+      "Lay out a long prompt: documents first, question last",
+      "Use quotes and caching to improve accuracy and cost",
+      "Decide between stuffing and retrieval with your own questions"
+    ]
+  },
+  "practice": {
+    "scenario": "Kosh Finance, a fictional NBFC, lets credit analysts ask questions over a 400-page loan bundle: the agreement, sanction letters and a 2025 addendum. The documents go first in the prompt, each in tags with its source and pages; the question goes last; the model quotes the clauses it relies on before answering. The document prefix is cached, so after the first question each one costs about a tenth.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Questions across agreements, sanction letters and addenda for one borrower"
+      },
+      {
+        "industry": "Legal",
+        "use": "Clause lookups across a contract and its amendments"
+      },
+      {
+        "industry": "Equity research",
+        "use": "Questions over an annual report, earnings call transcripts and filings"
+      }
+    ],
+    "analogy": "Handing a reviewer the whole file with the question clipped to the last page, and asking them to flag the paragraphs before giving an opinion.",
+    "library": {
+      "name": "Anthropic Python SDK",
+      "what": "Messages API with prompt caching via cache_control on a content block; usage shows cached and uncached input tokens.",
+      "install": "pip install anthropic"
+    },
+    "note": "load_bundle is a stub. Check current model names, context limits and caching prices in the provider documentation.",
+    "samples": [
+      {
+        "file": "ask_bundle.py",
+        "language": "python",
+        "code": "import anthropic\n\nclient = anthropic.Anthropic()\nbundle = load_bundle(\"loan_UL-5521\")      # list of (name, pages, text)\n\ndocs = \"\\n\".join(f'<document index=\"{i}\" source=\"{n}\" pages=\"{p}\">\\n{t}\\n</document>'\n                 for i, (n, p, t) in enumerate(bundle, start=1))\n\ndef ask(question: str) -> str:\n    msg = client.messages.create(\n        model=\"claude-sonnet-5\", max_tokens=1500,\n        messages=[{\"role\": \"user\", \"content\": [\n            {\"type\": \"text\", \"text\": f\"<documents>\\n{docs}\\n</documents>\",\n             \"cache_control\": {\"type\": \"ephemeral\"}},\n            {\"type\": \"text\", \"text\": \"Quote the relevant clauses in <quotes> with document index \"\n             \"and page, then answer in <answer> using only those quotes.\\n\\n\"\n             f\"Question: {question}\"}]}])\n    print(\"cached:\", msg.usage.cache_read_input_tokens, \"new:\", msg.usage.input_tokens)\n    return msg.content[0].text\n\nprint(ask(\"Which prepayment charge applies after the 2025 addendum?\"))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A 2,50,000-token bundle costs ₹0.25 per 1,000 input tokens, and cached reads cost a tenth. Over 50 questions with caching (the first question pays in full), what is the average input cost per question in rupees?",
+    "answer": "First question ₹62.5; the other 49 pay ₹6.25 each = ₹306.25. Total ₹368.75 ÷ 50 = ₹7.375 a question, against ₹62.5 without caching.",
+    "expected": {
+      "value": 7.375,
+      "tolerance": 0.1,
+      "label": "₹ per question ="
+    },
+    "interview": [
+      {
+        "question": "How would you prompt a model over a 300-page contract?",
+        "answer": "Put the contract first, split into tagged documents with source and page ranges, and the question last. Ask for the relevant quotes before the answer, and verify the quotes exist. Cache the prefix if several questions will be asked, and compare with retrieval on real multi-hop questions."
+      },
+      {
+        "question": "When is retrieval better than a long context?",
+        "answer": "When questions need a few passages from a large or changing corpus, when cost and latency per call matter, or when the documents exceed the context window. Long context wins when questions span many parts of one file and many questions share it."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Putting the question above the documents",
+        "fix": "Place documents first and the question at the end"
+      },
+      {
+        "mistake": "Re-sending the same documents at full price",
+        "fix": "Cache the shared prefix"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "lx01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Where should the question go in a prompt with 2,00,000 tokens of documents?",
+      "options": [
+        "Before the documents",
+        "After the documents",
+        "In the system prompt only",
+        "Repeated in every document"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Long-context questions are answered better when they follow the documents."
+    },
+    {
+      "id": "lx02",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why ask the model to quote clauses before answering?",
+      "options": [
+        "To make the answer longer",
+        "The answer rests on checkable evidence and the model focuses on what matters",
+        "Quotes are required by the API",
+        "To reduce input tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Quoting first focuses attention and gives you evidence to verify."
+    },
+    {
+      "id": "lx03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A 2,50,000-token prefix costs ₹62.5 per question. Cached reads cost a tenth. What do 10 questions cost with caching (first pays in full)?",
+      "options": [
+        "₹118.75",
+        "₹625",
+        "₹62.5",
+        "₹68.75"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "₹62.5 + 9 × ₹6.25 = ₹118.75."
+    },
+    {
+      "id": "lx04",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which help a model use a long policy bundle well? Select all that apply.",
+      "options": [
+        "Each document in tags with source and pages",
+        "The question at the end",
+        "Asking for relevant quotes first",
+        "Removing all headings from the documents"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Headings help the model navigate; removing them hurts."
+    },
+    {
+      "id": "lx05",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does \"lost in the middle\" describe?",
+      "options": [
+        "Documents lost during upload",
+        "Facts in the middle of a long context used less reliably than those at the ends",
+        "Tokens dropped by the tokenizer",
+        "A retrieval failure"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Position within a long context affects how reliably information is used."
+    },
+    {
+      "id": "lx06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A needle-in-a-haystack test scores 99%. What does it not prove?",
+      "options": [
+        "That the model can read long inputs",
+        "That it can combine several distant facts to answer multi-hop questions",
+        "That the context window is large",
+        "That caching works"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Finding one planted sentence differs from reasoning across many passages."
+    },
+    {
+      "id": "lx07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "When is retrieval usually better than putting everything in the prompt?",
+      "options": [
+        "A few passages answer each question from a large, changing corpus",
+        "Every question spans the whole file",
+        "There are many questions on one file",
+        "The file is 20 pages"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Retrieval is cheaper and faster when only a few passages matter."
+    },
+    {
+      "id": "lx08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Prompt caching needs what to be true of the prefix?",
+      "options": [
+        "It must be identical across calls",
+        "It must be under 1,000 tokens",
+        "It must be at the end",
+        "It must contain the question"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Caching matches an identical prefix; a question placed first breaks it."
+    },
+    {
+      "id": "lx09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Quotes in an answer do not appear in the source. What should the system do?",
+      "options": [
+        "Accept them",
+        "Flag the answer as unreliable",
+        "Shorten the answer",
+        "Retry with a higher temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A quote that cannot be found indicates an invented clause."
+    },
+    {
+      "id": "lx10",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which are costs of very long prompts? Select all that apply.",
+      "options": [
+        "Higher input cost per call",
+        "Slower time to first token",
+        "Less reliable use of facts mid-context",
+        "Automatic citations"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Citations are not automatic; they must be asked for."
+    },
+    {
+      "id": "lx11",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "An analyst asks 30 questions about one annual report. What cuts cost the most?",
+      "options": [
+        "A longer system prompt",
+        "Caching the report prefix",
+        "Asking questions in Hindi",
+        "Removing tables"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Repeated questions over the same prefix benefit most from caching."
+    },
+    {
+      "id": "lx12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Retrieval gets 90% of single-fact questions but 56% of multi-hop ones. What explains the gap?",
+      "options": [
+        "Multi-hop answers need passages that often miss the top-k",
+        "Retrieval cannot read numbers",
+        "The embedding model is too large",
+        "Multi-hop questions are longer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Several distant passages rarely all make a small top-k."
+    },
+    {
+      "id": "lx13",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What should each document tag include?",
+      "options": [
+        "Only the text",
+        "Source name and page range, so answers can cite them",
+        "The user id",
+        "The model name"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Metadata lets answers point to where a fact came from."
+    },
+    {
+      "id": "lx14",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A 600-page notification set exceeds the context window. What now?",
+      "options": [
+        "Truncate from the end",
+        "Retrieve relevant sections, or split into parts and combine answers",
+        "Lower the temperature",
+        "Ask a shorter question"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Beyond the window, retrieval or map-reduce is required."
+    },
+    {
+      "id": "lx15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Accuracy rises from 80% to 89% after quoting first. On 50 questions, how many more are right?",
+      "options": [
+        "About 4 or 5",
+        "9",
+        "45",
+        "1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "9 points of 50 questions is 4.5 more correct answers."
+    },
+    {
+      "id": "lx16",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which belong in an evaluation of long-context prompting? Select all that apply.",
+      "options": [
+        "Multi-hop questions from your own documents",
+        "Checks that quotes exist in the source",
+        "Cost and latency per question",
+        "Only needle-in-a-haystack tests"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Synthetic needle tests alone miss real failure modes."
+    },
+    {
+      "id": "lx17",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Where should instructions like \"answer only from the quotes\" go?",
+      "options": [
+        "At the very top, before the documents",
+        "After the documents, next to the question",
+        "Inside each document",
+        "Nowhere"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Instructions near the question, after the documents, are followed more reliably."
+    },
+    {
+      "id": "lx18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why tag documents instead of pasting them as one block?",
+      "options": [
+        "Tags reduce tokens",
+        "The model can tell documents apart and cite them",
+        "Tags are required by law",
+        "It avoids caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Clear boundaries help the model keep sources separate."
+    },
+    {
+      "id": "lx19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Cached input costs a tenth. If uncached input is ₹60 per question, what does a cached question cost for input?",
+      "options": [
+        "₹6",
+        "₹0.6",
+        "₹54",
+        "₹60"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A tenth of ₹60 is ₹6."
+    },
+    {
+      "id": "lx20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A team places the question first to \"prime\" the model. What is the side effect with caching?",
+      "options": [
+        "Better cache hits",
+        "The prefix changes every call, so nothing is cached",
+        "Lower latency",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A varying first block breaks prefix caching."
+    }
+  ]
+}

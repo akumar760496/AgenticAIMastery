@@ -1,0 +1,937 @@
+{
+  "id": "agentid",
+  "moduleSlug": "security",
+  "name": "Agent Identity and Least Privilege",
+  "shortName": "Agent identity",
+  "question": "Who is this agent, and what may it touch right now?",
+  "summary": "Every agent gets its own non-human identity, such as a SPIFFE ID, a cloud workload identity or a dedicated service account, instead of borrowing a shared admin account or a person’s login. When it acts for someone, it exchanges the user’s token for one that carries both identities (OAuth 2.0 Token Exchange, RFC 8693: the user as subject, the agent as actor). Each agent holds only the standing permissions its job needs, gets riskier rights just in time for minutes, uses short-lived credentials, and appears in an inventory with an owner and a kill switch of its own. Tool authentication covers the per-user token one tool call carries, and action policies decide whether a call may run; this is about who the agent itself is and what it may reach.",
+  "useCases": [
+    "An organisation running more than a handful of agents against real systems",
+    "Regulated work where every action must be traced to an agent and a person",
+    "Agents that act for customers or employees, not only for themselves"
+  ],
+  "keyFacts": {
+    "label": "Building blocks",
+    "items": [
+      {
+        "term": "Workload identity",
+        "detail": "the agent proves who it is with an attested, automatically issued credential, not a pasted key"
+      },
+      {
+        "term": "On-behalf-of",
+        "detail": "token exchange yields a token with sub = the user and act = the agent (RFC 8693)"
+      },
+      {
+        "term": "Least-privilege role",
+        "detail": "standing access only to the systems and actions this agent’s job needs"
+      },
+      {
+        "term": "Just-in-time elevation",
+        "detail": "write or admin rights granted for minutes, with a reason, then removed"
+      },
+      {
+        "term": "Short-lived credentials",
+        "detail": "minutes, renewed automatically; a stolen one expires before it is useful"
+      },
+      {
+        "term": "Inventory and kill switch",
+        "detail": "every agent listed with owner, permissions and a switch that disables only that agent"
+      }
+    ]
+  },
+  "steps": [
+    "Give each agent its own workload identity and list it in an inventory with an owner",
+    "Exchange the user’s token so each call carries both the user and the agent",
+    "Grant a minimal standing role and elevate just in time for risky actions",
+    "Issue short-lived credentials, log both identities on every action, and test the kill switch"
+  ],
+  "pitfalls": [
+    "One shared admin service account for every agent, so nobody knows which one acted",
+    "Agents reusing a person’s login or a long-lived API key in an environment variable",
+    "Permissions that only grow: nobody removes access an agent no longer needs"
+  ],
+  "tools": [
+    "SPIFFE and SPIRE",
+    "OAuth 2.0 Token Exchange (RFC 8693)",
+    "Microsoft Entra Agent ID",
+    "Google Cloud Workload Identity Federation",
+    "AWS IAM roles and STS",
+    "HashiCorp Vault"
+  ],
+  "remember": "One agent, one identity. Carry the user too. Grant little, briefly, and log both.",
+  "caption": "Illustrative: Sahyadri Bank, a fictional Indian bank, runs 30 agents over 12 systems and 80 lakh customer records.",
+  "comparison": {
+    "scope": "Agent credentials and roles",
+    "cost": 3,
+    "needs": "Per-agent identities and token exchange",
+    "best": "One stolen key opens every system"
+  },
+  "diagram": {
+    "file": "diagrams/agentid.svg"
+  },
+  "lesson": {
+    "file": "dispute_agent_identity.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import requests, jwt                      # PyJWT, to read claims for the log",
+        "steps": []
+      },
+      {
+        "text": "from platform_stubs import fetch_jwt_svid, pam, audit, core_banking   # your wrappers",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "AGENT = \"spiffe://sahyadri.bank/agents/upi-dispute\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "TOKEN_URL = \"https://auth.sahyadri.bank/oauth2/token\"",
+        "steps": []
+      },
+      {
+        "text": "STANDING = {\"crm\": \"read\", \"upi-switch\": \"read\", \"statements\": \"read\"}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def agent_token() -> str:",
+        "steps": [
+          1,
+          6
+        ]
+      },
+      {
+        "text": "    # issued by the SPIFFE agent or cloud metadata; lives 15 minutes",
+        "steps": [
+          1,
+          6
+        ]
+      },
+      {
+        "text": "    return fetch_jwt_svid(audience=\"auth.sahyadri.bank\")",
+        "steps": [
+          1,
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_behalf_of(user_token: str, audience: str, scope: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    r = requests.post(TOKEN_URL, timeout=5, data={",
+        "steps": []
+      },
+      {
+        "text": "        \"grant_type\": \"urn:ietf:params:oauth:grant-type:token-exchange\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"subject_token\": user_token,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"subject_token_type\": \"urn:ietf:params:oauth:token-type:access_token\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"actor_token\": agent_token(),",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"actor_token_type\": \"urn:ietf:params:oauth:token-type:jwt\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"audience\": audience, \"scope\": scope})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    r.raise_for_status()",
+        "steps": []
+      },
+      {
+        "text": "    return r.json()[\"access_token\"]      # sub = customer, act.sub = agent",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def refund(user_token: str, dispute) -> None:",
+        "steps": []
+      },
+      {
+        "text": "    grant = pam.request(identity=AGENT, role=\"refunds:write\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                        ttl_minutes=15, reason=\"UPI dispute\", ticket=dispute.id)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    grant.wait_for_approval()            # a policy or a person decides",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    tok = on_behalf_of(user_token, \"core-banking\", \"refunds:write\")",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    c = jwt.decode(tok, options={\"verify_signature\": False})  # the API verifies",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    audit.log(agent=c[\"act\"][\"sub\"], user=c[\"sub\"], action=\"refund\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "              amount=dispute.amount, grant=grant.id)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    core_banking.refund(dispute.id, dispute.amount, token=tok)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# Kill switch: disable AGENT in the inventory; the other 29 agents keep running",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "An identity of its own",
+        "text": "The UPI dispute agent has its own SPIFFE ID. The platform checks which workload is asking and issues it a signed credential, so there is no key pasted into an environment variable, and the agent never borrows a person’s login or the shared admin account."
+      },
+      {
+        "title": "Carry the customer too",
+        "text": "Token exchange (RFC 8693) sends the customer’s token as the subject and the agent’s credential as the actor. The token that comes back has sub set to the customer and an act claim naming the agent, so the system receiving it sees both and can refuse if either lacks the right."
+      },
+      {
+        "title": "Least privilege by default",
+        "text": "The standing role is read-only on three systems: CRM, the UPI switch and statements. Each exchange asks for one audience and one scope, so the token works for this customer, on one system, for one kind of action."
+      },
+      {
+        "title": "Elevate just in time",
+        "text": "refunds:write is not part of the standing role. The agent asks for it for 15 minutes, with a reason and a ticket; a policy approves small refunds and a person approves large ones. Then the right lapses, so there is no standing privileged account to steal."
+      },
+      {
+        "title": "Log both identities",
+        "text": "The audit record takes the agent and the customer from the token’s claims and adds the grant id. An investigator can answer which agent acted, for which customer, under which approval. Decoding without verifying is only for the log; the core banking API verifies the signature."
+      },
+      {
+        "title": "Short-lived and switchable",
+        "text": "Credentials last 15 minutes and renew automatically, so a stolen one soon stops working. Because each agent has its own identity, disabling it in the inventory stops this agent alone while the other 29 keep serving customers."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">spiffe://sahyadri.bank/agents/upi-dispute</text></g><text class=\"sb a\" x=\"8\" y=\"48\" style=\"text-anchor:start;--d:0.1s\">issued by the platform · not a pasted key</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"58\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"68\" y=\"74\" text-anchor=\"middle\">customer token</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"8\" y=\"88\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"68\" y=\"104\" text-anchor=\"middle\">agent credential</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M130 70L158 80\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.12s\"><path class=\"ln \" d=\"M130 100L158 90\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"160\" y=\"73\" width=\"192\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"256\" y=\"89\" text-anchor=\"middle\">sub=C-4471 · act=upi-dispute</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"122\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"138\" text-anchor=\"middle\">crm:read</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"124\" y=\"122\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"138\" text-anchor=\"middle\">upi:read</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"240\" y=\"122\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"138\" text-anchor=\"middle\">statements:read</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"154\" width=\"226\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"121\" y=\"170\" text-anchor=\"middle\">refunds:write · 15 min · T-9102</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"242\" y=\"154\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"297\" y=\"170\" text-anchor=\"middle\">approved</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"186\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"202\" text-anchor=\"middle\">audit: agent=upi-dispute · user=C-4471 · refund</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"218\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"234\" text-anchor=\"middle\">token lives 15 min</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"184\" y=\"218\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"234\" text-anchor=\"middle\">kill switch: 1 of 30</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"258\" style=\"text-anchor:middle;fill:var(--ink-2)\">one agent, one identity, both names in the log</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "A stolen credential reaches one agent’s few systems, not the whole bank",
+      "Every action is traced to the agent and to the person it acted for",
+      "One misbehaving agent can be switched off without stopping the rest",
+      "Short-lived credentials remove most key-rotation chores and leaked-key risk"
+    ],
+    "cons": [
+      "30 identities, roles and owners to create, review and retire",
+      "Token exchange needs an authorisation server that supports it, and every API must check the claims",
+      "Just-in-time approvals add minutes to risky actions",
+      "Least-privilege roles break when an agent’s job changes and nobody updates them"
+    ],
+    "avoidWhen": [
+      "A single prototype agent on test data with no real systems behind it (a sandboxed test account is enough)",
+      "Actions that must never happen at all (block them with a policy; do not grant them just in time)"
+    ],
+    "tools": [
+      {
+        "name": "SPIFFE and SPIRE",
+        "type": "Open source (CNCF)",
+        "what": "Attested workload identities (SPIFFE IDs) with short-lived X.509 and JWT credentials",
+        "url": "https://spiffe.io/docs/latest/spire-about/"
+      },
+      {
+        "name": "OAuth 2.0 Token Exchange",
+        "type": "IETF standard (RFC 8693)",
+        "what": "Exchange a user’s token plus an actor token for a delegated token with an act claim",
+        "url": "https://datatracker.ietf.org/doc/html/rfc8693"
+      },
+      {
+        "name": "Microsoft Entra on-behalf-of flow",
+        "type": "Commercial (Microsoft)",
+        "what": "A middle-tier service exchanges a user’s token for one to call a downstream API as that user",
+        "url": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow"
+      },
+      {
+        "name": "Google Cloud Workload Identity Federation",
+        "type": "Commercial (Google Cloud)",
+        "what": "Workloads get short-lived Google credentials without service-account keys",
+        "url": "https://cloud.google.com/iam/docs/workload-identity-federation"
+      },
+      {
+        "name": "AWS STS AssumeRole",
+        "type": "Commercial (AWS)",
+        "what": "Temporary credentials for a role, with session tags and a maximum duration",
+        "url": "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"
+      },
+      {
+        "name": "HashiCorp Vault",
+        "type": "Open source and commercial",
+        "what": "Dynamic, short-lived secrets and leases that can be revoked per identity",
+        "url": "https://developer.hashicorp.com/vault/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Sahyadri Bank, a fictional Indian bank, runs 30 agents across 12 systems holding 80 lakh customer records. An attacker steals the credential of one of them, the UPI dispute agent, which serves about 2,000 customers a day and needs read access to 3 systems and refunds on a fourth. Choose how agents are identified, what they may do and how long credentials live, and see how far the thief gets, what you can trace, and what it costs to run.",
+    "controls": [
+      "Pick the identity model: one shared admin service account, one identity per agent, or per agent plus on behalf of the user.",
+      "Pick the permissions: a broad role for every agent, least privilege per agent, or least privilege with just-in-time elevation.",
+      "Pick credential rotation: never, every 90 days, or short-lived 15-minute credentials, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Systems reachable",
+        "meaning": "How many of the 12 systems the stolen credential opens, and on how many it can write."
+      },
+      {
+        "name": "Customer records reachable",
+        "meaning": "All 80,00,000 when the agent’s own credential can query anyone; only customers served while it works when every call carries the user."
+      },
+      {
+        "name": "Stolen credential works for",
+        "meaning": "How long the thief has before the credential expires or is rotated."
+      },
+      {
+        "name": "Incidents traced",
+        "meaning": "Of last year’s 40 incidents, how many point to one agent, and how many to both the agent and the person it acted for."
+      },
+      {
+        "name": "Standing privileged accounts",
+        "meaning": "Identities that hold write or admin rights all the time, ready to be stolen."
+      },
+      {
+        "name": "Kill switch and ops overhead",
+        "meaning": "How many agents stop when you disable this identity, and monthly hours of identity upkeep, access reviews, approvals and rotation."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One shared admin account",
+        "expect": "12 of 12 systems (write to all 12) and all 80,00,000 records for about 180 days; 6 of 40 incidents traced to an agent, none to a person; 1 standing privileged account; the kill switch stops all 30 agents; 2 hours a month."
+      },
+      {
+        "k": "peragent",
+        "name": "Own identity, least privilege, 90-day rotation",
+        "expect": "4 systems (write to 1) but still all 80,00,000 records, for 45 days on average; 40 of 40 incidents traced to the agent, 12 to the person; 12 standing privileged accounts; 30 hours a month."
+      },
+      {
+        "k": "obo",
+        "name": "On behalf of the user, 15-minute tokens",
+        "expect": "4 systems (write to 1) and 21 customer records for 15 minutes; 40 of 40 traced to agent and person; 12 standing privileged accounts; 32 hours a month."
+      },
+      {
+        "k": "full",
+        "name": "On behalf of, just-in-time, 15-minute tokens",
+        "expect": "3 systems with no write access and 21 records for 15 minutes; 40 of 40 traced to both; 0 standing privileged accounts; 1 agent stopped by its kill switch; 38 hours a month."
+      }
+    ],
+    "missions": [
+      {
+        "k": "contain",
+        "text": "Cut what one compromised agent can reach to 4 systems or fewer and 100 customer records or fewer.",
+        "hint": "Give each agent its own least-privilege identity, carry the user on every call, and make credentials short-lived."
+      },
+      {
+        "k": "trace",
+        "text": "Trace all 40 incidents to both the agent and the person, with no standing privileged accounts.",
+        "hint": "Per agent plus on behalf of the user, with just-in-time elevation."
+      },
+      {
+        "k": "illusion",
+        "text": "Show that short-lived credentials alone are not enough: keep the shared admin account, make its credentials last 15 minutes, and still expose all 80 lakh records and at least 10 systems.",
+        "hint": "Shared account, short-lived rotation, any permissions."
+      }
+    ],
+    "tools": [
+      {
+        "n": "SPIFFE and SPIRE",
+        "type": "Open source · CNCF",
+        "start": 2,
+        "prod": 3,
+        "best": "Attested workload identities with automatically renewed short-lived X.509 and JWT credentials.",
+        "ex": "Each of the 30 agents gets a SPIFFE ID such as spiffe://sahyadri.bank/agents/upi-dispute and a JWT that renews every few minutes.",
+        "pros": [
+          "Works across clouds, Kubernetes and VMs",
+          "No secrets to paste or rotate by hand"
+        ],
+        "cons": [
+          "A platform to deploy and operate",
+          "Downstream systems must learn to trust SPIFFE IDs"
+        ],
+        "url": "https://spiffe.io/docs/latest/spire-about/"
+      },
+      {
+        "n": "OAuth 2.0 Token Exchange (RFC 8693)",
+        "type": "IETF standard",
+        "start": 2,
+        "prod": 3,
+        "best": "Exchange a user’s token plus the agent’s token for a delegated token whose act claim names the agent.",
+        "ex": "The dispute agent exchanges customer C-4471’s token for a core-banking token with scope refunds:write.",
+        "pros": [
+          "Both identities travel in one token",
+          "Audience and scope narrowed at each hop"
+        ],
+        "cons": [
+          "Not every identity provider supports actor tokens",
+          "Every API must check sub and act, not just the signature"
+        ],
+        "url": "https://datatracker.ietf.org/doc/html/rfc8693"
+      },
+      {
+        "n": "Microsoft Entra on-behalf-of flow",
+        "type": "Commercial · Microsoft",
+        "start": 3,
+        "prod": 3,
+        "best": "A middle-tier service turns a user’s token into one for a downstream API as that user.",
+        "ex": "An internal HR agent calls Microsoft Graph as the employee who asked, never with its own broad rights.",
+        "pros": [
+          "Mature and well documented",
+          "Fits Microsoft 365 and Azure estates"
+        ],
+        "cons": [
+          "Uses the jwt-bearer grant rather than RFC 8693 actor tokens",
+          "Tied to Entra ID"
+        ],
+        "url": "https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow"
+      },
+      {
+        "n": "Google Cloud Workload Identity Federation",
+        "type": "Commercial · Google Cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Short-lived Google credentials for workloads without service-account keys.",
+        "ex": "An agent running on GKE uses its Kubernetes service account to get a 1-hour token for BigQuery, with no key file.",
+        "pros": [
+          "Removes long-lived keys",
+          "Per-workload IAM roles"
+        ],
+        "cons": [
+          "Google Cloud resources only",
+          "Role design is still your job"
+        ],
+        "url": "https://cloud.google.com/iam/docs/workload-identity-federation"
+      },
+      {
+        "n": "HashiCorp Vault",
+        "type": "Open source and commercial",
+        "start": 2,
+        "prod": 3,
+        "best": "Dynamic database and cloud credentials with leases that expire or are revoked per identity.",
+        "ex": "The reporting agent gets a database user valid for 15 minutes; disabling its role revokes every live lease.",
+        "pros": [
+          "Short-lived secrets for systems without OAuth",
+          "Revocation per identity is a kill switch"
+        ],
+        "cons": [
+          "Another critical service to run",
+          "Agents need a Vault identity of their own first"
+        ],
+        "url": "https://developer.hashicorp.com/vault/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Every agent needs its own identity without secrets",
+        "tool": "SPIFFE and SPIRE, or your cloud’s workload identity"
+      },
+      {
+        "need": "Calls must carry the user and the agent",
+        "tool": "OAuth 2.0 Token Exchange (RFC 8693), or Entra on-behalf-of"
+      },
+      {
+        "need": "Legacy databases need short-lived credentials",
+        "tool": "HashiCorp Vault dynamic secrets"
+      }
+    ],
+    "goals": [
+      "Explain why one identity per agent shrinks blast radius and enables a targeted kill switch",
+      "Explain how on-behalf-of tokens make every action traceable to agent and user",
+      "See why short-lived credentials help only once identities and permissions are narrow"
+    ]
+  },
+  "practice": {
+    "scenario": "Sahyadri Bank, a fictional Indian bank, runs 30 agents, and until last quarter all of them logged in as one admin service account whose key had never been rotated. Now each agent has its own SPIFFE ID and a 15-minute credential, and every call it makes for a customer carries a token exchanged on that customer’s behalf, with the customer as subject and the agent as actor. Standing roles are read-only; refunds need a 15-minute elevation. The audit log names both identities, and an inventory lists every agent’s owner, roles and kill switch.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "A UPI dispute agent reads three systems for the customer it serves and gets refund rights only for 15 minutes when approved"
+      },
+      {
+        "industry": "Insurance",
+        "use": "A claims agent acts on behalf of the adjuster, so the insurer’s log shows which agent paid which claim for whom"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Network-operations agents each have their own cloud IAM role, and one misbehaving agent is disabled without stopping the others"
+      }
+    ],
+    "analogy": "Staff ID cards in a bank branch. Each employee has their own card that opens only the doors their job needs, the strongroom opens only with a manager’s co-signature for a few minutes, lost cards expire, and the door log records whose card opened what, and for which customer’s locker.",
+    "library": {
+      "name": "requests + PyJWT",
+      "what": "Call any RFC 8693 token-exchange endpoint with the user’s token and the agent’s own credential, then verify the result and read its sub and act claims.",
+      "install": "pip install requests pyjwt pyyaml"
+    },
+    "note": "The token URL, the SVID file path and agents.yaml are illustrative. Identity providers differ: some support RFC 8693 actor tokens directly, while Microsoft Entra’s on-behalf-of flow uses the jwt-bearer grant with requested_token_use=on_behalf_of. Check your provider’s documentation. The inventory check is plain Python you would run in CI or on a schedule.",
+    "samples": [
+      {
+        "file": "obo_token.py",
+        "language": "python",
+        "code": "import requests, jwt\n\nTOKEN_URL = \"https://auth.sahyadri.bank/oauth2/token\"\n\ndef read_agent_svid(path: str = \"/run/spire/agent/jwt_svid.token\") -> str:\n    \"\"\"A SPIFFE helper (or cloud agent) keeps a short-lived JWT here and renews it.\"\"\"\n    with open(path) as f:\n        return f.read().strip()\n\ndef exchange(user_token: str, audience: str, scope: str) -> dict:\n    \"\"\"RFC 8693: the user is the subject, this agent is the actor.\"\"\"\n    resp = requests.post(TOKEN_URL, timeout=5, data={\n        \"grant_type\": \"urn:ietf:params:oauth:grant-type:token-exchange\",\n        \"subject_token\": user_token,\n        \"subject_token_type\": \"urn:ietf:params:oauth:token-type:access_token\",\n        \"actor_token\": read_agent_svid(),\n        \"actor_token_type\": \"urn:ietf:params:oauth:token-type:jwt\",\n        \"audience\": audience,\n        \"scope\": scope,\n    })\n    resp.raise_for_status()\n    return resp.json()      # access_token, issued_token_type, token_type, expires_in\n\ndef check_delegation(token: str, jwks_url: str, audience: str, allowed_agents: set) -> dict:\n    \"\"\"What the receiving API does: verify the token, then require both identities.\"\"\"\n    key = jwt.PyJWKClient(jwks_url).get_signing_key_from_jwt(token).key\n    claims = jwt.decode(token, key, algorithms=[\"RS256\", \"ES256\"], audience=audience)\n    agent = claims.get(\"act\", {}).get(\"sub\")\n    if agent not in allowed_agents:\n        raise PermissionError(f\"agent {agent!r} may not call {audience}\")\n    return {\"user\": claims[\"sub\"], \"agent\": agent, \"scope\": claims.get(\"scope\", \"\")}"
+      },
+      {
+        "file": "inventory_check.py",
+        "language": "python",
+        "code": "import sys\nimport yaml\nfrom collections import Counter\n\n# agents.yaml: one entry per agent\n# - name: upi-dispute\n#   identity: spiffe://sahyadri.bank/agents/upi-dispute\n#   owner: payments-ops@sahyadri.bank\n#   standing: [crm:read, upi-switch:read, statements:read]\n#   jit: [core-banking:refunds:write]\n#   credential_ttl_minutes: 15\n#   unused_days: {statements:read: 3}\nINV = yaml.safe_load(open(\"agents.yaml\"))\nMAX_TTL, MAX_UNUSED = 60, 90\nWRITE = (\":write\", \":admin\")\n\ndef findings(agents: list) -> list:\n    out, shared = [], Counter(a[\"identity\"] for a in agents)\n    for a in agents:\n        n = a[\"name\"]\n        if shared[a[\"identity\"]] > 1:\n            out.append(f\"{n}: identity shared with {shared[a['identity']] - 1} other agent(s)\")\n        if not a.get(\"owner\"):\n            out.append(f\"{n}: no owner, so nobody reviews or retires it\")\n        for p in a.get(\"standing\", []):\n            if p.endswith(WRITE):\n                out.append(f\"{n}: standing privileged right {p}; move it to just-in-time\")\n        if a.get(\"credential_ttl_minutes\", 10**9) > MAX_TTL:\n            out.append(f\"{n}: long-lived credential; switch to short-lived tokens\")\n        for p, days in a.get(\"unused_days\", {}).items():\n            if days > MAX_UNUSED:\n                out.append(f\"{n}: {p} unused for {days} days; remove it\")\n    return out\n\nproblems = findings(INV)\nprint(\"\\n\".join(problems) or \"inventory clean\")\nsys.exit(1 if problems else 0)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "With on-behalf-of tokens, a stolen agent credential reaches only the customers whose sessions pass through the agent while the credential still works. The agent serves 2,000 customers a day. With 90-day rotation a stolen credential works for 45 days on average; with short-lived credentials it works for 15 minutes. By what factor do short-lived credentials shrink the number of customers exposed?",
+    "answer": "90-day rotation: 2,000 × 45 = 90,000 customers. 15 minutes is 15 / 1,440 of a day, so 2,000 × 15 / 1,440 ≈ 20.8 customers. 90,000 / 20.83 = 4,320, which is simply 45 days × 96 fifteen-minute slots a day. Without on-behalf-of tokens the agent’s own credential could query all 80 lakh customers, so rotation alone would change nothing about the reach.",
+    "expected": {
+      "value": 4320,
+      "tolerance": 1,
+      "label": "factor ="
+    },
+    "interview": [
+      {
+        "question": "Why give every agent its own identity instead of one service account?",
+        "answer": "A shared account means a stolen credential is every agent’s credential, the audit log cannot say which agent acted, and disabling it stops every agent at once. Separate identities let each agent hold only the permissions its job needs, make every action attributable, and give each agent its own kill switch."
+      },
+      {
+        "question": "What does on-behalf-of delegation add over the agent’s own identity?",
+        "answer": "The agent exchanges the user’s token together with its own credential for a token that names both: the user as subject and the agent as actor (the act claim in RFC 8693). Downstream systems can then enforce the user’s own permissions, the agent can reach only customers it is actually serving, and the audit log records both."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Letting agents reuse a person’s login or API key",
+        "fix": "Give each agent a workload identity and exchange the person’s token on their behalf, so both appear in every call"
+      },
+      {
+        "mistake": "Granting write and admin rights permanently because approvals are slow",
+        "fix": "Keep standing roles read-only and elevate just in time for minutes, with policy approval for routine cases"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ai01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s 30 agents all log in with one admin service account. Which problem does this NOT cause?",
+      "options": [
+        "A stolen credential is every agent’s credential",
+        "The audit log cannot say which agent acted",
+        "Disabling the account stops all 30 agents",
+        "The model’s answers become less accurate"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "A shared account is an access and accountability problem; it has no effect on answer quality."
+    },
+    {
+      "id": "ai02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "In a token produced by OAuth 2.0 Token Exchange (RFC 8693) for an agent acting for a customer, which claim names the agent?",
+      "options": [
+        "sub",
+        "aud",
+        "act",
+        "iss"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The act (actor) claim names the party acting on behalf of the subject; sub remains the customer."
+    },
+    {
+      "id": "ai03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims agent needs to read policies and write claim notes. Which standing role follows least privilege?",
+      "options": [
+        "Admin on the claims platform",
+        "Read on policies, write on claim notes only",
+        "Read and write on every insurance system",
+        "The adjuster’s own login"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Standing access should match exactly what the job needs, nothing more."
+    },
+    {
+      "id": "ai04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A refund agent holds refunds:write only for 15 minutes after an approval, then loses it. What is this called?",
+      "options": [
+        "Role explosion",
+        "Just-in-time elevation",
+        "Static provisioning",
+        "Break-glass access"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Privileged rights granted briefly, with a reason and approval, then removed automatically, are just-in-time access."
+    },
+    {
+      "id": "ai05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A network agent’s credential is stolen. It serves 1,200 sessions an hour and every call carries the user’s identity. Credentials last 10 minutes. About how many users’ sessions could the thief use?",
+      "options": [
+        "20",
+        "200",
+        "1,200",
+        "12,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,200 per hour × 10/60 of an hour = 200."
+    },
+    {
+      "id": "ai06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "With on-behalf-of tokens, an agent serves 2,000 customers a day. A stolen credential works 45 days on average under 90-day rotation. How many customers are exposed?",
+      "options": [
+        "2,000",
+        "45,000",
+        "90,000",
+        "1,80,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2,000 × 45 = 90,000."
+    },
+    {
+      "id": "ai07",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which of these make an agent’s actions attributable in a hospital’s audit log? Choose all that apply.",
+      "options": [
+        "Each agent has its own identity",
+        "Calls carry the clinician the agent acts for",
+        "Every agent uses the hospital’s shared integration account",
+        "The log records both identities and the approval id"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Attribution needs a distinct agent identity, the person it acts for, and a log that keeps both; a shared account erases the agent."
+    },
+    {
+      "id": "ai08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why are short-lived credentials alone not enough if all agents share one admin account?",
+      "options": [
+        "Short-lived tokens are slower",
+        "A thief with 15 minutes still reaches every system and every customer",
+        "Short-lived tokens cannot be logged",
+        "Rotation breaks least privilege"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Expiry shortens the window, but the reach of a shared admin account is still everything."
+    },
+    {
+      "id": "ai09",
+      "kind": "single",
+      "industry": "NBFC",
+      "question": "An NBFC’s collections agent keeps a long-lived API key in an environment variable. What is the better pattern?",
+      "options": [
+        "Encrypt the environment variable",
+        "A workload identity that issues short-lived credentials automatically",
+        "Rotate the key by hand every year",
+        "Paste the key into the system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Workload identity removes stored keys: the platform attests the workload and issues credentials that expire in minutes."
+    },
+    {
+      "id": "ai10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in an agent inventory? Choose all that apply.",
+      "options": [
+        "The agent’s identity",
+        "A named human owner",
+        "Its standing and just-in-time permissions",
+        "The customer’s UPI PIN"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "An inventory lists identity, owner and permissions so access can be reviewed and retired; secrets such as a UPI PIN never belong there."
+    },
+    {
+      "id": "ai11",
+      "kind": "single",
+      "industry": "Government services",
+      "question": "A citizen-services agent misbehaves. The team disables its identity. What should happen?",
+      "options": [
+        "Every agent stops",
+        "Only that agent stops; the others keep running",
+        "Nothing, until keys are rotated",
+        "The model is retrained"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A per-agent identity gives a per-agent kill switch."
+    },
+    {
+      "id": "ai12",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A SEBI-registered adviser’s portfolio agent calls a trading API. The API receives a token with sub=client and act=agent. What should the API check?",
+      "options": [
+        "Only the signature",
+        "Signature, audience, scope, and that this agent may act for this client",
+        "Only that the client exists",
+        "Only the agent’s IP address"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A delegated token must be verified and both identities checked against policy before acting."
+    },
+    {
+      "id": "ai13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank reduces a compromised agent’s reach from 12 systems to 3. By what percentage did the number of reachable systems fall?",
+      "options": [
+        "25%",
+        "50%",
+        "75%",
+        "300%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "(12 − 3) / 12 = 9/12 = 75%."
+    },
+    {
+      "id": "ai14",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which practices reduce standing privileged accounts? Choose all that apply.",
+      "options": [
+        "Just-in-time elevation for write and admin rights",
+        "Removing permissions unused for 90 days",
+        "Giving every agent the admin role to simplify reviews",
+        "Break-glass accounts kept disabled and alarmed"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "JIT, pruning unused rights and disabled, monitored break-glass accounts all shrink standing privilege; a blanket admin role does the opposite."
+    },
+    {
+      "id": "ai15",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why should an agent not simply reuse the logged-in doctor’s own session token for every downstream system?",
+      "options": [
+        "Tokens cannot cross systems",
+        "The agent would carry all of the doctor’s rights, and logs could not tell the agent from the doctor",
+        "It is slower",
+        "Doctors’ tokens never expire"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Exchanging the token narrows audience and scope and records the agent as actor, instead of the agent impersonating the doctor."
+    },
+    {
+      "id": "ai16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer has 20 agents. Manual rotation of each agent’s key takes 1 hour every 90 days. About how many hours a month is that?",
+      "options": [
+        "About 2",
+        "About 7",
+        "20",
+        "60"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "20 hours per 90 days ≈ 20 / 3 ≈ 6.7 hours a month."
+    },
+    {
+      "id": "ai17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which statement about SPIFFE is correct?",
+      "options": [
+        "It is a model-evaluation benchmark",
+        "It standardises workload identities (SPIFFE IDs) and short-lived credentials called SVIDs",
+        "It is a prompt-injection classifier",
+        "It replaces OAuth entirely"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "SPIFFE defines workload identity and SVIDs; SPIRE is a reference implementation that issues them."
+    },
+    {
+      "id": "ai18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A 90-day access review finds an agent has not used statements:read for 120 days. What should happen?",
+      "options": [
+        "Keep it in case it is needed",
+        "Remove it; the agent can request it again if its job changes",
+        "Upgrade it to write",
+        "Share it with other agents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unused permissions only add blast radius; least privilege is maintained by removing them."
+    },
+    {
+      "id": "ai19",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A marketplace wants every refund traceable to agent and customer. Which are needed? Choose all that apply.",
+      "options": [
+        "Token exchange so calls carry both identities",
+        "An audit record taking agent and customer from the token",
+        "A single shared refunds account for simplicity",
+        "Refund rights granted just in time, with the grant id logged"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Both identities in the token, logged from its claims with the grant id, give full attribution; a shared account removes it."
+    },
+    {
+      "id": "ai20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "With on-behalf-of tokens and 15-minute credentials, an agent serving 2,000 customers a day exposes about 21 customers if its credential is stolen. Without on-behalf-of, with the same 15-minute credentials, how many of the bank’s 80 lakh customers are reachable?",
+      "options": [
+        "About 21",
+        "About 2,000",
+        "All 80 lakh",
+        "None"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Without the user in the token, the agent’s own credential can query any customer, so expiry shortens the window but not the reach."
+    }
+  ]
+}

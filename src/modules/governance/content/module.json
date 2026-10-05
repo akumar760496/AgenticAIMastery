@@ -1,0 +1,297 @@
+{
+  "slug": "governance",
+  "number": 15,
+  "techniqueOrder": [
+    "dpdp",
+    "finreg",
+    "euai",
+    "frameworks",
+    "audit",
+    "cards",
+    "vendor",
+    "aiincident",
+    "provenance"
+  ],
+  "glossary": [
+    {
+      "term": "data fiduciary",
+      "definition": "Under the DPDP Act, the organisation that decides why and how personal data is processed."
+    },
+    {
+      "term": "data processor",
+      "definition": "An entity that processes personal data on a fiduciary’s behalf, such as a model vendor."
+    },
+    {
+      "term": "data principal",
+      "definition": "The person the personal data is about; a parent or guardian for a child."
+    },
+    {
+      "term": "consent manager",
+      "definition": "A registered entity through which people give, manage and withdraw consent under the DPDP Rules."
+    },
+    {
+      "term": "Significant Data Fiduciary",
+      "definition": "A fiduciary designated for volume or risk, with extra duties such as annual impact assessments and audits."
+    },
+    {
+      "term": "FREE-AI",
+      "definition": "RBI’s Framework for Responsible and Ethical Enablement of AI (August 2025), with seven sutras and six pillars."
+    },
+    {
+      "term": "Regulation 16C",
+      "definition": "SEBI’s 2025 rule making intermediaries solely responsible for data, output and compliance when they use AI tools."
+    },
+    {
+      "term": "kill switch",
+      "definition": "A control that stops an AI system’s actions immediately, without a deployment."
+    },
+    {
+      "term": "AI inventory",
+      "definition": "A register of every AI use with owner, purpose, model, vendor and risk tier."
+    },
+    {
+      "term": "high-risk system",
+      "definition": "An EU AI Act category, such as credit scoring of individuals, with duties on risk management, logs and oversight."
+    },
+    {
+      "term": "provider and deployer",
+      "definition": "EU AI Act roles: the provider builds or markets a system; the deployer uses it under its authority."
+    },
+    {
+      "term": "AI management system",
+      "definition": "ISO/IEC 42001’s term for the policies, processes and controls that govern AI across an organisation."
+    },
+    {
+      "term": "hash chain",
+      "definition": "Records that each include the hash of the previous one, so any edit or deletion is detectable."
+    },
+    {
+      "term": "reason code",
+      "definition": "A short, structured statement of why a decision was made, tied to a written rule."
+    },
+    {
+      "term": "system card",
+      "definition": "Documentation of a deployed AI system: purpose, data, results by segment, limitations and oversight."
+    },
+    {
+      "term": "zero data retention",
+      "definition": "A provider arrangement under which request and response content is not stored after the response is returned, beyond what is needed to serve it."
+    },
+    {
+      "term": "concentration risk",
+      "definition": "The risk that many critical services depend on one provider, so a single outage, price change or exit hits all of them at once."
+    },
+    {
+      "term": "exit plan",
+      "definition": "A documented, rehearsed plan to move a service off a vendor: what moves, how it is tested, how data is returned and deleted, and how long it takes."
+    },
+    {
+      "term": "AI incident",
+      "definition": "An event where an AI system’s development or use causes, or nearly causes, harm to people, property, rights or the environment."
+    },
+    {
+      "term": "CAPA",
+      "definition": "Corrective and preventive action: the fix for an incident and the change that stops it recurring."
+    },
+    {
+      "term": "notification clock",
+      "definition": "A legal or contractual deadline, counted from detection, for telling a regulator or affected people."
+    },
+    {
+      "term": "C2PA",
+      "definition": "An open standard for signed Content Credentials that record how a media file was created and edited."
+    },
+    {
+      "term": "synthetically generated information",
+      "definition": "In India’s IT Rules, audio-visual content created or altered by computer to appear real."
+    },
+    {
+      "term": "invisible watermark",
+      "definition": "A hidden signal in pixels or audio that marks content as generated and survives many edits."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "PIB: Digital Personal Data Protection Rules, 2025 notified (Nov 2025)",
+      "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2190014"
+    },
+    {
+      "id": "S2",
+      "title": "MeitY: Data protection framework (DPDP Act, 2023 and Rules)",
+      "url": "https://www.meity.gov.in/data-protection-framework"
+    },
+    {
+      "id": "S3",
+      "title": "RBI: Framework for Responsible and Ethical Enablement of AI (FREE-AI), Aug 2025",
+      "url": "https://www.rbi.org.in"
+    },
+    {
+      "id": "S4",
+      "title": "RBI draft guidance on model risk management, June 2026 (summary)",
+      "url": "https://www.corplawupdates.in/updates/rbi-draft-guidance-model-risk-management-2026-ai-ml-banks-nbfcs"
+    },
+    {
+      "id": "S5",
+      "title": "SEBI (Intermediaries) (Amendment) Regulations, 2025: Regulation 16C",
+      "url": "https://www.scconline.com/blog/post/2025/02/11/sebi-introduces-concept-of-ai/"
+    },
+    {
+      "id": "S6",
+      "title": "SEBI: Consultation paper on responsible usage of AI/ML in securities markets (June 2025)",
+      "url": "https://www.sebi.gov.in/reports-and-statistics/reports/jun-2025/consultation-paper-on-guidelines-for-responsible-usage-of-ai-ml-in-indian-securities-markets_94687.html"
+    },
+    {
+      "id": "S7",
+      "title": "The Policy Edge: SEBI signals tiered AI rules with kill switches (Aug 2026)",
+      "url": "https://www.policyedge.in/p/sebi-signals-tiered-ai-rules-with-kill-switches-and-human-oversight"
+    },
+    {
+      "id": "S8",
+      "title": "EU AI Act, Regulation (EU) 2024/1689",
+      "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj"
+    },
+    {
+      "id": "S9",
+      "title": "Gibson Dunn: EU AI Act Omnibus agreement, postponed high-risk deadlines",
+      "url": "https://www.gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes/"
+    },
+    {
+      "id": "S10",
+      "title": "NIST AI Risk Management Framework",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework"
+    },
+    {
+      "id": "S11",
+      "title": "NIST AI 600-1: Generative AI Profile (2024)",
+      "url": "https://doi.org/10.6028/NIST.AI.600-1"
+    },
+    {
+      "id": "S12",
+      "title": "ISO/IEC 42001:2023 AI management system",
+      "url": "https://www.iso.org/standard/81230.html"
+    },
+    {
+      "id": "S13",
+      "title": "Mitchell et al.: Model Cards for Model Reporting (2019)",
+      "url": "https://arxiv.org/abs/1810.03993"
+    },
+    {
+      "id": "S14",
+      "title": "Gebru et al.: Datasheets for Datasets (2018)",
+      "url": "https://arxiv.org/abs/1803.09010"
+    },
+    {
+      "id": "S15",
+      "title": "OpenTelemetry: semantic conventions for generative AI",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+    },
+    {
+      "id": "S16",
+      "title": "RBI: Master Direction on Outsourcing of Information Technology Services (April 2023)",
+      "url": "https://www.rbi.org.in"
+    },
+    {
+      "id": "S17",
+      "title": "SEBI: Cybersecurity and Cyber Resilience Framework for regulated entities (August 2024)",
+      "url": "https://www.sebi.gov.in"
+    },
+    {
+      "id": "S18",
+      "title": "OpenAI: Data controls in the OpenAI platform (retention, zero data retention, residency)",
+      "url": "https://platform.openai.com/docs/guides/your-data"
+    },
+    {
+      "id": "S19",
+      "title": "Anthropic: Model deprecations",
+      "url": "https://docs.claude.com/en/docs/about-claude/model-deprecations"
+    },
+    {
+      "id": "S20",
+      "title": "OpenAI: Deprecations",
+      "url": "https://platform.openai.com/docs/deprecations"
+    },
+    {
+      "id": "S21",
+      "title": "CERT-In: Directions on reporting cyber incidents within 6 hours (April 2022)",
+      "url": "https://www.cert-in.org.in"
+    },
+    {
+      "id": "S22",
+      "title": "OECD AI Incidents and Hazards Monitor",
+      "url": "https://oecd.ai/en/incidents"
+    },
+    {
+      "id": "S23",
+      "title": "EU AI Act, Article 73: Reporting of serious incidents",
+      "url": "https://artificialintelligenceact.eu/article/73/"
+    },
+    {
+      "id": "S24",
+      "title": "AI Incident Database",
+      "url": "https://incidentdatabase.ai"
+    },
+    {
+      "id": "S25",
+      "title": "Freshfields: key changes under MeitY’s 2026 amendments to the IT Rules (synthetic content)",
+      "url": "https://www.freshfields.com/en/our-thinking/blogs/technology-quotient/india-targets-deepfakes-and-ai-generated-content-key-changes-under-meitys-2026-102mjwn"
+    },
+    {
+      "id": "S26",
+      "title": "C2PA: Coalition for Content Provenance and Authenticity",
+      "url": "https://c2pa.org"
+    },
+    {
+      "id": "S27",
+      "title": "EU AI Act, Article 50: Transparency obligations",
+      "url": "https://artificialintelligenceact.eu/article/50/"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Our agent reads customers’ PAN, Aadhaar and bank details",
+      "techniqueId": "dpdp",
+      "advice": "Map the data flows, mask identifiers, sign processor contracts, and make erasure reach every store."
+    },
+    {
+      "symptom": "We are a bank, NBFC or broker launching a customer-facing agent",
+      "techniqueId": "finreg",
+      "advice": "Board policy, inventory, validation, kill switch, human review for high-impact decisions and customer disclosure."
+    },
+    {
+      "symptom": "We have clients or users in Europe",
+      "techniqueId": "euai",
+      "advice": "Check scope, classify the tier, identify your role, and plan for 2 Aug 2026 and 2 Dec 2027."
+    },
+    {
+      "symptom": "Each regulation is becoming a separate project",
+      "techniqueId": "frameworks",
+      "advice": "Adopt NIST AI RMF or ISO/IEC 42001 and map one control library to all of them."
+    },
+    {
+      "symptom": "A customer disputes a decision the agent made",
+      "techniqueId": "audit",
+      "advice": "Replay the decision from a tamper-evident record with versions, grounds and reason codes."
+    },
+    {
+      "symptom": "An auditor asks what the system does and where it fails",
+      "techniqueId": "cards",
+      "advice": "A system card with results by segment, limitations and oversight, plus a plain customer summary."
+    },
+    {
+      "symptom": "Our agent runs on one external provider’s model on a floating alias",
+      "techniqueId": "vendor",
+      "advice": "Agree data terms, pin a dated version with evals on change, add a tested fallback and write an exit plan."
+    },
+    {
+      "symptom": "An AI system caused harm and nobody is sure whether or whom to notify",
+      "techniqueId": "aiincident",
+      "advice": "Use a written AI-incident definition and severity scale, a register with owners, and notification playbooks with clocks."
+    },
+    {
+      "symptom": "Your tool makes realistic images, video or voice and must mark them as AI-made",
+      "techniqueId": "provenance",
+      "advice": "Add visible labels, signed C2PA metadata and an invisible watermark, and do not let users remove them."
+    }
+  ]
+}

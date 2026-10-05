@@ -1,0 +1,877 @@
+{
+  "id": "caching",
+  "moduleSlug": "cost-optimisation",
+  "name": "Prompt Caching",
+  "shortName": "Prompt caching",
+  "question": "Am I paying again for the same prompt prefix?",
+  "summary": "Providers can store the processed form of a long, unchanging prompt prefix, such as the system prompt, tool definitions and reference documents, and reuse it on the next call. Cached input is billed at a fraction of the normal price and is processed faster. A separate response cache can skip the model entirely for repeated questions.",
+  "useCases": [
+    "Agents that resend the same system prompt and tools on every step",
+    "Chat over a fixed document, codebase or knowledge pack",
+    "Many users sharing one long instruction set"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "What gets cached",
+        "detail": "the longest stable prefix: system prompt, tools, documents, earlier turns"
+      },
+      {
+        "term": "Cache hit rate",
+        "detail": "cached input tokens ÷ total input tokens"
+      },
+      {
+        "term": "Pricing",
+        "detail": "cached reads cost a fraction of normal input"
+      },
+      {
+        "term": "Minimum size",
+        "detail": "providers require a minimum prefix, often around 1,024 tokens"
+      },
+      {
+        "term": "Lifetime",
+        "detail": "minutes by default, refreshed on each hit"
+      },
+      {
+        "term": "Semantic cache",
+        "detail": "reuse whole answers for near-duplicate questions"
+      }
+    ]
+  },
+  "steps": [
+    "Order the prompt: static content first, variable content (user message, date) last",
+    "Mark the cache breakpoint where your provider requires it, or rely on automatic caching",
+    "Keep timestamps, request IDs and shuffled examples out of the prefix",
+    "Watch hit rate. A sudden drop usually means something changed in the prefix"
+  ],
+  "pitfalls": [
+    "One changed character early in the prompt invalidates everything after it",
+    "Cache writes can cost more than normal input on some providers",
+    "Semantic caches can serve a stale or wrong answer to a subtly different question"
+  ],
+  "tools": [
+    "Anthropic prompt caching",
+    "OpenAI prompt caching",
+    "Gemini context caching",
+    "GPTCache",
+    "Redis"
+  ],
+  "remember": "Static first, variable last.",
+  "caption": "Units = base input price per token. Uses Anthropic’s published multipliers: cache write 1.25×, cache read 0.1×.",
+  "comparison": {
+    "scope": "Price of input tokens",
+    "cost": 4,
+    "needs": "Low: reorder the prompt",
+    "best": "Breaks when the prefix changes"
+  },
+  "diagram": {
+    "file": "diagrams/caching.svg"
+  },
+  "lesson": {
+    "file": "cache.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import datetime, anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "TOOLS = load_tool_definitions()                  # 1,500 tokens, never changes",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "REPORT = open(\"annual_report.txt\").read()        # 10,000 tokens, never changes",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(question: str):",
+        "steps": []
+      },
+      {
+        "text": "    return client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=\"claude-sonnet-4-5\", max_tokens=1024,       # use your current model",
+        "steps": []
+      },
+      {
+        "text": "        tools=TOOLS,                                      # cached first",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        system=[",
+        "steps": []
+      },
+      {
+        "text": "            {\"type\": \"text\", \"text\": \"You are an equity research assistant.\"},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            {\"type\": \"text\", \"text\": REPORT,",
+        "steps": []
+      },
+      {
+        "text": "             \"cache_control\": {\"type\": \"ephemeral\"}},    # breakpoint: cache up to here",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        ],",
+        "steps": []
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\", \"content\":",
+        "steps": []
+      },
+      {
+        "text": "                   f\"Today is {datetime.date.today()}. {question}\"}],   # variable part last",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "    )",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "r1 = ask(\"Summarize segment revenue.\")",
+        "steps": []
+      },
+      {
+        "text": "print(r1.usage.cache_creation_input_tokens)      # 12,000 written at 1.25x",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "r2 = ask(\"List the key risks.\")                  # within 5 minutes",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "print(r2.usage.cache_read_input_tokens)          # 12,000 read at 0.1x",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "u = r2.usage",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "cached = u.cache_read_input_tokens",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "total = cached + u.cache_creation_input_tokens + u.input_tokens",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "print(f\"hit rate {cached / total:.0%}\")          # alert if this drops",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Order the prompt",
+        "text": "Caching works on the prefix, in the order tools, system, messages. Put everything that never changes first and the question last."
+      },
+      {
+        "title": "Mark the breakpoint",
+        "text": "cache_control marks the end of the stable prefix. Everything up to it, 12,000 tokens here, is cached for 5 minutes by default."
+      },
+      {
+        "title": "The first call writes the cache",
+        "text": "Call 1 processes the prefix and stores it. The write costs 1.25× the normal input price, slightly more than no caching."
+      },
+      {
+        "title": "The next call reads it",
+        "text": "Call 2 arrives within 5 minutes with an identical prefix, so the 12,000 tokens bill at 0.1×. Only the question is new."
+      },
+      {
+        "title": "One changed byte breaks it",
+        "text": "The date is safe in the user message. Move it into the system text above the breakpoint and every call misses and rewrites."
+      },
+      {
+        "title": "Monitor the hit rate",
+        "text": "Read the usage fields on every response. Over a 20-call session this prefix hits 19 times and input cost falls by 83%."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"12\" style=\"--d:0s\">Prompt order: static first, variable last</text><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"22\" width=\"66\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"41\" y=\"37\">tools</text><text class=\"sb\" x=\"41\" y=\"52\">1.5k</text></g><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"78\" y=\"22\" width=\"66\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"111\" y=\"37\">system</text><text class=\"sb\" x=\"111\" y=\"52\">0.5k</text></g><g class=\"a \" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"148\" y=\"22\" width=\"124\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"210\" y=\"37\">annual report</text><text class=\"sb\" x=\"210\" y=\"52\">10k</text></g><g class=\"a \" style=\"--d:0.4s\"><rect class=\"bx warn\" x=\"278\" y=\"22\" width=\"74\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"315\" y=\"37\">question</text><text class=\"sb\" x=\"315\" y=\"52\">varies</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><line x1=\"275\" x2=\"275\" y1=\"16\" y2=\"64\" class=\"ln dash\" style=\"stroke:var(--accent);stroke-width:2\"/></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"140\" y=\"74\" style=\"text-anchor:middle;fill:var(--accent)\">cached prefix · 12,000 tokens</text></g><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"281\" y=\"74\" style=\"text-anchor:start;fill:var(--accent)\">breakpoint</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"106\" style=\"--d:0s\">Call 1</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"56\" y=\"88\" width=\"208\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"160\" y=\"106\" text-anchor=\"middle\">write 12,000 × 1.25</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"268\" y=\"88\" width=\"84\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"106\" text-anchor=\"middle\">new 200</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"144\" style=\"--d:0s\">Call 2</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"56\" y=\"126\" width=\"208\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"160\" y=\"144\" text-anchor=\"middle\">read 12,000 × 0.1</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"268\" y=\"126\" width=\"84\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"144\" text-anchor=\"middle\">new 200</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"176\" style=\"--d:0s\">If</text><text class=\"tl l a\" x=\"8\" y=\"190\" style=\"--d:0s\">moved</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"56\" y=\"164\" width=\"208\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"160\" y=\"182\" text-anchor=\"middle\">date above breakpoint → miss</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"268\" y=\"164\" width=\"84\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"182\" text-anchor=\"middle\">rewrite</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"210\" width=\"170\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"228\" text-anchor=\"middle\">reads: 19 of 20 calls</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"182\" y=\"210\" width=\"170\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"267\" y=\"228\" text-anchor=\"middle\">session $0.73 → $0.13</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Large savings on long, repeated prefixes: cached reads bill at a fraction of input price",
+      "Faster time to first token on long prompts",
+      "Little code: reorder the prompt and mark a breakpoint",
+      "Stacks with batch processing and routing"
+    ],
+    "cons": [
+      "Any change before the breakpoint invalidates the cache",
+      "Cache writes can cost more than normal input",
+      "Entries expire after minutes without traffic",
+      "Minimum prefix sizes rule out short prompts"
+    ],
+    "avoidWhen": [
+      "Prompts are short or different on every call",
+      "Calls are hours apart, so the cache always expires"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic prompt caching",
+        "type": "Provider feature",
+        "what": "Explicit breakpoints with 5-minute or 1-hour lifetimes",
+        "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+      },
+      {
+        "name": "OpenAI prompt caching",
+        "type": "Provider feature",
+        "what": "Automatic caching of long prompt prefixes",
+        "url": "https://platform.openai.com/docs/guides/prompt-caching"
+      },
+      {
+        "name": "Gemini context caching",
+        "type": "Provider feature",
+        "what": "Implicit caching plus explicit caches with a chosen lifetime",
+        "url": "https://ai.google.dev/gemini-api/docs/caching"
+      },
+      {
+        "name": "GPTCache",
+        "type": "Open source",
+        "what": "Semantic response cache in front of any model",
+        "url": "https://github.com/zilliztech/GPTCache"
+      },
+      {
+        "name": "RedisVL",
+        "type": "Open source (Redis)",
+        "what": "Semantic cache and vector search on Redis",
+        "url": "https://github.com/redis/redis-vl-python"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An equity research agent answers an analyst's questions about one annual report. Every call sends the same tools, instructions and report, then a short question. You control how big that stable prefix is, how many calls the session makes and how far apart they are, and whether something breaks the cache.",
+    "controls": [
+      "Drag the sliders to set the prefix size and the number of calls.",
+      "Choose the time between calls and the cache lifetime.",
+      "Turn caching on, and try putting a timestamp at the top of the system prompt."
+    ],
+    "outputs": [
+      {
+        "name": "Input cost vs no caching",
+        "meaning": "Session input cost with your settings as a share of the uncached cost. Above 100% means caching costs extra."
+      },
+      {
+        "name": "Cache hit rate",
+        "meaning": "Tokens read from the cache ÷ all input tokens sent."
+      },
+      {
+        "name": "Cache writes · reads",
+        "meaning": "How many calls wrote the prefix (billed at 1.25× or 2×) and how many read it (0.1×)."
+      },
+      {
+        "name": "Saving on input",
+        "meaning": "The percentage cut in input cost. Negative means you pay more than without caching."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No caching",
+        "expect": "20 calls pay full price for a 12,000-token prefix: $0.732 per session, hit rate 0%."
+      },
+      {
+        "k": "cached",
+        "name": "Caching on",
+        "expect": "1 write and 19 reads: $0.125 per session, hit rate 93%, a saving of 83%."
+      },
+      {
+        "k": "stamp",
+        "name": "Timestamp at the top",
+        "expect": "Every call writes and none reads: $0.912 per session, 25% more than no caching."
+      },
+      {
+        "k": "slow",
+        "name": "Calls 20 minutes apart",
+        "expect": "The 5-minute cache expires between calls, so all 20 calls write: again 25% more than no caching."
+      }
+    ],
+    "missions": [
+      {
+        "k": "save85",
+        "text": "Push the input saving to 85% or more.",
+        "hint": "With caching on, each extra call costs only a tenth of the prefix. Raise the number of calls to about 35 or more."
+      },
+      {
+        "k": "expire",
+        "text": "With calls 20 minutes apart, get the saving above 75%.",
+        "hint": "Switch to the 1-hour cache lifetime. The write costs 2×, but every later call reads."
+      },
+      {
+        "k": "mincache",
+        "text": "Turn caching on but find a prefix size where nothing gets cached.",
+        "hint": "Providers require a minimum prefix. Drag the prefix below 1,024 tokens."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic prompt caching",
+        "type": "Provider feature · Claude API",
+        "start": 3,
+        "prod": 3,
+        "best": "Explicit cache breakpoints with 5-minute or 1-hour lifetimes and usage fields that report writes and reads.",
+        "ex": "Cache a 10,000-token annual report once, then answer 20 analyst questions at the cached rate.",
+        "pros": [
+          "Precise control over what is cached",
+          "Usage fields make hit rates easy to monitor"
+        ],
+        "cons": [
+          "Writes cost more than normal input",
+          "You must place breakpoints correctly"
+        ],
+        "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+      },
+      {
+        "n": "OpenAI prompt caching",
+        "type": "Provider feature · OpenAI API",
+        "start": 3,
+        "prod": 3,
+        "best": "Automatic caching of long prompt prefixes with no code changes.",
+        "ex": "A support bot with a 3,000-token system prompt sees cached_tokens rise in usage as soon as prompts are reordered.",
+        "pros": [
+          "Automatic: no breakpoints to manage",
+          "No extra charge for writes"
+        ],
+        "cons": [
+          "Less control over what is cached and for how long",
+          "Discount depends on the model"
+        ],
+        "url": "https://platform.openai.com/docs/guides/prompt-caching"
+      },
+      {
+        "n": "Gemini context caching",
+        "type": "Provider feature · Google",
+        "start": 2,
+        "prod": 3,
+        "best": "Implicit caching on recent models plus explicit caches with a lifetime you set.",
+        "ex": "Create an explicit cache for a 200-page policy manual and reference it from every request for the next hour.",
+        "pros": [
+          "Explicit caches suit very large, long-lived context",
+          "Implicit caching needs no code"
+        ],
+        "cons": [
+          "Explicit caches have storage costs over time",
+          "Rules differ between Gemini API and Vertex AI"
+        ],
+        "url": "https://ai.google.dev/gemini-api/docs/caching"
+      },
+      {
+        "n": "GPTCache",
+        "type": "Open source · Zilliz",
+        "start": 3,
+        "prod": 1,
+        "best": "A semantic response cache that returns stored answers for similar questions without calling the model.",
+        "ex": "Answer repeated “What are the brokerage charges?” questions from the cache in a prototype.",
+        "pros": [
+          "Skips the model call entirely on a hit",
+          "Pluggable embedding and storage back ends"
+        ],
+        "cons": [
+          "Similar is not identical: risk of wrong answers",
+          "Less active than it once was"
+        ],
+        "url": "https://github.com/zilliztech/GPTCache"
+      },
+      {
+        "n": "RedisVL",
+        "type": "Open source · Redis",
+        "start": 2,
+        "prod": 3,
+        "best": "A semantic cache and vector search on Redis, for teams that already run Redis.",
+        "ex": "Cache answers to FAQ-style questions with a strict similarity threshold and a 24-hour expiry.",
+        "pros": [
+          "Production-grade store many teams already run",
+          "Thresholds and expiry under your control"
+        ],
+        "cons": [
+          "Tuning the similarity threshold takes care",
+          "You operate the Redis cluster"
+        ],
+        "url": "https://github.com/redis/redis-vl-python"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Long stable prompts on Claude",
+        "tool": "Anthropic prompt caching"
+      },
+      {
+        "need": "Zero-code caching on OpenAI",
+        "tool": "OpenAI prompt caching"
+      },
+      {
+        "need": "Repeated identical questions",
+        "tool": "A semantic cache such as RedisVL"
+      }
+    ],
+    "goals": [
+      "Explain why the stable part of the prompt must come first",
+      "Calculate session cost with cache writes and reads",
+      "Diagnose a falling cache hit rate"
+    ]
+  },
+  "practice": {
+    "scenario": "A research agent for equity analysts sends a 12,000-token prompt on each of 20 steps: instructions, tool definitions and a company's annual report. With the report marked for caching, the first step writes it to the cache and the next 19 read it at the cached rate.",
+    "industries": [
+      {
+        "industry": "Financial research",
+        "use": "Cache a long filing or report across a whole Q&A session"
+      },
+      {
+        "industry": "Legal",
+        "use": "Cache the contract once, then ask many questions about it"
+      },
+      {
+        "industry": "Coding tools",
+        "use": "Cache repository context and tool definitions across agent steps"
+      }
+    ],
+    "analogy": "A chef's mise en place. The chopping is done once before service; each order only needs the final cooking.",
+    "library": {
+      "name": "Anthropic SDK (prompt caching)",
+      "what": "Mark the end of the stable prefix with cache_control; the usage object reports cache writes and reads so you can check hit rates.",
+      "install": "pip install anthropic"
+    },
+    "samples": [
+      {
+        "file": "cache.py",
+        "language": "python",
+        "code": "import anthropic\nclient = anthropic.Anthropic()\n\nreport = open(\"annual_report.txt\").read()          # large and unchanging\n\ndef ask(question: str):\n    return client.messages.create(\n        model=\"claude-sonnet-4-5\",                  # use your current model\n        max_tokens=1024,\n        system=[\n            {\"type\": \"text\", \"text\": \"You are an equity research assistant.\"},\n            {\"type\": \"text\", \"text\": report,\n             \"cache_control\": {\"type\": \"ephemeral\"}},   # cache everything up to here\n        ],\n        messages=[{\"role\": \"user\", \"content\": question}],   # variable part last\n    )\n\nr1 = ask(\"Summarize segment revenue.\")\nr2 = ask(\"List the key risks management mentions.\")\nprint(r1.usage.cache_creation_input_tokens, r2.usage.cache_read_input_tokens)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Base input: $3 per million tokens. Cache write 1.25×, read 0.1×. A 20,000-token prefix is used on 10 calls within the cache window. What does the prefix cost with caching, in $?",
+    "answer": "Without caching: 200,000 tokens × $3/M = $0.60. With caching: one write (20,000 × $3.75/M = $0.075) plus 9 reads (180,000 × $0.30/M = $0.054) = $0.129, about 78% less.",
+    "expected": {
+      "value": 0.129,
+      "tolerance": 0.003,
+      "label": "$ with caching ="
+    },
+    "interview": [
+      {
+        "question": "What breaks prompt caching?",
+        "answer": "Any change before the cache breakpoint: timestamps, request IDs, reordered tools or examples, or per-user text in the system prompt. Keep the static prefix byte-identical and put variable content last."
+      },
+      {
+        "question": "How is prompt caching different from semantic caching?",
+        "answer": "Prompt caching reuses the processed prefix, and the model still generates a fresh answer. Semantic caching returns a stored answer for a similar question without calling the model: cheaper, but it risks stale or wrong answers."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Putting the date or user name at the top of the system prompt",
+        "fix": "Move variable content to the end"
+      },
+      {
+        "mistake": "Never checking cache usage",
+        "fix": "Monitor cache read and write tokens per request"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pc01",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A legal assistant sends a 30,000-token contract with each of 25 questions over 10 minutes, but the cache hit rate is 0%. The system prompt begins “Session started at 14:32:07”. What is the cause?",
+      "options": [
+        "The contract is too long to cache",
+        "Caching only works with batch jobs",
+        "The timestamp at the top changes the prefix on every call",
+        "The questions are too short"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Any change before the breakpoint invalidates the cache. Move the timestamp after the stable content."
+    },
+    {
+      "id": "pc02",
+      "kind": "single",
+      "industry": "Financial research",
+      "question": "Base input is $3 per million tokens, cache writes cost 1.25× and reads 0.1×. A 16,000-token prefix is used on 8 calls within the cache lifetime. What does the prefix cost with caching?",
+      "options": [
+        "$0.0336",
+        "$0.1200",
+        "$0.0936",
+        "$0.3840"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "One write: 16,000 × $3.75/M = $0.06. Seven reads: 112,000 × $0.30/M = $0.0336. Total $0.0936, against $0.384 uncached."
+    },
+    {
+      "id": "pc03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A 5,000-token catalogue prompt is reused on 40 calls within the cache lifetime. Writes cost 1.25× and reads 0.1× the base input price. What is the saving on the prefix?",
+      "options": [
+        "85.0%",
+        "87.1%",
+        "90.0%",
+        "97.5%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cost in base units: 5,000 × 1.25 + 39 × 5,000 × 0.1 = 6,250 + 19,500 = 25,750, against 200,000 uncached: a saving of 87.1%."
+    },
+    {
+      "id": "pc04",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which changes will cause prompt-cache misses on a claims assistant? Select all that apply.",
+      "options": [
+        "Putting each policyholder’s name at the start of the system prompt",
+        "Reordering the tool definitions between calls",
+        "Changing the question at the end of the prompt",
+        "Shuffling the few-shot examples on each call"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Anything that changes the prefix breaks the cache. The final question sits after the breakpoint, so it is safe."
+    },
+    {
+      "id": "pc05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A support bot’s calls arrive about 30 minutes apart, and the provider’s default cache lifetime is 5 minutes. What happens?",
+      "options": [
+        "Every call reads at 0.1×",
+        "Every call writes the cache again, so caching adds cost",
+        "The provider keeps the cache for a day",
+        "The request fails"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The entry expires between calls, so each call pays the write premium and nothing is read. A longer lifetime, where offered, fixes it."
+    },
+    {
+      "id": "pc06",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A 12,000-token prefix uses a 1-hour cache (writes 2×, reads 0.1×). Calls arrive every 20 minutes for 3 hours: 10 calls. What is the saving on the prefix?",
+      "options": [
+        "29.0%",
+        "80.0%",
+        "71.0%",
+        "90.0%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "One write: 12,000 × 2 = 24,000 units. Nine reads: 9 × 1,200 = 10,800. Total 34,800 against 120,000: a 71.0% saving."
+    },
+    {
+      "id": "pc07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A semantic cache answers “What is the FD rate for 2 years?” with the stored answer for “What is the FD rate for 1 year?”. What went wrong?",
+      "options": [
+        "The prompt cache expired",
+        "The batch discount was applied twice",
+        "The router picked the wrong model",
+        "A near-duplicate match served a stored answer to a different question"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Semantic caches reuse whole answers for similar questions, so a small but important difference can return a wrong answer."
+    },
+    {
+      "id": "pc08",
+      "kind": "single",
+      "industry": "Financial research",
+      "question": "You use Claude and want explicit control over what is cached, with an option for a 1-hour lifetime. What do you use?",
+      "options": [
+        "GPTCache",
+        "Anthropic prompt caching with cache_control",
+        "Celery beat",
+        "LLMLingua"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anthropic’s prompt caching uses cache_control breakpoints and offers 5-minute and 1-hour lifetimes."
+    },
+    {
+      "id": "pc09",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "What belongs in the cached prefix of an agent’s prompt? Select all that apply.",
+      "options": [
+        "Tool definitions",
+        "System instructions",
+        "A long reference document",
+        "The current user’s message"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Stable content goes in the prefix. The user’s message changes every call, so it goes after the breakpoint."
+    },
+    {
+      "id": "pc10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A patient-FAQ bot on OpenAI has a 3,000-token system prompt. What do you need to do to benefit from prompt caching?",
+      "options": [
+        "Add cache_control to every message",
+        "Send requests through the batch API",
+        "Nothing special: caching is automatic for long prompts, so keep the prefix stable",
+        "Nothing: OpenAI does not cache prompts"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "OpenAI caches long prompt prefixes automatically. Your job is to keep the start of the prompt identical."
+    },
+    {
+      "id": "pc11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A response’s usage shows 9,000 tokens read from cache, 1,000 uncached input tokens and no cache writes. What is the cache hit rate?",
+      "options": [
+        "9%",
+        "10%",
+        "100%",
+        "90%"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Hit rate = cached tokens ÷ all input tokens = 9,000 ÷ 10,000 = 90%."
+    },
+    {
+      "id": "pc12",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which workloads benefit most from prompt caching? Select all that apply.",
+      "options": [
+        "A coding agent resending 40,000 tokens of repository context over 30 steps",
+        "Many users sharing one long instruction set",
+        "One-off prompts that are different every time",
+        "Chat over a fixed product manual"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Caching pays when a long prefix repeats. Prompts that never repeat get nothing from it."
+    },
+    {
+      "id": "pc13",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "Prompt caching is turned on for a rebooking agent. Which costs does it NOT reduce? Select all that apply.",
+      "options": [
+        "Output tokens",
+        "The new tokens in each user message",
+        "Input cost of the repeated prefix",
+        "The number of requests"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Caching discounts only the repeated input prefix. Output, fresh input and request count are unchanged."
+    },
+    {
+      "id": "pc14",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "After adding a summary step that rewrites the history on every turn, a tutor bot’s cache hit rate fell from 85% to 20%. Why?",
+      "options": [
+        "Summaries increase output tokens",
+        "The cache has a daily quota",
+        "Rewriting history changes the prefix, so later content no longer matches",
+        "The model version changed"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Caching needs an identical prefix. Prune less often, below the stable system prompt and tools."
+    },
+    {
+      "id": "pc15",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Twelve lawyers will query the same 300-page case bundle all afternoon on Gemini. Which approach fits?",
+      "options": [
+        "An explicit context cache with a lifetime that covers the afternoon",
+        "A semantic cache keyed by lawyer name",
+        "One batch job per question",
+        "Prompt compression alone"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Explicit context caching suits very large context reused many times over a known period."
+    },
+    {
+      "id": "pc16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A merchant-support prompt has an 800-token stable prefix, and the model’s minimum cacheable prefix is 1,024 tokens. What saving does caching give?",
+      "options": [
+        "0%: the prefix is below the minimum",
+        "About 50%",
+        "About 75%",
+        "About 90%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Prefixes below the minimum are not cached at all, so there is nothing to save."
+    },
+    {
+      "id": "pc17",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "On the Claude API, where do you check whether caching is working?",
+      "options": [
+        "The HTTP status code",
+        "cache_read_input_tokens and cache_creation_input_tokens in the response usage",
+        "The model name in the response",
+        "The max_tokens setting"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The usage object reports tokens written to and read from the cache on every response."
+    },
+    {
+      "id": "pc18",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A research assistant’s hit rate is 40%. Which changes could raise it? Select all that apply.",
+      "options": [
+        "Move the analyst’s name and the date after the breakpoint",
+        "Keep tool definitions in a fixed order",
+        "Group questions about the same report close together in time",
+        "Put the question before the report"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Stable, identically ordered prefixes and calls within the lifetime raise hits. Putting the question first breaks the prefix."
+    },
+    {
+      "id": "pc19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Base input is $3 per million tokens. A call reads a 10,000-token prefix from cache at 0.1× and adds 500 new input tokens. What is the input cost of the call?",
+      "options": [
+        "$0.0030",
+        "$0.0315",
+        "$0.0045",
+        "$0.0345"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "(10,000 × 0.1 + 500) × $3/M = 1,500 × $3/M = $0.0045, against $0.0315 without the cache."
+    },
+    {
+      "id": "pc20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What is the key difference between prompt caching and semantic response caching?",
+      "options": [
+        "Semantic caching regenerates the answer each time",
+        "Both skip the model entirely",
+        "Prompt caching reuses the processed prefix but the model still generates a fresh answer",
+        "Neither uses stored data"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Prompt caching only discounts repeated input. A semantic cache returns a stored answer without calling the model."
+    }
+  ]
+}

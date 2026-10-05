@@ -1,0 +1,951 @@
+{
+  "id": "routing",
+  "moduleSlug": "cost-optimisation",
+  "name": "Model Routing and Tiering",
+  "shortName": "Routing and tiering",
+  "question": "Does this request need the big model?",
+  "summary": "Send each request, and each step of a pipeline, to the cheapest model that can handle it. At run time, a router judges difficulty up front, or a cascade tries a small model first and escalates only when a check fails or confidence is low. At design time, evaluate each pipeline step on its own test set and give it the cheapest tier that meets its bar. Errors compound across steps, so spend on the weakest one.",
+  "useCases": [
+    "High-volume traffic with a mix of easy and hard requests",
+    "Multi-step pipelines whose steps differ in difficulty, such as classify, extract, assess and draft",
+    "Latency-sensitive paths where small models also answer faster"
+  ],
+  "keyFacts": {
+    "label": "Routing patterns",
+    "items": [
+      {
+        "term": "Rule-based router",
+        "detail": "task type, input length or tenant → model"
+      },
+      {
+        "term": "Learned router",
+        "detail": "a classifier predicts which model is needed (e.g. RouteLLM)"
+      },
+      {
+        "term": "Cascade",
+        "detail": "small model first; escalate on low confidence or a failed check"
+      },
+      {
+        "term": "Tier per step",
+        "detail": "each pipeline step gets the cheapest tier that passes its own eval set"
+      },
+      {
+        "term": "Compounding",
+        "detail": "end-to-end accuracy ≈ the product of step accuracies, so the weakest step limits all"
+      },
+      {
+        "term": "Success metric",
+        "detail": "cost per task at an equal success rate"
+      }
+    ]
+  },
+  "steps": [
+    "Label a sample of real traffic and write a small eval set for each pipeline step",
+    "Run steps on each tier; pick the cheapest that meets the bar, spending on the weakest step",
+    "Route requests with simple rules first, then a trained router once you have outcome data",
+    "Add escalation on failed checks, and recheck tiers when models change"
+  ],
+  "pitfalls": [
+    "Misrouted hard tasks fail on the weak model, so measure quality per route",
+    "Measuring only end to end hides the weak step",
+    "Cascades add latency every time they escalate"
+  ],
+  "tools": [
+    "LiteLLM",
+    "OpenRouter",
+    "RouteLLM",
+    "Not Diamond",
+    "promptfoo"
+  ],
+  "remember": "Smallest model that passes, per request and per step. Escalate on doubt.",
+  "caption": "Example assumes the small model costs 1/20 of the large one: 0.2 × 1 + 0.8 × 0.05 = 0.24.",
+  "comparison": {
+    "scope": "Price per token",
+    "cost": 4,
+    "needs": "Medium: router + evals",
+    "best": "Misrouted hard tasks"
+  },
+  "diagram": {
+    "file": "diagrams/routing.svg"
+  },
+  "lesson": {
+    "file": "router.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json",
+        "steps": []
+      },
+      {
+        "text": "from litellm import completion",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "SMALL = \"anthropic/claude-haiku-4-5\"     # tried on 500 labelled requests",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "LARGE = \"anthropic/claude-sonnet-4-5\"    # swap in your current models",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "HARD_INTENTS = {\"tax\", \"portfolio\", \"complaint\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def route(intent: str) -> str:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return LARGE if intent in HARD_INTENTS else SMALL",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def valid(text: str) -> bool:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        out = json.loads(text)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    except ValueError:",
+        "steps": []
+      },
+      {
+        "text": "        return False",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return bool(out.get(\"answer\")) and out.get(\"confidence\", 0) >= 0.7",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(model: str, q: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    prompt = q + '\\nReply as JSON: {\"answer\": ..., \"confidence\": 0-1}'",
+        "steps": []
+      },
+      {
+        "text": "    r = completion(model=model, messages=[{\"role\": \"user\", \"content\": prompt}])",
+        "steps": []
+      },
+      {
+        "text": "    return r.choices[0].message.content",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def answer(q: str, intent: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    model = route(intent)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    text = ask(model, q)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if model == SMALL and not valid(text):          # cascade",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        model, text = LARGE, ask(LARGE, q)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    log_route(intent, model, cost=COST[model], ok=valid(text))",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "    return text",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Label a traffic sample",
+        "text": "Run the small model on a few hundred real, labelled requests. Here it passes 8 of 10, so most traffic doesn’t need the large model."
+      },
+      {
+        "title": "Route with simple rules first",
+        "text": "Start with rules on intent or length: FAQs and extraction go to the small model, tax and complaints to the large one."
+      },
+      {
+        "title": "Validate the cheap answers",
+        "text": "A validator checks every small-model answer: valid JSON, a non-empty answer, confidence of at least 0.7. One of eight fails."
+      },
+      {
+        "title": "Escalate what fails",
+        "text": "The failed answer is re-asked on the large model. This cascade trades a little latency on escalations for safety."
+      },
+      {
+        "title": "Count the cost",
+        "text": "The small model costs 1/20 as much. Eight small calls plus three large ones: (8 × 0.05 + 3 × 1) ÷ 10 = 34% of all-large spend."
+      },
+      {
+        "title": "Track quality per route",
+        "text": "Log cost and pass rate for every route. If a route’s pass rate drops, tighten the rules or train a learned router on the logs."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"14\" style=\"--d:0s\">Sample: the small model tried on 10 labelled requests</text><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"18\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M14 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><circle cx=\"40\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M36 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"62\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M58 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.25s\"><circle cx=\"84\" cy=\"34\" r=\"9\" class=\"bd-fail\"/><path d=\"M80.5 30.5l7 7M87.5 30.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"106\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M102 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.35s\"><circle cx=\"128\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M124 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"150\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M146 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.45000000000000007s\"><circle cx=\"172\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M168 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.5s\"><circle cx=\"194\" cy=\"34\" r=\"9\" class=\"bd-fail\"/><path d=\"M190.5 30.5l7 7M197.5 30.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.55s\"><circle cx=\"216\" cy=\"34\" r=\"9\" class=\"bd-pass\"/><path d=\"M212 34l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.7s\"><rect class=\"bx soft\" x=\"240\" y=\"23\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"38\" text-anchor=\"middle\">passes 8 of 10</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"bx acc\" d=\"M40 104 L64 128 L40 152 L16 128 Z\"/><text class=\"sb\" x=\"40\" y=\"168\">router</text><text class=\"sb\" x=\"40\" y=\"181\">by intent</text></g><path class=\"ln draw pass\" pathLength=\"1\" d=\"M64 128 C86 128,86 84,106 84\" style=\"--d:0.2s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M64 128 C86 128,86 172,106 172\" style=\"--d:0.3s\"/><g class=\"a \" style=\"--d:0.4s\"><rect class=\"bx \" x=\"106\" y=\"62\" width=\"134\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"173\" y=\"81\">Small model</text><text class=\"sb\" x=\"173\" y=\"96\">$ · FAQ, extraction</text></g><g class=\"a \" style=\"--d:0.5s\"><rect class=\"bx \" x=\"106\" y=\"150\" width=\"134\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"173\" y=\"169\">Large model</text><text class=\"sb\" x=\"173\" y=\"184\">$$$$ · tax, complaints</text></g><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"80\" y=\"98\" style=\"text-anchor:middle;fill:var(--pass)\">8</text></g><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"80\" y=\"166\" style=\"text-anchor:middle;fill:var(--ink-2)\">2</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M240 84L256 84\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"258\" y=\"58\" width=\"94\" height=\"54\" rx=\"7\"/><text class=\"lb\" x=\"305\" y=\"77\">Validator</text><text class=\"sb\" x=\"305\" y=\"92\">valid JSON</text><text class=\"sb\" x=\"305\" y=\"105\">confidence</text></g><g class=\"a\" style=\"--d:0.4s\"><text class=\"tag-t\" x=\"284\" y=\"122\" style=\"text-anchor:middle;fill:var(--pass)\">7 pass</text></g><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t\" x=\"330\" y=\"122\" style=\"text-anchor:middle;fill:var(--fail)\">1 fail</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln fail draw\" pathLength=\"1\" d=\"M330 130 C330 162,306 172,244 172\" marker-end=\"url(#arr)\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.4s\"><text class=\"tag-t\" x=\"306\" y=\"188\" style=\"text-anchor:middle;fill:var(--fail)\">escalate 1</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"84\" y=\"224\" style=\"text-anchor:end;--d:0s\">All on large</text><rect x=\"90\" y=\"214\" width=\"220\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"90\" y=\"214\" width=\"220\" height=\"13\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><text class=\"mono a\" x=\"316\" y=\"224\" style=\"--d:0.3s\">100%</text><text class=\"tl a\" x=\"84\" y=\"246\" style=\"text-anchor:end;--d:0.2s\">Routed</text><rect x=\"90\" y=\"236\" width=\"220\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"90\" y=\"236\" width=\"74.80000000000001\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.3s\"/><text class=\"mono a\" x=\"171\" y=\"246\" style=\"--d:0.5s\">34%</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tag-t\" x=\"173\" y=\"122\" style=\"text-anchor:middle;fill:var(--pass)\">route pass rate 97%</text></g><g class=\"a\" style=\"--d:0.15s\"><text class=\"tag-t\" x=\"173\" y=\"207\" style=\"text-anchor:middle;fill:var(--pass)\">route pass rate 95%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Cuts the price of the bulk of traffic, often by 60–85%",
+      "Small models also answer faster",
+      "Works with any provider through a gateway such as LiteLLM",
+      "Savings scale with volume and need no prompt changes"
+    ],
+    "cons": [
+      "Misrouted hard requests fail on the weak model",
+      "Cascades add latency every time they escalate",
+      "More models means more prompts to test and maintain",
+      "Needs labelled traffic and a reliable validator"
+    ],
+    "avoidWhen": [
+      "Nearly every request is genuinely hard (route everything to the capable model)",
+      "You have no way to check a small-model answer before it reaches the user"
+    ],
+    "tools": [
+      {
+        "name": "LiteLLM",
+        "type": "Open source",
+        "what": "One API for 100+ providers, with fallbacks and budgets",
+        "url": "https://github.com/BerriAI/litellm"
+      },
+      {
+        "name": "RouteLLM",
+        "type": "Open source (LMSYS)",
+        "what": "Trained routers that decide between a strong and a weak model",
+        "url": "https://github.com/lm-sys/RouteLLM"
+      },
+      {
+        "name": "OpenRouter",
+        "type": "Commercial",
+        "what": "Hosted access to many models behind one endpoint",
+        "url": "https://openrouter.ai"
+      },
+      {
+        "name": "Not Diamond",
+        "type": "Commercial",
+        "what": "Learned model routing as a service",
+        "url": "https://www.notdiamond.ai"
+      },
+      {
+        "name": "Portkey",
+        "type": "Commercial, open-source gateway",
+        "what": "Conditional routing, fallbacks and cost tracking",
+        "url": "https://portkey.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A broker's help assistant answers 50,000 questions a day. Four kinds of request arrive, each with a known pass rate on a small and a large model. You decide where each kind goes: straight to the small model, straight to the large one, or a cascade that tries the small model first and re-asks the large model when a validator rejects the answer.",
+    "controls": [
+      "Click Small, Large or Cascade on each request type to route it.",
+      "Drag the slider to set how many bad small-model answers the validator catches.",
+      "Or load a scenario to see a typical setup."
+    ],
+    "outputs": [
+      {
+        "name": "Spend vs all-large",
+        "meaning": "Daily cost as a share of sending everything to the large model ($500 a day)."
+      },
+      {
+        "name": "Success rate",
+        "meaning": "Share of all requests answered correctly, weighted by traffic."
+      },
+      {
+        "name": "Escalated to large",
+        "meaning": "Share of traffic re-asked on the large model after failing the validator. These pay for both calls."
+      },
+      {
+        "name": "Average latency",
+        "meaning": "Mean response time. An escalation pays for the small call and the large one."
+      },
+      {
+        "name": "Per-type chips",
+        "meaning": "Pass rate and relative cost for each request type; red means below 95%."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "All on the large model",
+        "expect": "Every request pays frontier prices: spend 100% ($500 a day), success 98.0%, latency 2.40 s."
+      },
+      {
+        "k": "naive",
+        "name": "All on the small model",
+        "expect": "Spend drops to 5% ($25 a day), but tax questions pass only 60%, so success falls to 89.5%."
+      },
+      {
+        "k": "rules",
+        "name": "Rules by intent",
+        "expect": "FAQs and extraction on small, tax and complaints on large: spend 24% ($120 a day), success 95.9%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "cheap",
+        "text": "Get spend under 20% while success stays at or above 97%.",
+        "hint": "Put every type on Cascade with the validator at 90%."
+      },
+      {
+        "k": "match",
+        "text": "Match the all-large success rate exactly, for no more than 20% of the spend.",
+        "hint": "A cascade matches the large model only if the validator catches every bad answer: set it to 100%."
+      },
+      {
+        "k": "fall",
+        "text": "With all four types on Cascade, weaken the validator until success falls below 95%.",
+        "hint": "Success falls by about 0.85 points for every 10 points of validator catch rate you remove. Try 60%."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LiteLLM",
+        "type": "Open source · proxy or Python SDK",
+        "start": 3,
+        "prod": 3,
+        "best": "One OpenAI-style API over 100+ providers, so a router or cascade can switch models with a string.",
+        "ex": "A proxy that sends FAQ intents to a small model, falls back to a large one on errors and enforces a daily budget per team.",
+        "pros": [
+          "Provider-agnostic, with fallbacks and retries built in",
+          "Spend tracking and budgets in the proxy"
+        ],
+        "cons": [
+          "Routing logic itself is yours to write",
+          "Running the proxy is another service to operate"
+        ],
+        "url": "https://github.com/BerriAI/litellm"
+      },
+      {
+        "n": "RouteLLM",
+        "type": "Open source · LMSYS",
+        "start": 2,
+        "prod": 2,
+        "best": "Trained routers that decide per request whether a strong or a weak model is needed.",
+        "ex": "Calibrate a router threshold so 30% of chat traffic reaches the strong model, then compare quality on your own eval set.",
+        "pros": [
+          "Research-backed routers with a published method",
+          "Drop-in OpenAI-compatible server"
+        ],
+        "cons": [
+          "Routers were trained on general chat, so check them on your traffic",
+          "Two-model setups only"
+        ],
+        "url": "https://github.com/lm-sys/RouteLLM"
+      },
+      {
+        "n": "OpenRouter",
+        "type": "Commercial · hosted gateway",
+        "start": 3,
+        "prod": 2,
+        "best": "Trying many models behind one endpoint and key, with provider fallbacks.",
+        "ex": "Benchmark five small models on 500 labelled FAQs in an afternoon without signing up to five providers.",
+        "pros": [
+          "Fast access to a very wide catalogue",
+          "One bill across providers"
+        ],
+        "cons": [
+          "Another party in the data path",
+          "Routing policy is mostly yours to design"
+        ],
+        "url": "https://openrouter.ai"
+      },
+      {
+        "n": "Not Diamond",
+        "type": "Commercial · routing service",
+        "start": 2,
+        "prod": 2,
+        "best": "A learned router trained on your own evaluation data to pick the best model per prompt.",
+        "ex": "Train a router on 2,000 graded support answers so each new question goes to the cheapest model likely to pass.",
+        "pros": [
+          "Learned routing without building the classifier",
+          "Can optimise for cost, quality or latency"
+        ],
+        "cons": [
+          "Needs labelled outcome data to shine",
+          "External dependency on the request path"
+        ],
+        "url": "https://www.notdiamond.ai"
+      },
+      {
+        "n": "Portkey",
+        "type": "Commercial · open-source gateway",
+        "start": 2,
+        "prod": 3,
+        "best": "A production AI gateway with conditional routing, fallbacks, caching and cost analytics.",
+        "ex": "Route requests by a metadata field such as tenant tier, with automatic fallback when a provider returns errors.",
+        "pros": [
+          "Rich routing rules and observability",
+          "Gateway is open source"
+        ],
+        "cons": [
+          "Many features to configure",
+          "Advanced analytics are in the paid tiers"
+        ],
+        "url": "https://portkey.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype a cascade this week",
+        "tool": "LiteLLM"
+      },
+      {
+        "need": "Learned router from research",
+        "tool": "RouteLLM"
+      },
+      {
+        "need": "Managed gateway in production",
+        "tool": "Portkey or LiteLLM proxy"
+      }
+    ],
+    "goals": [
+      "Explain the difference between a router and a cascade",
+      "Calculate blended cost from traffic shares and relative prices",
+      "Explain why a cascade is only as good as its validator"
+    ]
+  },
+  "practice": {
+    "scenario": "A broker's help assistant gets about 50,000 questions a day. Most are FAQs such as “What are the charges for intraday trades?”, which a small model answers well. Tax and portfolio questions go to the large model, and any small-model answer that fails a validator is re-asked on the large one.",
+    "industries": [
+      {
+        "industry": "Customer support",
+        "use": "FAQs on small models, escalations and complaints on large ones"
+      },
+      {
+        "industry": "Fintech",
+        "use": "Classification and extraction on small models, advisory reasoning on frontier models"
+      },
+      {
+        "industry": "E-commerce search",
+        "use": "Intent detection on a small model, complex comparisons on a large one"
+      }
+    ],
+    "analogy": "A hospital triage desk. A nurse handles routine cases and sends only the complicated ones to the specialist.",
+    "library": {
+      "name": "LiteLLM",
+      "what": "One API for 100+ model providers, so switching or cascading between models is a one-line change. Also adds budgets and fallbacks.",
+      "install": "pip install litellm"
+    },
+    "samples": [
+      {
+        "file": "router.py",
+        "language": "python",
+        "code": "from litellm import completion\n\nSMALL = \"openai/gpt-4o-mini\"                     # swap in your current models\nLARGE = \"anthropic/claude-3-5-sonnet-20241022\"\nHARD = (\"tax\", \"portfolio\", \"compare\", \"why did\")\n\ndef pick(q: str) -> str:\n    return LARGE if len(q) > 400 or any(w in q.lower() for w in HARD) else SMALL\n\ndef ask(model: str, q: str) -> str:\n    out = completion(model=model, messages=[{\"role\": \"user\", \"content\": q}])\n    return out.choices[0].message.content\n\ndef answer(q: str) -> str:\n    model = pick(q)\n    text = ask(model, q)\n    if model == SMALL and not passes_checks(text):   # cascade: escalate on failure\n        text = ask(LARGE, q)\n    return text"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Large model: $10 per 1,000 requests. Small: $0.50. You route 75% to the small model, and 10% of those escalate to the large one. Cost per 1,000 requests, in $?",
+    "answer": "Small: 750 × $0.0005 = $0.375. Escalations: 75 × $0.01 = $0.75. Large direct: 250 × $0.01 = $2.50. Total ≈ $3.63, against $10 before.",
+    "expected": {
+      "value": 3.625,
+      "tolerance": 0.02,
+      "label": "$ per 1,000 ="
+    },
+    "interview": [
+      {
+        "question": "How do you decide which requests can go to a small model?",
+        "answer": "Label a sample of real traffic, run both models, and check which requests the small model passes on your evals. Start with rules on task type and length, then train a router on outcome data, with validators so failures escalate."
+      },
+      {
+        "question": "What's the difference between a router and a cascade?",
+        "answer": "A router predicts up front and sends each request to one model. A cascade tries the cheap model first and escalates on failure or low confidence. Cascades need a reliable check and add latency on escalations; routers need a good predictor."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Routing for cost without measuring quality per route",
+        "fix": "Track success rate per route and per request type"
+      },
+      {
+        "mistake": "Escalating without a validator",
+        "fix": "Escalate on schema checks, confidence or a judge score"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rt01",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A broker’s assistant answers 50,000 questions a day. 85% are FAQs about brokerage charges and account opening, and every one runs on a frontier model. What is the biggest single saving?",
+      "options": [
+        "Batch all questions overnight",
+        "Route FAQs to a small model and escalate failures",
+        "Summarize each conversation before answering",
+        "Raise max_tokens so answers are complete"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Most traffic is easy, so moving it to a small model cuts the price of most tokens. Escalation protects the hard cases."
+    },
+    {
+      "id": "rt02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A small model costs 1/25 of the large one per request. You route 80% of traffic to it with no escalations. What share of the all-large spend remains?",
+      "options": [
+        "20.0%",
+        "24.0%",
+        "23.2%",
+        "32.0%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.8 × 0.04 + 0.2 × 1 = 0.032 + 0.2 = 0.232, so 23.2% of the original spend."
+    },
+    {
+      "id": "rt03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Every request goes to a small model at $0.001 first; 15% fail validation and are re-asked on a large model at $0.02. What do 1,000 requests cost?",
+      "options": [
+        "$3.00",
+        "$4.15",
+        "$20.00",
+        "$4.00"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "All 1,000 pay the small price ($1.00) and 150 escalations pay the large price ($3.00): $4.00, against $20.00 on the large model alone."
+    },
+    {
+      "id": "rt04",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "A claims assistant runs a cascade. Which signals are sensible triggers for escalating to the large model? Select all that apply.",
+      "options": [
+        "The reply fails JSON schema validation",
+        "The model’s confidence field is below the threshold",
+        "A judge model scores the answer below the bar",
+        "The reply arrived in under one second"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Escalation should depend on evidence that the answer is bad. Response speed says nothing about correctness."
+    },
+    {
+      "id": "rt05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "After launching a router, cost fell 65%, but errors on plan-change requests rose fourfold. What should you do first?",
+      "options": [
+        "Measure pass rate per route and per intent",
+        "Send everything back to the large model",
+        "Lower max_tokens on the small model",
+        "Turn on prompt caching"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Per-route quality shows which intent is being misrouted, so you can fix that rule instead of giving up the savings."
+    },
+    {
+      "id": "rt06",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking cascade tries a small model (0.5 s) on every request and escalates 30% to a large model (3 s). What is the average latency?",
+      "options": [
+        "1.25 s",
+        "1.75 s",
+        "1.40 s",
+        "3.00 s"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Every request pays 0.5 s, and 30% also pay 3 s: 0.5 + 0.3 × 3 = 1.4 s. Escalations pay for both calls."
+    },
+    {
+      "id": "rt07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "You want to compare five small models on 500 labelled tickets this afternoon, behind one API key, before building a router. Which tool fits best?",
+      "options": [
+        "Celery",
+        "OpenRouter",
+        "LLMLingua",
+        "tiktoken"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "OpenRouter gives hosted access to many models through one endpoint, which suits quick comparisons."
+    },
+    {
+      "id": "rt08",
+      "kind": "single",
+      "industry": "Healthcare admin",
+      "question": "Which task is the strongest candidate for a small model?",
+      "options": [
+        "Classifying appointment requests into 12 departments",
+        "Summarizing multi-specialty discharge notes for physicians",
+        "Drafting appeals for denied claims with legal reasoning",
+        "Explaining conflicting lab results to a patient"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Short classification with a fixed label set is easy to validate and usually within a small model’s reach."
+    },
+    {
+      "id": "rt09",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Before training a learned router for a contract-review assistant, what do you need? Select all that apply.",
+      "options": [
+        "Outcome labels showing which model passed each request",
+        "A representative sample of real traffic",
+        "An eval that scores each model’s answers",
+        "A batch API account"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A learned router is trained on real requests labelled with which model succeeded. A batch API is unrelated."
+    },
+    {
+      "id": "rt10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A router sends messages over 400 characters to the large model. The 60-character question “why was my UPI refund of INR 18,450 reversed twice?” goes to the small model and fails. What does this show?",
+      "options": [
+        "The small model needs a larger max_tokens",
+        "Length is a weak proxy for difficulty; add intent rules or a validator",
+        "UPI questions should be batched",
+        "Prompt caching broke the routing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Short questions can be hard. Route on intent as well as length, and let a validator catch the misroutes."
+    },
+    {
+      "id": "rt11",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "200,000 grading requests a day cost $0.004 each on the large model. You route 90% to a small model at $0.0002, and 5% of those escalate. What is the new daily cost?",
+      "options": [
+        "$116",
+        "$156",
+        "$800",
+        "$152"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Small: 180,000 × $0.0002 = $36. Escalations: 9,000 × $0.004 = $36. Direct large: 20,000 × $0.004 = $80. Total $152, against $800."
+    },
+    {
+      "id": "rt12",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which are genuine risks of a small-first cascade for shipment-status questions? Select all that apply.",
+      "options": [
+        "Extra latency on escalated requests",
+        "Wrong answers when the validator misses a bad reply",
+        "Paying for two calls on every escalated request",
+        "Prompt caching stops working on the large model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Escalations are slower and cost two calls, and missed bad answers reach customers. Caching is unaffected."
+    },
+    {
+      "id": "rt13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An underwriting agent plans a task, then runs extraction and formatting steps. How should you split models?",
+      "options": [
+        "Plan on the small model, format on the large one",
+        "Use the large model only for the final message",
+        "Plan on the large model; run extraction and formatting on a small one",
+        "Alternate models on every step"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Planning benefits from the strongest model; well-defined sub-steps such as extraction and formatting rarely need it."
+    },
+    {
+      "id": "rt14",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "For one request type the small model passes 90% and the large 98%; assume the large model gets right everything the small one does. The validator catches 80% of bad small-model answers. What is the cascade’s success rate?",
+      "options": [
+        "90.0%",
+        "97.2%",
+        "98.0%",
+        "96.4%"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Caught failures are fixed by the large model: 0.90 + 0.80 × (0.98 − 0.90) = 0.90 + 0.064 = 96.4%."
+    },
+    {
+      "id": "rt15",
+      "kind": "single",
+      "industry": "Retail banking",
+      "question": "Two routing setups are proposed. Which metric compares them most fairly?",
+      "options": [
+        "Total tokens per day",
+        "Average latency alone",
+        "Cost per task at an equal success rate",
+        "Number of models in use"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Savings only count if quality holds, so compare cost per task at the same success rate."
+    },
+    {
+      "id": "rt16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "You need provider fallbacks and per-team spend limits in a self-hosted proxy that every app calls. Which tool fits?",
+      "options": [
+        "LiteLLM proxy",
+        "GPTCache",
+        "Letta",
+        "Vertex AI batch prediction"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "LiteLLM’s proxy offers one API across providers with fallbacks, budgets and spend tracking."
+    },
+    {
+      "id": "rt17",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "What should you log for every routed request to monitor a patient-FAQ router? Select all that apply.",
+      "options": [
+        "The route taken",
+        "Whether the validator passed or escalated",
+        "The cost of the request",
+        "The patient’s full medical record in plain text"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Route, validator outcome and cost let you track quality and savings per route. Logging full records adds privacy risk for no benefit."
+    },
+    {
+      "id": "rt18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A routing classifier costs 3% of a large-model call and sends 60% of traffic to a small model at 1/20 of the large price. What share of the all-large spend remains?",
+      "options": [
+        "43%",
+        "49%",
+        "60%",
+        "46%"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Classifier 0.03, plus small 0.6 × 0.05 = 0.03, plus large 0.4 × 1 = 0.4: 0.46 in total, so 46%."
+    },
+    {
+      "id": "rt19",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which properties make a request type a good candidate for the small model? Select all that apply.",
+      "options": [
+        "The small model passes it at least 95% of the time on labelled traffic",
+        "Its answers can be validated cheaply",
+        "It is high volume",
+        "It requires multi-step legal reasoning"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "High volume, a proven pass rate and a cheap check are what make routing pay off safely."
+    },
+    {
+      "id": "rt20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Small-model answers must follow a fixed JSON schema, and 6% fail it. What is the best validator?",
+      "options": [
+        "Ask the small model whether it is sure",
+        "Parse and validate against the schema; escalate on failure",
+        "Escalate a random 6% of requests",
+        "Raise the temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A deterministic schema check is cheap and exact, and a failure is a clear signal to escalate."
+    },
+    {
+      "id": "tr01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Four steps score 97%, 97.5%, 94% and 96%. Errors compound. End to end?",
+      "options": [
+        "96.1%",
+        "94%",
+        "85.3%",
+        "90%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.97 × 0.975 × 0.94 × 0.96 ≈ 0.853."
+    },
+    {
+      "id": "tr06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Classification scores 97% on a small model and 98.5% on a large one, and the pipeline passes either way. What should you pick?",
+      "options": [
+        "Large, to be safe",
+        "Small, since it meets the bar at a fraction of the cost",
+        "Neither",
+        "Both, and average"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Pay only where a step needs it."
+    },
+    {
+      "id": "tr09",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Why can a small model on an early step be a false saving? Select all that apply.",
+      "options": [
+        "Its errors become inputs for later steps",
+        "Later steps usually cannot recover from them",
+        "Small models cost more",
+        "Early steps are ignored"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Errors compound downstream."
+    },
+    {
+      "id": "tr16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A plan averages step accuracies to 96% and declares success. What is wrong?",
+      "options": [
+        "Nothing",
+        "Averages ignore compounding; the product is about 85%",
+        "It should use the maximum",
+        "It should use the minimum only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Multiply, don’t average."
+    }
+  ]
+}

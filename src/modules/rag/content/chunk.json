@@ -1,0 +1,854 @@
+{
+  "id": "chunk",
+  "moduleSlug": "rag",
+  "name": "Chunking Strategies",
+  "shortName": "Chunking",
+  "question": "Does each retrieved piece hold the whole answer?",
+  "summary": "Splits parsed documents into the pieces that are embedded and retrieved. Size and boundaries decide whether a retrieved chunk contains the full answer: too small and a rule loses its exception, too large and the embedding blurs and the prompt fills with noise. Common strategies are fixed-size with overlap, recursive splitting by paragraph and sentence, structure-aware splitting by heading or clause, semantic splitting where the topic shifts, and small-to-big retrieval that searches small chunks but returns their parent section.",
+  "useCases": [
+    "Long, structured documents: policies, contracts, manuals, regulations",
+    "Answers that depend on a condition or exception",
+    "Corpora where a few chunk types answer most questions"
+  ],
+  "keyFacts": {
+    "label": "Strategies",
+    "items": [
+      {
+        "term": "Fixed size + overlap",
+        "detail": "simple baseline; cuts through sentences and clauses"
+      },
+      {
+        "term": "Recursive",
+        "detail": "split on paragraphs, then sentences, until under the size"
+      },
+      {
+        "term": "Structure-aware",
+        "detail": "split on headings, clauses or slides"
+      },
+      {
+        "term": "Semantic",
+        "detail": "split where the embedding similarity drops"
+      },
+      {
+        "term": "Small-to-big",
+        "detail": "search small chunks, return the parent section"
+      },
+      {
+        "term": "Contextual headers",
+        "detail": "prepend the title and section path to each chunk"
+      }
+    ]
+  },
+  "steps": [
+    "Split by the document’s own structure, then recursively to about 300–500 tokens",
+    "Overlap by 10–15% so sentences at a boundary appear in both chunks",
+    "Prepend the document title and section path to every chunk",
+    "Evaluate recall on real questions for each strategy before choosing"
+  ],
+  "pitfalls": [
+    "Tiny chunks that separate a rule from its exception",
+    "Huge chunks that waste context and dilute the embedding",
+    "Every change of chunking means re-embedding the whole corpus"
+  ],
+  "tools": [
+    "LangChain text splitters",
+    "LlamaIndex node parsers",
+    "Docling HybridChunker",
+    "Unstructured chunk_by_title",
+    "Chonkie"
+  ],
+  "remember": "Cut along the document’s structure and carry its context.",
+  "caption": "Illustrative: Pragati Insurance, a fictional insurer, answers 120 questions about its policy wordings.",
+  "comparison": {
+    "scope": "Ingestion, before embedding",
+    "cost": 1,
+    "needs": "Long, structured documents",
+    "best": "Answers split across chunks"
+  },
+  "diagram": {
+    "file": "diagrams/chunk.svg"
+  },
+  "lesson": {
+    "file": "chunk_policy.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from langchain_text_splitters import (MarkdownHeaderTextSplitter,",
+        "steps": []
+      },
+      {
+        "text": "                                      RecursiveCharacterTextSplitter)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "headers = [(\"#\", \"doc\"), (\"##\", \"section\"), (\"###\", \"clause\")]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "clauses = MarkdownHeaderTextSplitter(headers_to_split_on=headers)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "sections = clauses.split_text(policy_md)          # one piece per clause",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    encoding_name=\"cl100k_base\", chunk_size=400, chunk_overlap=50,",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "    separators=[\"\\n\\n\", \"\\n\", \". \", \" \"])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "chunks = splitter.split_documents(sections)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for c in chunks:",
+        "steps": []
+      },
+      {
+        "text": "    path = \" > \".join(c.metadata.get(k, \"\") for k in (\"doc\", \"section\", \"clause\"))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    c.page_content = f\"[{path}]\\n{c.page_content}\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    c.metadata[\"parent\"] = path            # the whole clause",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "store.add_documents(chunks)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "hits = store.similarity_search(question, k=8)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "context = list(dict.fromkeys(clause_text[h.metadata[\"parent\"]] for h in hits))[:3]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for name, cfg in STRATEGIES.items():",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(name, recall_at_k(cfg, eval_questions, k=5), tokens_per_answer(cfg))",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Split along the document’s own structure",
+        "text": "Policy wordings are written as sections and clauses. Split on those headings first, so a clause starts and ends where its author meant."
+      },
+      {
+        "title": "Split long clauses recursively",
+        "text": "A clause longer than about 400 tokens is split on paragraphs, then lines, then sentences, never mid-word. Most clauses stay whole."
+      },
+      {
+        "title": "Overlap the edges",
+        "text": "50 tokens of overlap mean a sentence cut at a boundary appears in both neighbours, so “except after 36 months” is not orphaned."
+      },
+      {
+        "title": "Prepend the section path",
+        "text": "“[Policy › Exclusions › 4.2]” goes at the top of the chunk. A question about exclusions now matches a chunk whose text never uses that word."
+      },
+      {
+        "title": "Search small, return the clause",
+        "text": "The search matches small, precise chunks; the prompt receives the whole parent clause, deduplicated, so the rule and its exception arrive together."
+      },
+      {
+        "title": "Measure each strategy",
+        "text": "Compare recall at 5 and tokens per answer on real questions. Any change of chunking means re-embedding the corpus, so decide on evidence."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"24\" text-anchor=\"middle\"># Policy</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"122\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"24\" text-anchor=\"middle\">## Exclusions</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"24\" text-anchor=\"middle\">### 4.2</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"56\" text-anchor=\"middle\">clause 4.2: 620 tokens → 2 chunks of ≤ 400</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"200\" height=\"24\" rx=\"4\"/><rect class=\"bx soft\" x=\"152\" y=\"100\" width=\"200\" height=\"24\" rx=\"4\"/><rect x=\"152\" y=\"72\" width=\"56\" height=\"52\" style=\"fill:var(--warn);opacity:.18\"/></g><text class=\"tl l a\" x=\"214\" y=\"89\" style=\"--d:0.2s\">50-token overlap</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"134\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"150\" text-anchor=\"middle\">[Policy › Exclusions › 4.2] pre-existing …</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"166\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"182\" text-anchor=\"middle\">match: small chunk</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 178L192 178\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"194\" y=\"166\" width=\"158\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"273\" y=\"182\" text-anchor=\"middle\">send: whole 4.2</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"202\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"218\" text-anchor=\"middle\">recall@5 0.67 → 0.90 · 5,120 → 2,100 tokens</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Keeps a rule and its exception in the same retrieved text",
+      "Section paths let chunks match questions in the document’s own terms",
+      "Small-to-big gives precise search and complete context",
+      "Cheap: no model calls at query time"
+    ],
+    "cons": [
+      "No single size suits every document or question",
+      "Every change means re-embedding the corpus",
+      "Structure-aware splitting depends on good parsing",
+      "Overlap and parents add storage and tokens"
+    ],
+    "avoidWhen": [
+      "Documents are short enough to embed whole, such as FAQs and product cards",
+      "You are tuning chunking before parsing is fixed (fix the text first)"
+    ],
+    "tools": [
+      {
+        "name": "LangChain text splitters",
+        "type": "Open source",
+        "what": "Recursive, Markdown-header and token-based splitters",
+        "url": "https://docs.langchain.com/oss/python/integrations/splitters"
+      },
+      {
+        "name": "LlamaIndex node parsers",
+        "type": "Open source",
+        "what": "Sentence, semantic and hierarchical (small-to-big) parsers",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "Docling HybridChunker",
+        "type": "Open source (IBM)",
+        "what": "Structure-aware chunks that respect token limits",
+        "url": "https://github.com/docling-project/docling"
+      },
+      {
+        "name": "Unstructured",
+        "type": "Open source",
+        "what": "chunk_by_title groups elements under their headings",
+        "url": "https://github.com/Unstructured-IO/unstructured"
+      },
+      {
+        "name": "Chonkie",
+        "type": "Open source",
+        "what": "Lightweight token, sentence and semantic chunkers",
+        "url": "https://github.com/chonkie-inc/chonkie"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Pragati Insurance, a fictional insurer, has 1.2 million tokens of policy wordings. 120 test questions: 50 short facts, 40 rules whose exception sits elsewhere in the same clause, and 30 that name a section the clause text never repeats. Five chunks reach the prompt.",
+    "controls": [
+      "Choose the strategy: fixed size, recursive or structure-aware.",
+      "Drag the chunk size from 128 to 1,024 tokens.",
+      "Switch on overlap, section paths and small-to-big retrieval."
+    ],
+    "outputs": [
+      {
+        "name": "Recall at 5",
+        "meaning": "Questions whose full answer is inside the retrieved text, overall and by question type."
+      },
+      {
+        "name": "Tokens sent per answer",
+        "meaning": "What the prompt carries: 5 chunks, or the deduplicated parent clauses."
+      },
+      {
+        "name": "Chunks in the index",
+        "meaning": "How many pieces are embedded."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Fixed 1,024 tokens",
+        "expect": "About 67% recall for 5,120 tokens per answer: facts rank lower and exceptions are cut off."
+      },
+      {
+        "k": "tiny",
+        "name": "Recursive 128 tokens",
+        "expect": "About 65% recall: facts are found, but rules lose their exceptions."
+      },
+      {
+        "k": "big",
+        "name": "Clauses at 512, with headers",
+        "expect": "About 88% recall, but 2,560 tokens per answer."
+      },
+      {
+        "k": "tuned",
+        "name": "Clauses at 256, small-to-big",
+        "expect": "90% recall for 2,100 tokens per answer."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Reach at least 85% recall while sending no more than 2,500 tokens per answer.",
+        "hint": "Small chunks for search, whole clauses for the prompt, with section paths."
+      },
+      {
+        "k": "tiny",
+        "text": "Show how tiny chunks separate rules from their exceptions.",
+        "hint": "128 tokens, without small-to-big."
+      },
+      {
+        "k": "headers",
+        "text": "Get the questions that name a section above 85% recall.",
+        "hint": "Prepend the section path to every chunk."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangChain text splitters",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Recursive, token-based and Markdown-header splitters.",
+        "ex": "Split by headings, then recursively to 400 tokens with 50 tokens of overlap.",
+        "pros": [
+          "Simple and widely used",
+          "Many splitter types"
+        ],
+        "cons": [
+          "Structure awareness depends on your input format",
+          "Easy to leave at defaults"
+        ],
+        "url": "https://docs.langchain.com/oss/python/integrations/splitters"
+      },
+      {
+        "n": "LlamaIndex node parsers",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Sentence, semantic and hierarchical parsers, with auto-merging retrieval for small-to-big.",
+        "ex": "HierarchicalNodeParser with 2,048, 512 and 128-token levels and an auto-merging retriever.",
+        "pros": [
+          "Small-to-big built in",
+          "Semantic splitting available"
+        ],
+        "cons": [
+          "Framework-specific objects",
+          "More settings to tune"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "Docling HybridChunker",
+        "type": "Open source · IBM",
+        "start": 2,
+        "prod": 3,
+        "best": "Chunks that follow the parsed document structure while respecting a token limit.",
+        "ex": "Chunk a converted policy so tables and list items are never split.",
+        "pros": [
+          "Uses real document structure",
+          "Token-aware"
+        ],
+        "cons": [
+          "Requires Docling parsing first"
+        ],
+        "url": "https://github.com/docling-project/docling"
+      },
+      {
+        "n": "Unstructured chunk_by_title",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Groups parsed elements under their section titles.",
+        "ex": "Each chunk holds one section of a manual, split further if it is too long.",
+        "pros": [
+          "Works with Unstructured elements",
+          "Keeps sections together"
+        ],
+        "cons": [
+          "Titles must be detected correctly"
+        ],
+        "url": "https://github.com/Unstructured-IO/unstructured"
+      },
+      {
+        "n": "Chonkie",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Lightweight, fast chunkers: token, sentence, recursive and semantic.",
+        "ex": "Semantic chunking of long transcripts where there are no headings.",
+        "pros": [
+          "Small and fast",
+          "Several strategies"
+        ],
+        "cons": [
+          "Younger project",
+          "Fewer integrations"
+        ],
+        "url": "https://github.com/chonkie-inc/chonkie"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Structured documents with headings",
+        "tool": "LangChain header splitter or Docling HybridChunker"
+      },
+      {
+        "need": "Small-to-big retrieval",
+        "tool": "LlamaIndex hierarchical parser"
+      },
+      {
+        "need": "Transcripts with no structure",
+        "tool": "Semantic chunking"
+      }
+    ],
+    "goals": [
+      "Choose a strategy and size by measuring recall and tokens",
+      "Explain why section paths and overlap help",
+      "Use small-to-big retrieval for rules with exceptions"
+    ]
+  },
+  "practice": {
+    "scenario": "Pragati Insurance, a fictional insurer, answers agents' questions about its policy wordings. It splits each document by section and clause, then recursively to about 400 tokens with a 50-token overlap, prepends the section path to each chunk, and retrieves small chunks but sends the whole clause to the model, so rules arrive with their exceptions.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Policy wordings, where exclusions and waiting periods sit inside clauses"
+      },
+      {
+        "industry": "Legal",
+        "use": "Contracts split by clause and schedule"
+      },
+      {
+        "industry": "Software",
+        "use": "Documentation split by heading, with code blocks kept whole"
+      }
+    ],
+    "analogy": "Cutting a newspaper into clippings. Cut along the articles and write the section name on each clipping, not every 10 centimetres straight across the page.",
+    "library": {
+      "name": "LangChain text splitters",
+      "what": "Recursive, token-aware and Markdown-header splitters; the most common starting point for chunking.",
+      "install": "pip install langchain-text-splitters tiktoken"
+    },
+    "note": "Chunk sizes here are in tokens of the cl100k_base encoding; match the tokenizer of your embedding model where it matters.",
+    "samples": [
+      {
+        "file": "chunk.py",
+        "language": "python",
+        "code": "from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter\n\npolicy_md = open(\"health_policy.md\").read()\nheaders = [(\"#\", \"doc\"), (\"##\", \"section\"), (\"###\", \"clause\")]\nsections = MarkdownHeaderTextSplitter(headers_to_split_on=headers).split_text(policy_md)\n\nsplitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(\n    encoding_name=\"cl100k_base\", chunk_size=400, chunk_overlap=50)\nchunks = splitter.split_documents(sections)\n\nfor c in chunks:\n    path = \" > \".join(v for k, v in c.metadata.items() if k in (\"doc\", \"section\", \"clause\"))\n    c.page_content = f\"[{path}]\\n{c.page_content}\"\n    c.metadata[\"parent\"] = path\n\nprint(len(chunks), \"chunks\")\nprint(chunks[0].page_content[:200])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A corpus of 900,000 tokens is chunked at 300 tokens with no overlap. How many chunks, in thousands?",
+    "answer": "900,000 ÷ 300 = 3,000 chunks, or 3 thousand. With 20% overlap it would be about 3,600.",
+    "expected": {
+      "value": 3,
+      "tolerance": 0.05,
+      "label": "thousand chunks ="
+    },
+    "interview": [
+      {
+        "question": "How do you choose chunk size?",
+        "answer": "Start from the document structure and a few hundred tokens, then measure recall and tokens per answer on real questions. Small chunks match precise facts; larger ones keep conditions together. Small-to-big retrieval gets both: search small, return the parent section."
+      },
+      {
+        "question": "What is contextual chunking?",
+        "answer": "Adding context to each chunk before embedding: at minimum the title and section path, or an LLM-written sentence situating the chunk in its document. It helps chunks match questions phrased in the document's own terms, at a one-off ingestion cost."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Picking a chunk size once and never measuring it",
+        "fix": "Compare strategies on recall and tokens with real questions"
+      },
+      {
+        "mistake": "Cutting fixed-size chunks through clauses and tables",
+        "fix": "Split along headings, clauses and rows"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ch01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A clause says “pre-existing diseases are excluded” and, 700 tokens later, “except after 36 months”. With 400-token fixed chunks, what happens?",
+      "options": [
+        "Both sentences are always retrieved together",
+        "The exception may be in another chunk and missed",
+        "Chunking does not affect this",
+        "The embedding merges them"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Fixed cuts can separate a rule from its exception."
+    },
+    {
+      "id": "ch02",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What does a recursive character splitter do?",
+      "options": [
+        "Splits at a fixed character count",
+        "Tries paragraphs, then lines, then sentences, then words, until pieces fit",
+        "Splits by embedding similarity",
+        "Merges small documents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It uses the largest natural separator that keeps pieces under the size."
+    },
+    {
+      "id": "ch03",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A 1.2 million-token corpus is chunked at 400 tokens with 15% overlap. About how many chunks?",
+      "options": [
+        "3,000",
+        "3,450",
+        "1,200",
+        "4,800"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,200,000 ÷ 400 = 3,000, × 1.15 ≈ 3,450."
+    },
+    {
+      "id": "ch04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why prepend “[Policy › Exclusions › 4.2]” to a chunk?",
+      "options": [
+        "It is required by vector databases",
+        "The section path becomes part of the embedded text, so section-level questions match",
+        "It reduces tokens",
+        "It improves OCR"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Chunks often never repeat their section name; the path supplies it."
+    },
+    {
+      "id": "ch05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is small-to-big retrieval?",
+      "options": [
+        "Retrieving small documents first",
+        "Searching small chunks but sending their parent section to the model",
+        "Using a small model then a big one",
+        "Compressing chunks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Precise matching with complete context."
+    },
+    {
+      "id": "ch06",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are symptoms of chunks that are too large? Select all that apply.",
+      "options": [
+        "Short facts rank lower because the embedding is diluted",
+        "Prompts carry many irrelevant tokens",
+        "Rules lose their exceptions",
+        "Higher cost per answer"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Losing exceptions is a symptom of chunks that are too small or badly cut."
+    },
+    {
+      "id": "ch07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "k = 5 chunks of 512 tokens reach the prompt. How many tokens is that?",
+      "options": [
+        "512",
+        "2,560",
+        "5,120",
+        "1,024"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "5 × 512 = 2,560 tokens."
+    },
+    {
+      "id": "ch08",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "You change chunk size from 512 to 256 tokens in production. What must happen?",
+      "options": [
+        "Nothing",
+        "Re-embed the whole corpus",
+        "Only new documents use the new size",
+        "Retrain the re-ranker"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Chunks are the embedded unit; changing them means re-embedding."
+    },
+    {
+      "id": "ch09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Semantic chunking splits where…",
+      "options": [
+        "a fixed number of tokens is reached",
+        "the embedding similarity between neighbouring sentences drops",
+        "a heading appears",
+        "a table begins"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It places boundaries at topic shifts."
+    },
+    {
+      "id": "ch10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which should never be split across chunks? Select all that apply.",
+      "options": [
+        "A table row",
+        "A code block",
+        "A single sentence",
+        "A 50-page document"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Rows, code blocks and sentences lose meaning when cut; long documents must be split."
+    },
+    {
+      "id": "ch11",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Search returns three small chunks from the same clause. What should reach the prompt with small-to-big?",
+      "options": [
+        "All three chunks and the clause",
+        "The clause once",
+        "Only the first chunk",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deduplicate parents to keep prompts lean."
+    },
+    {
+      "id": "ch12",
+      "kind": "single",
+      "industry": "Software",
+      "question": "Which strategy suits a transcript with no headings?",
+      "options": [
+        "Structure-aware by heading",
+        "Semantic or recursive chunking",
+        "Chunk per page",
+        "One chunk per file"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without structure to follow, split by meaning or by natural separators."
+    },
+    {
+      "id": "ch13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Recall is 90% at 256-token chunks with small-to-big, using 2,100 tokens per answer. At 512 tokens without it, recall is 88% for 2,560 tokens. Which is better?",
+      "options": [
+        "512 without small-to-big",
+        "256 with small-to-big: higher recall, fewer tokens",
+        "They are the same",
+        "Neither; use 1,024"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Better on both measures."
+    },
+    {
+      "id": "ch14",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Why add 10–15% overlap between chunks?",
+      "options": [
+        "To make chunks larger",
+        "So sentences at a boundary appear whole in at least one chunk",
+        "To speed up search",
+        "To reduce storage"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Overlap costs a little storage and prevents orphaned sentences."
+    },
+    {
+      "id": "ch15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Product cards are 80 tokens each. How should they be chunked?",
+      "options": [
+        "Split each into 20-token pieces",
+        "Keep each card whole as one chunk",
+        "Merge 50 cards per chunk",
+        "Use semantic chunking"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Short, self-contained items are natural chunks."
+    },
+    {
+      "id": "ch16",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What should you compare when choosing a chunking strategy? Select all that apply.",
+      "options": [
+        "Recall at k on real questions",
+        "Tokens sent per answer",
+        "Number of chunks and re-embedding cost",
+        "The number of headings in the documents"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Measure outcomes and costs; heading counts are an input, not a result."
+    },
+    {
+      "id": "ch17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Anthropic’s contextual retrieval adds what to each chunk before embedding?",
+      "options": [
+        "A random ID",
+        "A short model-written note situating the chunk in its document",
+        "The whole document",
+        "A summary of all documents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The context note helps chunks match questions phrased in the document’s terms."
+    },
+    {
+      "id": "ch18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "At 128-token chunks, questions about rules with exceptions get 40% recall. What is the best fix?",
+      "options": [
+        "Smaller chunks",
+        "Small-to-big retrieval or clause-level chunks",
+        "A bigger LLM",
+        "Lower top-k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The whole clause must reach the model."
+    },
+    {
+      "id": "ch19",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A 900,000-token corpus is chunked at 300 tokens with no overlap. How many chunks?",
+      "options": [
+        "300",
+        "3,000",
+        "9,000",
+        "30,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "900,000 ÷ 300 = 3,000."
+    },
+    {
+      "id": "ch20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A guideline’s dosage table is split between two chunks mid-row. What should the chunker do?",
+      "options": [
+        "Nothing",
+        "Keep table rows intact, splitting only between rows",
+        "Delete the table",
+        "Convert it to an image"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Split tables only at row boundaries and repeat the header."
+    }
+  ]
+}

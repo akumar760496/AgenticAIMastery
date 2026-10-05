@@ -1,0 +1,863 @@
+{
+  "id": "toolsearch",
+  "moduleSlug": "tool-use",
+  "name": "Tool Search and Large Tool Sets",
+  "shortName": "Tool search",
+  "question": "How does the agent find the right tool among hundreds?",
+  "summary": "Loading every tool definition into every prompt stops working past a few dozen tools: the definitions eat the context and similar tools blur together. Instead, keep a handful of frequently used tools loaded, mark the rest as deferred, and give the model a search tool. When it needs a capability it searches, the matching definitions are loaded, and it calls the one it needs. Anthropic’s API offers regex and BM25 tool search, and you can plug in your own, such as embedding search.",
+  "useCases": [
+    "Agents connected to several MCP servers with hundreds of tools",
+    "Tool definitions that take more than about 10,000 tokens a turn",
+    "A tool library that grows every month"
+  ],
+  "keyFacts": {
+    "label": "Parts",
+    "items": [
+      {
+        "term": "Deferred tools",
+        "detail": "sent with every request but hidden from the model until a search finds them (defer_loading)"
+      },
+      {
+        "term": "Always-loaded set",
+        "detail": "the 3–5 most used tools stay visible, so common tasks skip the search"
+      },
+      {
+        "term": "Search tool",
+        "detail": "regex or BM25 over names and descriptions, or your own embedding search"
+      },
+      {
+        "term": "Search results",
+        "detail": "a few tool references per search, expanded into full definitions"
+      },
+      {
+        "term": "Descriptions",
+        "detail": "they are the search index: clear names and the words users actually say"
+      },
+      {
+        "term": "Measure",
+        "detail": "right-tool rate, searches that find nothing, tokens per turn and the extra step"
+      }
+    ]
+  },
+  "steps": [
+    "Measure definition tokens per turn and the right-tool rate on a task set",
+    "Keep the most-used tools loaded and defer the rest",
+    "Add a search tool, and rewrite names and descriptions so the right words find each tool",
+    "Measure again, and log every search that found nothing useful"
+  ],
+  "pitfalls": [
+    "A tool with a vague name and description is never found, so it is never used",
+    "Deferring everything adds a search step to even the most common tasks",
+    "Near-duplicate tools from different servers still confuse the model once found"
+  ],
+  "tools": [
+    "Anthropic tool search",
+    "Custom tool search",
+    "Claude Code MCP tool search",
+    "LangGraph BigTool",
+    "MCP Inspector"
+  ],
+  "remember": "Load a few, search for the rest. Descriptions are the index.",
+  "caption": "Illustrative: a back-office agent at Nivesh Setu, a fictional wealth platform, with 240 tools across 6 MCP servers.",
+  "comparison": {
+    "scope": "Which tools the model sees each turn",
+    "cost": 2,
+    "needs": "Medium: a search tool and good descriptions",
+    "best": "Tools that are never found"
+  },
+  "diagram": {
+    "file": "diagrams/toolsearch.svg"
+  },
+  "lesson": {
+    "file": "nivesh_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ALL_TOOLS = load_mcp_tool_definitions()   # 240 tools from 6 MCP servers",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "KEEP = {\"get_client\", \"get_holdings\", \"create_ticket\", \"send_message\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "tools = [{\"type\": \"tool_search_tool_bm25_20251119\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "          \"name\": \"tool_search_tool_bm25\"}]      # never deferred",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "tools += [{**t, \"defer_loading\": t[\"name\"] not in KEEP}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "          for t in ALL_TOOLS]                    # all still sent",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "r = client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "    model=\"claude-sonnet-4-5\", max_tokens=1024, tools=tools,",
+        "steps": []
+      },
+      {
+        "text": "    messages=[{\"role\": \"user\", \"content\":",
+        "steps": []
+      },
+      {
+        "text": "               \"Client NS-2210 wants to stop her SIP from next month.\"}])",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for block in r.content:",
+        "steps": []
+      },
+      {
+        "text": "    if block.type == \"server_tool_use\":",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        print(\"searched:\", block.input)       # e.g. {\"query\": \"stop SIP mandate\"}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    elif block.type == \"tool_search_tool_result\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        print(\"found:\", [t.tool_name for t in block.content.tool_references])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    elif block.type == \"tool_use\":",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        print(\"calls:\", block.name, block.input)  # run it like any tool",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Start from the whole library",
+        "text": "Six MCP servers bring 240 tools. Loaded together, their definitions take about 43,000 tokens on every call, and past roughly 30 to 50 tools the model starts picking the wrong one."
+      },
+      {
+        "title": "Keep a few, defer the rest",
+        "text": "The four tools used in most tasks stay loaded. Every other tool is marked defer_loading. They are still sent with each request, because the API needs them to search, but the model does not see them yet."
+      },
+      {
+        "title": "Add a search tool",
+        "text": "The BM25 search tool is added once and never deferred. The model now knows it can look for a capability instead of scanning a huge list."
+      },
+      {
+        "title": "The model searches",
+        "text": "Asked to stop a SIP, the model sees no suitable tool among the four, so it searches: “stop SIP mandate”. That search is one extra step, which is why common tools stay loaded."
+      },
+      {
+        "title": "Matching tools are loaded",
+        "text": "The search returns references to up to 5 matching tools. The API expands them into full definitions, so only those few are added to the context."
+      },
+      {
+        "title": "Call the tool it found",
+        "text": "The model calls cancel_sip_mandate with the client and date. Your loop runs it exactly like any other tool; search changed only which tools the model could see."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"22\">240 tools · 6 MCP servers</text><text class=\"sb\" x=\"180\" y=\"37\">all loaded ≈ 43,000 tokens per call</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"52\" width=\"166\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"67\" text-anchor=\"middle\">kept: 4 common tools</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx soft\" x=\"180\" y=\"52\" width=\"172\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"266\" y=\"67\" text-anchor=\"middle\">deferred: 236 tools</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"84\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"99\" text-anchor=\"middle\">tool_search_tool_bm25 · never deferred</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"116\" width=\"164\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"90\" y=\"129\">Model</text><text class=\"sb\" x=\"90\" y=\"144\">no matching tool loaded</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln acc\" d=\"M174 132L196 132\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx warn\" x=\"198\" y=\"121\" width=\"154\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"275\" y=\"136\" text-anchor=\"middle\">search \"stop SIP\"</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"160\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"175\" text-anchor=\"middle\">found 5: cancel_sip_mandate, pause_sip, …</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"194\" width=\"344\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"214.5\">tool_use: cancel_sip_mandate(NS-2210)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Hundreds of tools without filling the context",
+      "Right-tool rate stays high as the library grows",
+      "Fewer definition tokens on every call, so lower cost",
+      "New tools become usable just by adding them to the library"
+    ],
+    "cons": [
+      "An extra search step for tasks whose tool is not kept loaded",
+      "Tools with poor names or descriptions are never found",
+      "Another moving part to test and monitor",
+      "Needs a model and API that support deferred tools, or your own search"
+    ],
+    "avoidWhen": [
+      "The agent has fewer than about 10 tools (load them all)",
+      "Every task uses the same small set of tools (keep them loaded, no search)"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic tool search",
+        "type": "Model API (Anthropic)",
+        "what": "Regex and BM25 search over deferred tools, with defer_loading",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "name": "Custom tool search",
+        "type": "Model API (Anthropic)",
+        "what": "Your own search, such as embeddings, returning tool_reference blocks",
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "name": "Claude Code MCP tool search",
+        "type": "Product (Anthropic)",
+        "what": "Loads MCP tools on demand when many servers are connected",
+        "url": "https://code.claude.com/docs/en/mcp"
+      },
+      {
+        "name": "LangGraph BigTool",
+        "type": "Open source (LangChain)",
+        "what": "Agents that retrieve tools from a large registry",
+        "url": "https://github.com/langchain-ai/langgraph-bigtool"
+      },
+      {
+        "name": "MCP Inspector",
+        "type": "Open source",
+        "what": "Lists every tool a server exposes, to audit names and descriptions",
+        "url": "https://github.com/modelcontextprotocol/inspector"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Nivesh Setu's back-office agent answers 100 client requests, each taking 3 model calls. You choose how many tools it has, whether they all load on every call or sit behind a search tool, how it searches, how many common tools stay loaded, and how good the tool descriptions are.",
+    "controls": [
+      "Drag the slider to connect between 20 and 400 tools.",
+      "Tick the box to defer tools behind a search tool, then pick the search method and how many common tools stay loaded.",
+      "Choose terse or full descriptions, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Right tool chosen",
+        "meaning": "Share of requests where the agent picks the tool that actually does the job."
+      },
+      {
+        "name": "Definition tokens per call",
+        "meaning": "Tokens of tool definitions sent to the model on each call."
+      },
+      {
+        "name": "Input tokens per request",
+        "meaning": "All input tokens across the 3 calls, including any search step."
+      },
+      {
+        "name": "Cost per 1,000 requests",
+        "meaning": "At ₹250 per million input tokens."
+      },
+      {
+        "name": "Extra time from searching",
+        "meaning": "Average delay added by the search step, which only runs when no kept tool fits."
+      },
+      {
+        "name": "Searches that miss",
+        "meaning": "Requests where the search did not put the right tool in its top 5."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "240 tools, all loaded",
+        "expect": "43,200 definition tokens a call, right tool only 61% of the time, ₹33,525 per 1,000 requests."
+      },
+      {
+        "k": "search",
+        "name": "BM25 search, nothing kept",
+        "expect": "Tokens fall to 9,600 a request and accuracy rises to 86.5%, but every request pays 1.2 s for a search."
+      },
+      {
+        "k": "tuned",
+        "name": "Embedding search, 5 kept",
+        "expect": "95.2% right, 10,503 tokens a request, 0.5 s extra on average."
+      },
+      {
+        "k": "terse",
+        "name": "BM25, 5 kept, terse descriptions",
+        "expect": "Search finds the right tool only 73% of the time, so accuracy drops to 86.7%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "scale",
+        "text": "Handle 200 or more tools while picking the right tool at least 90% of the time.",
+        "hint": "Defer tools behind a search, keep a few common ones loaded and use full descriptions."
+      },
+      {
+        "k": "lean",
+        "text": "Keep each request under 10,000 input tokens with at least 90% right.",
+        "hint": "Search with 3 kept tools and full descriptions."
+      },
+      {
+        "k": "fast",
+        "text": "Add no more than 0.6 s of search time on average while staying at 92% or better.",
+        "hint": "Keep 4 or more common tools loaded so most requests never search."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic tool search",
+        "type": "Model API · Anthropic",
+        "best": "Regex and BM25 tool search over tools marked defer_loading, up to thousands of tools.",
+        "pros": [
+          "No search infrastructure to run",
+          "Definitions stay out of the context until found"
+        ],
+        "cons": [
+          "Only matches words in names and descriptions",
+          "Supported on recent Claude models only"
+        ],
+        "ex": "A BM25 search tool plus 236 deferred tools and 4 kept loaded.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "n": "Custom tool search",
+        "type": "Model API · Anthropic",
+        "best": "Your own search, such as embeddings, that answers with tool_reference blocks.",
+        "pros": [
+          "Matches meaning, not just words",
+          "You control ranking and filters"
+        ],
+        "cons": [
+          "An embedding index to build and keep fresh",
+          "More code to test"
+        ],
+        "ex": "find_tools embeds the need and returns the 5 closest tools.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+      },
+      {
+        "n": "Claude Code MCP tool search",
+        "type": "Product · Anthropic",
+        "best": "Loads MCP tools on demand when many servers are connected to Claude Code.",
+        "pros": [
+          "Works without code changes",
+          "Keeps sessions responsive with many servers"
+        ],
+        "cons": [
+          "Specific to Claude Code",
+          "Less control over ranking"
+        ],
+        "ex": "A developer connects ten MCP servers and only the needed tools load.",
+        "prod": 2,
+        "start": 3,
+        "url": "https://code.claude.com/docs/en/mcp"
+      },
+      {
+        "n": "LangGraph BigTool",
+        "type": "Open source · LangChain",
+        "best": "LangGraph agents that retrieve tools from a large registry by similarity.",
+        "pros": [
+          "Fits existing LangGraph agents",
+          "Pluggable retrieval"
+        ],
+        "cons": [
+          "Another library to learn",
+          "You run the store"
+        ],
+        "ex": "A registry of 300 tools indexed in a vector store and fetched per step.",
+        "prod": 2,
+        "start": 2,
+        "url": "https://github.com/langchain-ai/langgraph-bigtool"
+      },
+      {
+        "n": "MCP Inspector",
+        "type": "Open source",
+        "best": "Lists every tool a server exposes, so you can audit names and descriptions.",
+        "pros": [
+          "Quick audit of look-alike tools",
+          "Test calls by hand"
+        ],
+        "cons": [
+          "Not a search tool itself",
+          "One server at a time"
+        ],
+        "ex": "Finding three near-duplicate mandate tools across two servers.",
+        "prod": 2,
+        "start": 3,
+        "url": "https://github.com/modelcontextprotocol/inspector"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Hundreds of tools, Claude API",
+        "tool": "Anthropic tool search"
+      },
+      {
+        "need": "Search by meaning, not keywords",
+        "tool": "Custom tool search"
+      },
+      {
+        "need": "Audit tool names first",
+        "tool": "MCP Inspector"
+      }
+    ],
+    "goals": [
+      "Explain why loading every tool fails past a few dozen",
+      "Decide which tools to keep loaded and which to defer",
+      "Explain why descriptions decide whether a tool can be found"
+    ]
+  },
+  "practice": {
+    "scenario": "Nivesh Setu, a fictional wealth platform, gives its back-office agent 240 tools from six MCP servers: KYC, payments, portfolios, CRM, ticketing and reports. Loaded together they took 43,000 tokens a call and the agent kept picking look-alike tools. Now four common tools stay loaded, the rest are deferred behind a search tool, and descriptions were rewritten in the words staff actually use, such as \"stop SIP\" as well as \"cancel mandate\".",
+    "industries": [
+      {
+        "industry": "Wealth and broking",
+        "use": "Hundreds of order, mandate, KYC and report tools across back-office systems"
+      },
+      {
+        "industry": "Banking operations",
+        "use": "Separate servers for core banking, cards, loans and complaints, each with dozens of tools"
+      },
+      {
+        "industry": "IT service desks",
+        "use": "An agent reaching many internal systems, each exposed as its own MCP server"
+      }
+    ],
+    "analogy": "A big library. You keep a few favourite books on your desk and look the rest up in the catalogue when you need them. A book with a vague title and no summary is never found, however useful it is.",
+    "library": {
+      "name": "Anthropic Python SDK",
+      "what": "Mark tools with defer_loading and add a tool search tool, or answer your own search tool with tool_reference blocks, as below.",
+      "install": "pip install anthropic"
+    },
+    "note": "embed() and load_mcp_tool_definitions() stand for your embedding model and tool registry. Every referenced tool must also be in the tools list, usually deferred.",
+    "samples": [
+      {
+        "file": "custom_tool_search.py",
+        "language": "python",
+        "code": "import numpy as np\n\nTOOLS = load_mcp_tool_definitions()          # 240 definitions\nvecs = embed([t[\"name\"] + \": \" + t[\"description\"] for t in TOOLS])\n\nfind_tools = {\n    \"name\": \"find_tools\",\n    \"description\": (\"Search the tool library by what you need to do, in plain words. \"\n                    \"Use it when none of the loaded tools fits. Returns matching tools.\"),\n    \"input_schema\": {\"type\": \"object\",\n                     \"properties\": {\"need\": {\"type\": \"string\"}},\n                     \"required\": [\"need\"]}}\n\ndef run_find_tools(need: str, k: int = 5):\n    scores = vecs @ embed([need])[0]           # cosine if vectors are normalised\n    best = np.argsort(-scores)[:k]\n    return [{\"type\": \"tool_reference\", \"tool_name\": TOOLS[i][\"name\"]} for i in best]\n\nKEEP = {\"get_client\", \"get_holdings\", \"create_ticket\", \"send_message\"}\ntools = [find_tools] + [{**t, \"defer_loading\": t[\"name\"] not in KEEP} for t in TOOLS]\n\n# In your tool loop, answer a find_tools call with:\n# {\"type\": \"tool_result\", \"tool_use_id\": call.id,\n#  \"content\": run_find_tools(**call.input)}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent has 240 tools whose definitions average 180 tokens each, and it makes 3 model calls per request. How many definition tokens does one request send if every tool is loaded on every call?",
+    "answer": "240 × 180 = 43,200 tokens per call × 3 calls = 129,600 tokens per request, before the question, history or any results.",
+    "expected": {
+      "value": 129600,
+      "tolerance": 100,
+      "label": "tokens ="
+    },
+    "interview": [
+      {
+        "question": "Your agent now has 300 tools across several MCP servers and picks the wrong one often. What do you change?",
+        "answer": "Stop loading every definition. Keep the handful of tools used in most tasks loaded, defer the rest behind a search tool, and rewrite names and descriptions so the words people use find the right tool. Merge look-alike tools where possible, then measure the right-tool rate and the searches that find nothing."
+      },
+      {
+        "question": "What are the trade-offs of tool search?",
+        "answer": "It saves context and keeps accuracy high as tools grow, but adds a search step when the needed tool is not loaded, and a tool with a poor description may never be found. Keeping common tools loaded limits the extra step; logging failed searches shows which descriptions to fix."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Deferring every tool, including the common ones",
+        "fix": "Keep the 3–5 most used tools loaded so most tasks skip the search"
+      },
+      {
+        "mistake": "Leaving terse, jargon-only descriptions",
+        "fix": "Write descriptions in the words users say, since they are what the search matches"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ts01",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A wealth platform’s agent has 240 tools from six MCP servers, all loaded on every call, and often picks look-alike tools. What is the first fix to try?",
+      "options": [
+        "A larger model",
+        "Defer most tools behind a search tool and keep a few common ones loaded",
+        "Remove the tool descriptions to save tokens",
+        "Raise max_tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Past a few dozen tools, loading everything hurts accuracy and cost; search lets the model see only what it needs."
+    },
+    {
+      "id": "ts02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Tool definitions for a bank’s agent take 45,000 tokens per call. What does that cost the team on every request?",
+      "options": [
+        "Nothing: definitions are free",
+        "Input tokens and context space on every call, before any real work",
+        "Only latency on the first call",
+        "Only output tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Definitions are part of the input on every call, so they cost tokens and crowd the context each time."
+    },
+    {
+      "id": "ts03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A team marks every tool, including the search tool, as deferred. What happens?",
+      "options": [
+        "It works the same",
+        "The model can see no tools at all, and the request fails",
+        "The model loads all tools anyway",
+        "Only the first tool is used"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The search tool, and ideally the few most-used tools, must stay loaded."
+    },
+    {
+      "id": "ts04",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Most client requests at a broker use the same 4 tools. How should they be handled with tool search?",
+      "options": [
+        "Defer them like the rest",
+        "Keep them loaded, so those requests skip the search step",
+        "Remove them",
+        "Duplicate them under new names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Keeping common tools loaded avoids an extra search step on most requests."
+    },
+    {
+      "id": "ts05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "After adding tool search, a claims tool named proc_clm_v2 with the description \"claims ops\" is never used. Why?",
+      "options": [
+        "The model dislikes version numbers",
+        "Its name and description do not contain the words the search matches",
+        "Deferred tools cannot be called",
+        "The search tool is broken"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Names and descriptions are the search index; vague ones are never found."
+    },
+    {
+      "id": "ts06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Deferred tools in Anthropic’s API: are their full definitions still sent in the tools list on each request?",
+      "options": [
+        "Yes, so the API can search them and expand the results",
+        "No, they are fetched from a registry",
+        "Only the names are sent",
+        "Only on the first request"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Deferred tools are still sent; they are just hidden from the model until found."
+    },
+    {
+      "id": "ts07",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which signs suggest a telecom agent needs tool search? Select all that apply.",
+      "options": [
+        "Tool definitions exceed about 10,000 tokens a call",
+        "The agent uses 3 tools in total",
+        "Tools come from many MCP servers and keep growing",
+        "The right-tool rate falls as tools are added"
+      ],
+      "correct": [
+        0,
+        2,
+        3
+      ],
+      "explanation": "Large, growing tool sets and falling accuracy are the signals; three tools need no search."
+    },
+    {
+      "id": "ts08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Staff ask to \"stop a refund\" but the tool is described only as \"reverse settlement instruction\". Keyword search rarely finds it. What helps most?",
+      "options": [
+        "A bigger search result limit only",
+        "Adding the words people use, such as \"stop refund\", to the description, or using meaning-based search",
+        "Renaming every tool to a number",
+        "Removing the tool"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Matching the words users say, or searching by meaning, lets the right tool be found."
+    },
+    {
+      "id": "ts09",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital agent’s common task, booking an appointment, now takes an extra second after tool search was added. What should change?",
+      "options": [
+        "Remove tool search entirely",
+        "Keep the booking tool loaded so it never needs a search",
+        "Use a slower model",
+        "Add more deferred tools"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Common tools belong in the always-loaded set, so their tasks skip the search step."
+    },
+    {
+      "id": "ts10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A custom tool search built on embeddings must return what to Anthropic’s API?",
+      "options": [
+        "The full tool definitions as text",
+        "tool_reference blocks naming the tools, inside a tool_result",
+        "A list of URLs",
+        "Nothing; it runs the tools itself"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A custom search answers with tool_reference blocks; the API expands them into definitions."
+    },
+    {
+      "id": "ts11",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Two MCP servers both expose a tool for \"loan status\" with different names. After search finds both, the model picks the wrong one. What is the root fix?",
+      "options": [
+        "A higher search limit",
+        "Merge or clearly distinguish the look-alike tools and their descriptions",
+        "Defer both",
+        "A larger thinking budget"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Search limits what the model sees; near-duplicate tools still need clearer design."
+    },
+    {
+      "id": "ts12",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "How should a team check that tool search is working after launch?",
+      "options": [
+        "Count tools only",
+        "Track the right-tool rate, searches that return nothing useful, and tokens per call",
+        "Check that the search tool is called on every request",
+        "Ask the model if it is happy"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Measure accuracy, failed searches and token savings; failed searches point to descriptions to fix."
+    },
+    {
+      "id": "ts13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An agent has 8 tools totalling 2,000 tokens of definitions. Should it use tool search?",
+      "options": [
+        "Yes, always",
+        "No: load them all; search would only add a step",
+        "Yes, but defer all 8",
+        "Only on weekends"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Small tool sets are best loaded in full; search pays off with dozens or hundreds of tools."
+    },
+    {
+      "id": "ts14",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which improve how often the right tool is found by keyword search? Select all that apply.",
+      "options": [
+        "Descriptions that say what the tool does and when to use it",
+        "The words users actually say, such as \"renew policy\"",
+        "Shorter names made of internal codes",
+        "Removing near-duplicate tools"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Clear descriptions in users’ words and fewer look-alikes improve search; internal codes hurt it."
+    },
+    {
+      "id": "ts15",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "With 240 tools at 180 tokens each, how many definition tokens per call does loading them all cost?",
+      "options": [
+        "4,320",
+        "43,200",
+        "432,000",
+        "24,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "240 × 180 = 43,200 tokens per call."
+    },
+    {
+      "id": "ts16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A search tool keeps returning 5 tools, but the right one is usually sixth. What could the team try?",
+      "options": [
+        "Lower the limit to 1",
+        "Improve that tool’s description or allow a slightly larger result limit",
+        "Defer the search tool",
+        "Remove descriptions"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Better descriptions lift the right tool; a slightly larger limit also helps, at some token cost."
+    },
+    {
+      "id": "ts17",
+      "kind": "single",
+      "industry": "Government",
+      "question": "A benefits agent grows from 30 to 300 tools over a year as departments add MCP servers. What does tool search make easier?",
+      "options": [
+        "Nothing changes",
+        "Adding new tools without growing every prompt or retraining",
+        "Removing the need for descriptions",
+        "Skipping tests for new tools"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "New tools join the searchable library without bloating each call, though they still need good descriptions and tests."
+    },
+    {
+      "id": "ts18",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which search is better at matching \"patient cannot come tomorrow\" to a tool described as \"reschedule appointment\"?",
+      "options": [
+        "Exact regex on the tool name",
+        "Meaning-based (embedding) search",
+        "Alphabetical order",
+        "Random choice"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Embedding search matches meaning, so different words for the same need still find the tool."
+    },
+    {
+      "id": "ts19",
+      "kind": "single",
+      "industry": "Security",
+      "question": "Could a malicious MCP server exploit tool search?",
+      "options": [
+        "No, search is always safe",
+        "Yes: a tool description stuffed with popular words could win searches it should not",
+        "Only if the model is small",
+        "Only with regex search"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Descriptions drive search results, so vet servers and watch for tools that match everything."
+    },
+    {
+      "id": "ts20",
+      "kind": "multi",
+      "industry": "Wealth management",
+      "question": "A team is moving 240 tools to tool search. Which steps belong in the rollout? Select all that apply.",
+      "options": [
+        "Measure the right-tool rate before and after on a task set",
+        "Keep the most-used tools loaded",
+        "Delete all tool descriptions to save tokens",
+        "Log searches that find nothing useful"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Measure, keep common tools loaded and learn from failed searches; descriptions are what makes search work."
+    }
+  ]
+}

@@ -1,0 +1,832 @@
+{
+  "id": "fewshot",
+  "moduleSlug": "prompting",
+  "name": "Few-Shot Examples",
+  "shortName": "Few-shot",
+  "question": "Will examples help, or will the model copy them?",
+  "summary": "A few input–output examples in the prompt show the model the format, tone and decisions you want, often better than description alone. But models pick up whatever the examples share: the most common label, the last label, the length, even irrelevant surface features. Use a handful of diverse, balanced examples that cover edge cases, vary their order, and consider retrieving the most similar examples for each input.",
+  "useCases": [
+    "Classification and extraction with subtle categories",
+    "A house style or format that is easier to show than describe",
+    "Edge cases the instructions alone keep getting wrong"
+  ],
+  "keyFacts": {
+    "label": "Pitfalls and practice",
+    "items": [
+      {
+        "term": "Majority-label bias",
+        "detail": "the model over-predicts the label most examples share"
+      },
+      {
+        "term": "Recency bias",
+        "detail": "the last example’s label is copied more often"
+      },
+      {
+        "term": "Order sensitivity",
+        "detail": "the same examples in a different order can change results"
+      },
+      {
+        "term": "Surface copying",
+        "detail": "length, phrasing or names in examples leak into outputs"
+      },
+      {
+        "term": "Dynamic selection",
+        "detail": "retrieve the examples most similar to the current input"
+      },
+      {
+        "term": "Token cost",
+        "detail": "each example is paid for on every call unless cached"
+      }
+    ]
+  },
+  "steps": [
+    "Start with instructions; add examples only where evals show a gap",
+    "Use 3–5 diverse examples with balanced labels, including an edge case",
+    "Rotate or randomise order, and wrap examples in tags",
+    "Measure accuracy and per-label prediction rates, not just the average"
+  ],
+  "pitfalls": [
+    "All examples sharing one label, so the model predicts it everywhere",
+    "Examples that contradict the written instructions",
+    "Dozens of static examples that cost tokens on every call"
+  ],
+  "tools": [
+    "LangChain example selectors",
+    "DSPy",
+    "promptfoo",
+    "Anthropic prompt engineering guide",
+    "Any vector store for example retrieval"
+  ],
+  "remember": "Few, diverse, balanced, shuffled. Measure per label.",
+  "caption": "Illustrative: skewed examples double the predicted share of one label; balanced, retrieved examples raise accuracy.",
+  "comparison": {
+    "scope": "Format and subtle decisions",
+    "cost": 1,
+    "needs": "Good examples and evals",
+    "best": "The model copies the examples’ bias"
+  },
+  "diagram": {
+    "file": "diagrams/fewshot.svg"
+  },
+  "lesson": {
+    "file": "dynamic_examples.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import random",
+        "steps": []
+      },
+      {
+        "text": "import numpy as np",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "EXAMPLES = load_labelled_examples()   # [{\"text\", \"label\", \"vec\"}] from real tickets",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "LABELS = [\"refund\", \"delivery\", \"damage\", \"billing\"]",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def pick_examples(query_vec):",
+        "steps": []
+      },
+      {
+        "text": "    chosen = []",
+        "steps": []
+      },
+      {
+        "text": "    for label in LABELS:                                        # one per label",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        pool = [e for e in EXAMPLES if e[\"label\"] == label]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        best = max(pool, key=lambda e: float(np.dot(e[\"vec\"], query_vec)))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        chosen.append(best)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    random.shuffle(chosen)                                      # no fixed order",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return chosen",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def build_prompt(complaint: str, query_vec) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    shots = \"\\n\".join(f\"<example><text>{e['text']}</text><label>{e['label']}</label></example>\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                      for e in pick_examples(query_vec))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return (f\"Classify the complaint as one of: {', '.join(LABELS)}.\\n\"",
+        "steps": []
+      },
+      {
+        "text": "            f\"<examples>\\n{shots}\\n</examples>\\n<complaint>{complaint}</complaint>\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def label_rates(predictions):                                   # evaluate per label",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {l: predictions.count(l) / len(predictions) for l in LABELS}",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Collect real, labelled examples",
+        "text": "Examples come from real tickets with checked labels, including awkward ones. Invented examples tend to be too clean."
+      },
+      {
+        "title": "Balance the labels",
+        "text": "One example per label means no label dominates. Four refunds out of five had pushed predicted refunds to 60%."
+      },
+      {
+        "title": "Pick the most similar",
+        "text": "For each label, the example closest to this complaint is chosen, so the demonstrations are relevant to the case at hand."
+      },
+      {
+        "title": "Shuffle the order",
+        "text": "The last example’s label gets copied more often. Shuffling removes a fixed recency bias."
+      },
+      {
+        "title": "Wrap examples in tags",
+        "text": "Tags separate examples from instructions and from the real complaint, so the model does not confuse them."
+      },
+      {
+        "title": "Measure per label",
+        "text": "Average accuracy can hide bias. Compare the share of each predicted label with the true share; a big gap means the model is copying the examples."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">labelled store: 2,400 real tickets</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"36\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"48\" y=\"51\" text-anchor=\"middle\">refund</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx pass\" x=\"95\" y=\"36\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"135\" y=\"51\" text-anchor=\"middle\">delivery</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx pass\" x=\"182\" y=\"36\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"222\" y=\"51\" text-anchor=\"middle\">damage</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx pass\" x=\"269\" y=\"36\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"309\" y=\"51\" text-anchor=\"middle\">billing</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"sb a\" x=\"8\" y=\"80\" style=\"text-anchor:start;--d:0s\">nearest example of each label to this complaint</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"48\" y=\"103\" text-anchor=\"middle\">damage</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx acc\" x=\"95\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"135\" y=\"103\" text-anchor=\"middle\">refund</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx acc\" x=\"182\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"222\" y=\"103\" text-anchor=\"middle\">billing</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx acc\" x=\"269\" y=\"88\" width=\"80\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"309\" y=\"103\" text-anchor=\"middle\">delivery</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"118\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"133\" text-anchor=\"middle\">&lt;examples&gt; … &lt;/examples&gt; &lt;complaint&gt; … &lt;/complaint&gt;</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"160\" style=\"text-anchor:start;--d:0s\">Predicted refund share (true: 30%)</text><text class=\"tl a\" x=\"112\" y=\"179\" style=\"text-anchor:end;--d:0.1s\">skewed</text><rect x=\"118\" y=\"169\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"169\" width=\"114\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"179\" style=\"text-anchor:start;--d:0.30000000000000004s\">60%</text><text class=\"tl a\" x=\"112\" y=\"201\" style=\"text-anchor:end;--d:0.2s\">balanced</text><rect x=\"118\" y=\"191\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"191\" width=\"58.9\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"201\" style=\"text-anchor:start;--d:0.4s\">31%</text><g class=\"a\" style=\"--d:0.35s\"><text class=\"tag-t\" x=\"180\" y=\"236\" style=\"text-anchor:middle;fill:var(--pass)\">accuracy 91% with balanced, retrieved examples</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Shows formats and styles that are hard to describe",
+      "Fixes subtle category boundaries",
+      "Retrieval keeps examples relevant",
+      "Quick to try"
+    ],
+    "cons": [
+      "Examples can bias outputs towards their labels and order",
+      "Costs tokens on every call",
+      "Examples can contradict instructions",
+      "Needs good labelled data"
+    ],
+    "avoidWhen": [
+      "Tasks the instructions already handle well on your evals",
+      "Examples you have not checked for label balance and diversity"
+    ],
+    "tools": [
+      {
+        "name": "LangChain example selectors",
+        "type": "Open source",
+        "what": "Semantic similarity and length-based example selection",
+        "url": "https://python.langchain.com/docs/how_to/example_selectors/"
+      },
+      {
+        "name": "DSPy",
+        "type": "Open source",
+        "what": "Optimises demonstrations and prompts automatically",
+        "url": "https://dspy.ai"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Measure per-label accuracy across prompt variants",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "Anthropic prompt engineering guide",
+        "type": "Documentation",
+        "what": "Multishot prompting guidance",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview"
+      },
+      {
+        "name": "Chroma",
+        "type": "Open source",
+        "what": "A small vector store for retrieving examples",
+        "url": "https://docs.trychroma.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An e-commerce company classifies complaints as refund (30%), delivery (30%), damage (20%) or billing (20%). Add examples to the prompt and see when they help and when the model starts copying them.",
+    "controls": [
+      "Drag the number of examples from 0 to 8.",
+      "Choose a fixed set or examples retrieved for each complaint, and whether order is shuffled or a refund example always comes last.",
+      "Tick skewed labels or diverse edge cases, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Accuracy",
+        "meaning": "Share of 1,000 held-out complaints labelled correctly."
+      },
+      {
+        "name": "Predicted as refund",
+        "meaning": "Share of complaints the model labels refund; the true share is 30%."
+      },
+      {
+        "name": "Prompt tokens",
+        "meaning": "Instructions plus about 180 tokens per example."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No examples",
+        "expect": "78% accuracy with instructions alone; 400 tokens."
+      },
+      {
+        "k": "skewed",
+        "name": "Five skewed examples, refund last",
+        "expect": "The model labels 60% of complaints refund; accuracy 77.6%."
+      },
+      {
+        "k": "fixed",
+        "name": "Four balanced, fixed examples",
+        "expect": "88% accuracy, 1,120 tokens."
+      },
+      {
+        "k": "retrieved",
+        "name": "Four balanced, retrieved examples",
+        "expect": "91.2% accuracy, 1,120 tokens."
+      }
+    ],
+    "missions": [
+      {
+        "k": "acc",
+        "text": "Reach 90% accuracy.",
+        "hint": "Balanced, diverse examples chosen for each complaint."
+      },
+      {
+        "k": "cheap",
+        "text": "Reach 90% with a prompt of 1,200 tokens or fewer.",
+        "hint": "Four good examples beat eight mediocre ones."
+      },
+      {
+        "k": "bias",
+        "text": "Make the model label at least 55% of complaints as refunds.",
+        "hint": "Skew the labels and put a refund example last."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangChain example selectors",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Select examples by semantic similarity, length or maximal marginal relevance.",
+        "ex": "A semantic-similarity selector over 2,400 labelled tickets.",
+        "pros": [
+          "Ready-made selectors",
+          "Works with any vector store"
+        ],
+        "cons": [
+          "LangChain dependency",
+          "Balancing labels is up to you"
+        ],
+        "url": "https://python.langchain.com/docs/how_to/example_selectors/"
+      },
+      {
+        "n": "DSPy",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Optimises which demonstrations and instructions to use against a metric.",
+        "ex": "Let an optimiser choose demonstrations that maximise per-label accuracy.",
+        "pros": [
+          "Automated search",
+          "Metric-driven"
+        ],
+        "cons": [
+          "Learning curve",
+          "Optimisation runs cost calls"
+        ],
+        "url": "https://dspy.ai"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Measure accuracy and label distribution across prompt variants.",
+        "ex": "Compare skewed, balanced and retrieved example sets on held-out complaints.",
+        "pros": [
+          "Side-by-side comparisons",
+          "CI-friendly"
+        ],
+        "cons": [
+          "You provide the labels",
+          "Per-label metrics need custom asserts"
+        ],
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "n": "Chroma",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "A simple vector store for retrieving similar examples.",
+        "ex": "Store labelled complaints and query the nearest per label.",
+        "pros": [
+          "Quick to start",
+          "Local or hosted"
+        ],
+        "cons": [
+          "Another component",
+          "Scale limits for very large sets"
+        ],
+        "url": "https://docs.trychroma.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I have a few hundred labelled examples",
+        "tool": "Retrieve similar, balanced examples per input"
+      },
+      {
+        "need": "I want the choice optimised",
+        "tool": "DSPy"
+      },
+      {
+        "need": "I need to prove examples help",
+        "tool": "Compare variants in promptfoo on held-out data"
+      }
+    ],
+    "goals": [
+      "See majority-label and recency bias",
+      "Know when examples earn their tokens",
+      "Measure per label, not just on average"
+    ]
+  },
+  "practice": {
+    "scenario": "An e-commerce company classifies complaints into refund, delivery, damage and billing. Its prompt had five examples, four of them refunds, and the model labelled 60% of complaints as refunds when the true share was 30%. Replacing them with balanced examples retrieved by similarity for each complaint raised accuracy to 91%.",
+    "industries": [
+      {
+        "industry": "E-commerce",
+        "use": "Classify complaints and returns into fine-grained reasons"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Tag claim notes with loss types using examples of borderline cases"
+      },
+      {
+        "industry": "Legal",
+        "use": "Label contract clauses where categories differ by subtle wording"
+      }
+    ],
+    "analogy": "Training a new hire with sample tickets. Show only refund tickets and they will see refunds everywhere; show a fair mix, including the tricky ones, and they learn the distinctions.",
+    "library": {
+      "name": "Anthropic SDK + a small example store",
+      "what": "Keep labelled examples in a store, embed them, and insert the most similar balanced few into each prompt.",
+      "install": "pip install anthropic numpy"
+    },
+    "note": "Measure accuracy per label and the share of each predicted label; a model that over-predicts one label is copying the examples.",
+    "samples": [
+      {
+        "file": "dynamic_examples.py",
+        "language": "python",
+        "code": "import random\nimport numpy as np\n\nEXAMPLES = load_labelled_examples()        # [{\"text\": ..., \"label\": ..., \"vec\": np.array}]\nLABELS = [\"refund\", \"delivery\", \"damage\", \"billing\"]\n\ndef pick_examples(query_vec, per_label=1):\n    \"\"\"Most similar example for each label: balanced and relevant.\"\"\"\n    chosen = []\n    for label in LABELS:\n        pool = [e for e in EXAMPLES if e[\"label\"] == label]\n        best = max(pool, key=lambda e: float(np.dot(e[\"vec\"], query_vec)))\n        chosen.extend([best][:per_label])\n    random.shuffle(chosen)                  # no fixed order, no recency bias\n    return chosen\n\ndef build_prompt(complaint: str, query_vec) -> str:\n    shots = \"\\n\".join(f\"<example><text>{e['text']}</text><label>{e['label']}</label></example>\"\n                      for e in pick_examples(query_vec))\n    return (f\"Classify the complaint as one of: {', '.join(LABELS)}.\\n\"\n            f\"<examples>\\n{shots}\\n</examples>\\n<complaint>{complaint}</complaint>\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "True complaint labels are 30% refund, 30% delivery, 20% damage and 20% billing. With skewed examples the model predicts refund for 60% of complaints. If every true refund is still labelled refund, what share of all complaints is wrongly labelled refund, in percent?",
+    "answer": "60% predicted refund minus 30% that really are refunds leaves 30% of all complaints wrongly labelled refund. Those errors come from the other labels, so accuracy can fall by up to 30 points.",
+    "expected": {
+      "value": 30,
+      "tolerance": 0.1,
+      "label": "% wrongly labelled ="
+    },
+    "interview": [
+      {
+        "question": "Why can few-shot examples make a model worse?",
+        "answer": "Models pick up patterns the examples share, including ones you did not intend: the most common label, the label of the last example, their length or their wording. Skewed or unrepresentative examples bias outputs towards them. Balanced, diverse examples in varied order avoid this."
+      },
+      {
+        "question": "When should you retrieve examples dynamically?",
+        "answer": "When the input space is broad and a fixed handful cannot cover it, or when the best example depends on the input. Retrieving the most similar labelled examples for each input, balanced across labels, gives relevant demonstrations without paying for dozens of static ones on every call."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Using the first five examples you found",
+        "fix": "Choose diverse, balanced examples that include edge cases"
+      },
+      {
+        "mistake": "Always putting the same example last",
+        "fix": "Shuffle or rotate the order"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fs01",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Four of five examples are labelled refund. What bias does this create?",
+      "options": [
+        "Recency bias",
+        "Majority-label bias towards refund",
+        "No bias",
+        "Length bias only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Models over-predict the label most examples share."
+    },
+    {
+      "id": "fs02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The true refund share is 30%, but the model predicts refund for 60% of complaints. If every real refund is still labelled refund, what share of all complaints is wrongly labelled refund?",
+      "options": [
+        "15%",
+        "30%",
+        "45%",
+        "60%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "60% − 30% = 30% of complaints mislabelled as refund."
+    },
+    {
+      "id": "fs03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why shuffle the order of examples?",
+      "options": [
+        "To shorten the prompt",
+        "To avoid the model copying the label of a fixed last example",
+        "To make caching work",
+        "It has no effect"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Recency bias favours the last example’s label."
+    },
+    {
+      "id": "fs04",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "When is retrieving examples per input most useful?",
+      "options": [
+        "When the input space is broad and the best example depends on the case",
+        "When there are no labelled examples",
+        "When the task is trivial",
+        "When prompts must be cached"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Similar examples make demonstrations relevant."
+    },
+    {
+      "id": "fs05",
+      "kind": "multi",
+      "industry": "Retail",
+      "question": "Which are good practices for few-shot examples? Select all that apply.",
+      "options": [
+        "Include an edge case",
+        "Balance labels across examples",
+        "Use only the easiest examples",
+        "Always put the same label last"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Diverse, balanced examples teach the boundaries."
+    },
+    {
+      "id": "fs06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Each example costs about 180 tokens. How many tokens do 4 examples add?",
+      "options": [
+        "180",
+        "400",
+        "720",
+        "1,120"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "4 × 180 = 720."
+    },
+    {
+      "id": "fs07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Accuracy is 88% overall. What else should you check to detect example bias?",
+      "options": [
+        "Latency",
+        "The share of each predicted label against the true share",
+        "The model size",
+        "The prompt’s word count"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Per-label rates reveal bias an average hides."
+    },
+    {
+      "id": "fs08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Examples contradict the written instructions. What typically happens?",
+      "options": [
+        "The model always follows the instructions",
+        "The model often follows the examples, causing confusing results",
+        "The API rejects the prompt",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Keep examples consistent with instructions."
+    },
+    {
+      "id": "fs09",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A classifier over-predicts one label. Which fixes help? Select all that apply.",
+      "options": [
+        "Balance the examples across labels",
+        "Shuffle the order",
+        "Add more examples of the over-predicted label",
+        "Remove all instructions"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Balance and order address the bias."
+    },
+    {
+      "id": "fs10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What does research such as Zhao et al. (2021) report about few-shot prompting?",
+      "options": [
+        "Predictions are biased by the majority label, the last example and common tokens",
+        "Examples never matter",
+        "More examples always help",
+        "Order has no effect"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It documents majority-label, recency and common-token biases."
+    },
+    {
+      "id": "fs11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Zero-shot accuracy is already 95% on your eval set. Should you add examples?",
+      "options": [
+        "Yes, always",
+        "Only if evals show specific failures examples could fix",
+        "Yes, at least ten",
+        "No, never"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Add examples where they fix measured gaps."
+    },
+    {
+      "id": "fs12",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which surface features might a model copy from examples? Select all that apply.",
+      "options": [
+        "Answer length",
+        "Wording and names",
+        "The API key",
+        "The provider’s pricing"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Models imitate what examples share, including length and phrasing."
+    },
+    {
+      "id": "fs13",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Why wrap examples in tags such as <example>?",
+      "options": [
+        "To separate them clearly from instructions and the real input",
+        "Tags are mandatory",
+        "To make them cheaper",
+        "To hide them from the model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Clear boundaries prevent confusion."
+    },
+    {
+      "id": "fs14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Retrieved examples raise accuracy from 88% to 91% with the same token count. What changed?",
+      "options": [
+        "The examples are more relevant to each input",
+        "The model is larger",
+        "The prompt is shorter",
+        "Caching improved"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Relevance per input improves demonstrations."
+    },
+    {
+      "id": "fs15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which statements about example order are correct? Select all that apply.",
+      "options": [
+        "The same examples in a different order can change results",
+        "A fixed last example can bias outputs",
+        "Order never matters for large models",
+        "Alphabetical order removes all bias"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Order sensitivity and recency bias are well documented."
+    },
+    {
+      "id": "fs16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which tool can optimise which demonstrations to include against a metric?",
+      "options": [
+        "DSPy",
+        "Temporal",
+        "Presidio",
+        "Jaeger"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DSPy optimises prompts and demonstrations."
+    },
+    {
+      "id": "fs17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How many examples are usually a good starting point?",
+      "options": [
+        "Zero, never more",
+        "Three to five diverse ones",
+        "At least fifty",
+        "Exactly one per token"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A handful of diverse examples is typical; measure before adding more."
+    },
+    {
+      "id": "fs18",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "Few-shot examples come from real tickets. What should be checked? Select all that apply.",
+      "options": [
+        "That their labels are correct",
+        "That they do not contain personal data",
+        "That they are the most recent tickets only",
+        "That they all share one label"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Correct labels and privacy matter for examples."
+    },
+    {
+      "id": "fs19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Where are few-shot examples most valuable?",
+      "options": [
+        "Subtle category boundaries and formats hard to describe",
+        "Simple arithmetic",
+        "Tasks already at 99% zero-shot",
+        "Tasks with no correct answer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "They show what words struggle to describe."
+    },
+    {
+      "id": "fs20",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Retrieval picks the 4 most similar tickets overall, ignoring labels. What can go wrong? Select all that apply.",
+      "options": [
+        "All four may share one label, biasing the answer",
+        "Rare labels may never appear as examples",
+        "The prompt becomes invalid JSON",
+        "Caching becomes impossible"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Pick per label to keep balance."
+    }
+  ]
+}

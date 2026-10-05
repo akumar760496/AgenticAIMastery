@@ -1,0 +1,864 @@
+{
+  "id": "versioning",
+  "moduleSlug": "operations",
+  "name": "Prompt and Model Versioning",
+  "shortName": "Versioning",
+  "question": "What exactly was running when it broke?",
+  "summary": "Treat the prompt, the model snapshot, the tool set and the parameters as one versioned release. Pin dated model snapshots instead of aliases the provider can move, keep prompts in a registry with labels such as production and staging, and stamp every trace with the release. Then rollback is a label move, and every trace says exactly what ran.",
+  "useCases": [
+    "More than one person changes prompts, or prompts change weekly",
+    "You depend on a hosted model that is updated or retired on the provider’s schedule",
+    "Audits or incidents need to know which prompt produced an answer"
+  ],
+  "keyFacts": {
+    "label": "What to version",
+    "items": [
+      {
+        "term": "Alias vs snapshot",
+        "detail": "an alias such as claude-sonnet-4-5 can move; a dated snapshot such as claude-sonnet-4-5-20250929 does not"
+      },
+      {
+        "term": "Prompt registry",
+        "detail": "numbered versions with labels; code loads by label, not by pasted text"
+      },
+      {
+        "term": "Release record",
+        "detail": "prompt + model + tools + parameters, hashed into one id"
+      },
+      {
+        "term": "Trace stamp",
+        "detail": "the release id on every root span"
+      },
+      {
+        "term": "Rollback",
+        "detail": "move the production label back one version; no redeploy"
+      },
+      {
+        "term": "Retirement",
+        "detail": "providers deprecate snapshots on a published schedule, so plan migrations"
+      }
+    ]
+  },
+  "steps": [
+    "Move prompts out of code into a registry and load them by label",
+    "Pin a dated model snapshot in the release configuration",
+    "Stamp every trace with the release id",
+    "Roll back by moving the label; upgrade snapshots through a canary"
+  ],
+  "pitfalls": [
+    "An alias in the config lets the provider change your model without a deploy",
+    "Prompts edited in a dashboard with no review or eval gate",
+    "Pinning forever and missing the retirement date of the snapshot"
+  ],
+  "tools": [
+    "MLflow Prompt Registry",
+    "Langfuse prompt management",
+    "LangSmith prompt hub",
+    "PromptLayer",
+    "Git with code review"
+  ],
+  "remember": "Pin the snapshot, label the prompt, stamp the trace.",
+  "caption": "Illustrative: a release bundles prompt, snapshot, tools and parameters; the provider’s alias moves, the pinned release does not.",
+  "comparison": {
+    "scope": "What changed, and how to undo it",
+    "cost": 1,
+    "needs": "A registry and discipline",
+    "best": "Aliases that move under you"
+  },
+  "diagram": {
+    "file": "diagrams/versioning.svg"
+  },
+  "lesson": {
+    "file": "release_prompt.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import mlflow",
+        "steps": []
+      },
+      {
+        "text": "from opentelemetry import trace",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "v13 = mlflow.genai.register_prompt(",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    name=\"claims-review\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    template=\"Summarise the claim. Cite the clause.\\n\\n{{claim}}\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    commit_message=\"Ask for clause citations\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    model_config={\"model_name\": \"claude-sonnet-4-5-20250929\",  # dated snapshot",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "                  \"temperature\": 0.2})",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "if run_offline_evals(\"claims-review\", v13.version) >= 0.92:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    mlflow.genai.set_prompt_alias(name=\"claims-review\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                                  alias=\"production\", version=v13.version)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def summarise(claim: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    p = mlflow.genai.load_prompt(\"prompts:/claims-review@production\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    span = trace.get_current_span()",
+        "steps": []
+      },
+      {
+        "text": "    span.set_attribute(\"app.prompt.version\", p.version)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    span.set_attribute(\"gen_ai.request.model\", p.model_config[\"model_name\"])",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    return call_model(p.model_config, p.format(claim=claim))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def rollback(to_version: int):",
+        "steps": []
+      },
+      {
+        "text": "    mlflow.genai.set_prompt_alias(name=\"claims-review\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                                  alias=\"production\", version=to_version)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Register a version",
+        "text": "Each change becomes a numbered version with a commit message. The model configuration travels with the prompt, so a version means prompt text and model settings together."
+      },
+      {
+        "title": "Promote only after evals",
+        "text": "The production alias moves to the new version only when the offline suite passes. Nobody edits the live text directly."
+      },
+      {
+        "title": "Load by alias",
+        "text": "Application code asks for claims-review@production. It never contains the prompt text, so promotion needs no redeploy."
+      },
+      {
+        "title": "Stamp the trace",
+        "text": "Every span records the prompt version and the model. When an answer is questioned, the trace says exactly which release produced it."
+      },
+      {
+        "title": "Pin a snapshot, not an alias",
+        "text": "claude-sonnet-4-5 is an alias the provider can move; claude-sonnet-4-5-20250929 is a fixed snapshot. Pinning means the model only changes when you change it."
+      },
+      {
+        "title": "Roll back with one call",
+        "text": "If v13 misbehaves, point production back at v12. The next request loads v12; nothing is rebuilt or redeployed."
+      }
+    ],
+    "sceneHeight": 258,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"53\" y=\"23\" text-anchor=\"middle\">v11</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"8\" y=\"36\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"53\" y=\"51\" text-anchor=\"middle\">v12</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"8\" y=\"64\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"53\" y=\"79\" text-anchor=\"middle\">v13</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"200\" y=\"64\" width=\"152\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"276\" y=\"79\" text-anchor=\"middle\">snapshot …20250929</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"104\" y=\"64\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"149\" y=\"79\" text-anchor=\"middle\">production</text></g><g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"96\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"111\" text-anchor=\"middle\">offline evals 93% ≥ 92% → promote v13</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"128\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"143\" text-anchor=\"middle\">app loads prompts:/claims-review@production</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"158\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"173\" text-anchor=\"middle\">span: app.prompt.version=13 · model …20250929</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"188\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"203\" text-anchor=\"middle\">…-4-5: alias, can move</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"184\" y=\"188\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"203\" text-anchor=\"middle\">…-20250929: fixed</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"104\" y=\"36\" width=\"90\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"149\" y=\"51\" text-anchor=\"middle\">production</text></g><path class=\"ln draw fail\" pathLength=\"1\" d=\"M100 75 L198 75\" style=\"--d:0.1s\"/><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"200\" y=\"51\" style=\"text-anchor:start;fill:var(--pass)\">← moved back</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"8\" y=\"222\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"237\" text-anchor=\"middle\">rollback: set_prompt_alias(version=12)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Rollback becomes a label move, in seconds",
+      "Every answer is traceable to one prompt and model",
+      "Provider-side model changes cannot reach you unannounced",
+      "Reviews and eval gates apply to prompt changes too"
+    ],
+    "cons": [
+      "Another system to run and secure",
+      "Pinned snapshots are retired, so upgrades must be planned",
+      "Discipline needed: dashboard edits bypass it",
+      "Releases multiply with routes, tenants and tools"
+    ],
+    "avoidWhen": [
+      "A throwaway prototype where the prompt lives in one notebook",
+      "Pinning a snapshot and never tracking its retirement date"
+    ],
+    "tools": [
+      {
+        "name": "MLflow Prompt Registry",
+        "type": "Open source",
+        "what": "Versioned prompts with aliases and model config",
+        "url": "https://mlflow.org/docs/latest/genai/prompt-registry/"
+      },
+      {
+        "name": "Langfuse prompt management",
+        "type": "Open source, cloud",
+        "what": "Prompt versions with labels, linked to traces",
+        "url": "https://langfuse.com/docs/prompt-management/overview"
+      },
+      {
+        "name": "LangSmith prompt hub",
+        "type": "Commercial (LangChain)",
+        "what": "Prompt versions with commits and tags",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "PromptLayer",
+        "type": "Commercial",
+        "what": "Prompt registry and release labels for non-engineers",
+        "url": "https://docs.promptlayer.com"
+      },
+      {
+        "name": "Git with code review",
+        "type": "Open source",
+        "what": "Prompts as files, reviewed like code",
+        "url": "https://git-scm.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A wealth-tech firm’s portfolio-review assistant normally succeeds on 94% of reviews. Decide how its releases are managed: an alias or a pinned snapshot, prompts in code or in a registry, and whether traces carry the release. Then trigger what goes wrong: the provider moves the alias, or someone ships a bad prompt.",
+    "controls": [
+      "Choose the model reference: the alias alpha-latest or the pinned snapshot alpha-0712.",
+      "Choose where the prompt lives, and whether every trace is stamped with the release.",
+      "Pick the event: a quiet day, a provider alias move or a bad prompt v13, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Success during the event",
+        "meaning": "Share of reviews that succeed while the problem is live."
+      },
+      {
+        "name": "Time to restore",
+        "meaning": "Time to find what ran plus time to undo it."
+      },
+      {
+        "name": "Can every trace say what ran?",
+        "meaning": "True only with a registry version, a pinned snapshot and the release stamped on traces."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Alias, prompt in code, alias moves",
+        "expect": "Success falls to 86%; with no trace stamp, restoring takes 3 h 10 min."
+      },
+      {
+        "k": "pinned",
+        "name": "Pinned snapshot, alias moves",
+        "expect": "Success stays at 94%: the pinned snapshot did not move."
+      },
+      {
+        "k": "badcode",
+        "name": "Bad prompt, prompt in code",
+        "expect": "Success 89%; the trace names v13 in 5 min, but a redeploy takes 45 min: 50 min in all."
+      },
+      {
+        "k": "release",
+        "name": "Bad prompt, registry and stamps",
+        "expect": "Success 89% until a label move: restored in 7 min, and every trace says what ran."
+      }
+    ],
+    "missions": [
+      {
+        "k": "alias",
+        "text": "Survive the provider’s alias move with no drop in success.",
+        "hint": "Pin a dated snapshot instead of the alias."
+      },
+      {
+        "k": "quick",
+        "text": "Undo a bad prompt within 10 minutes.",
+        "hint": "You need to see which version is live and to roll back without a deploy."
+      },
+      {
+        "k": "known",
+        "text": "Make every trace say exactly what ran.",
+        "hint": "Registry, pinned snapshot and a release stamp on traces, all three."
+      }
+    ],
+    "tools": [
+      {
+        "n": "MLflow Prompt Registry",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Versioned prompts with aliases and an attached model configuration.",
+        "ex": "Register claims-review v13 with a pinned snapshot and move the production alias after evals pass.",
+        "pros": [
+          "Aliases make rollback one call",
+          "Fits teams already on MLflow"
+        ],
+        "cons": [
+          "Runs a tracking server",
+          "UI less suited to non-engineers"
+        ],
+        "url": "https://mlflow.org/docs/latest/genai/prompt-registry/"
+      },
+      {
+        "n": "Langfuse prompt management",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Prompt versions with labels, linked to the traces that used them.",
+        "ex": "Label version 12 as production and see its traces and scores side by side with version 13.",
+        "pros": [
+          "Versions linked to traces",
+          "Editable by non-engineers with review"
+        ],
+        "cons": [
+          "Dashboard edits need a review process",
+          "Self-hosting upkeep"
+        ],
+        "url": "https://langfuse.com/docs/prompt-management/overview"
+      },
+      {
+        "n": "LangSmith prompt hub",
+        "type": "Commercial · LangChain",
+        "start": 3,
+        "prod": 2,
+        "best": "Prompt commits and tags pulled into LangChain apps.",
+        "ex": "Pull a tagged prompt into a LangGraph node at start-up.",
+        "pros": [
+          "Commit history per prompt",
+          "Playground to compare versions"
+        ],
+        "cons": [
+          "Commercial service",
+          "Best inside LangChain"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "PromptLayer",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 2,
+        "best": "A prompt CMS with release labels for product and ops teams.",
+        "ex": "A product manager edits a template; engineering promotes it with a label.",
+        "pros": [
+          "Friendly for non-engineers",
+          "Release labels and history"
+        ],
+        "cons": [
+          "Another vendor in the request path",
+          "Less control than self-hosted"
+        ],
+        "url": "https://docs.promptlayer.com"
+      },
+      {
+        "n": "Git with code review",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Prompts as files, reviewed and tagged like code.",
+        "ex": "Keep prompts in a prompts/ folder, require review, and tag releases.",
+        "pros": [
+          "No new system",
+          "Full review history"
+        ],
+        "cons": [
+          "Rollback needs a deploy",
+          "Non-engineers need Git access"
+        ],
+        "url": "https://git-scm.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want rollback without a redeploy",
+        "tool": "A prompt registry with labels (MLflow or Langfuse)"
+      },
+      {
+        "need": "I am a small team with few prompt changes",
+        "tool": "Git with code review, plus a pinned snapshot"
+      },
+      {
+        "need": "Product managers edit prompts",
+        "tool": "Langfuse or PromptLayer, with review before promotion"
+      }
+    ],
+    "goals": [
+      "Pin model snapshots instead of aliases",
+      "Roll back a prompt by moving a label",
+      "Make every trace answer “what ran?”"
+    ]
+  },
+  "practice": {
+    "scenario": "A wealth-tech firm’s portfolio-review assistant has its prompt edited by three teams. After a bad edit, it took a day to find which text was live. They move prompts to a registry: code loads claims-review@production, each version stores its model configuration with a pinned snapshot, and every trace carries the version. A later rollback takes one command.",
+    "industries": [
+      {
+        "industry": "Wealth management",
+        "use": "Registry-managed advisory prompts with review before a label moves to production"
+      },
+      {
+        "industry": "Banking",
+        "use": "Audit trail of which prompt and model produced each customer letter"
+      },
+      {
+        "industry": "SaaS support",
+        "use": "Per-tenant prompt variants with versioned labels and quick rollback"
+      }
+    ],
+    "analogy": "Release notes for a medicine. Every batch has a number, and if a batch is bad you recall exactly that batch.",
+    "library": {
+      "name": "MLflow Prompt Registry",
+      "what": "Versioned prompts with aliases such as production, commit messages and an attached model configuration, loaded by URI.",
+      "install": "pip install \"mlflow>=3\""
+    },
+    "note": "Record the prompt name, version and model snapshot on every trace so an incident can be tied to one release.",
+    "samples": [
+      {
+        "file": "prompt_registry.py",
+        "language": "python",
+        "code": "import mlflow\n\n# Register a new version (the template uses {{double braces}})\np = mlflow.genai.register_prompt(\n    name=\"claims-review\",\n    template=\"Summarise this claim for the desk. Cite the policy clause.\\n\\n{{claim}}\",\n    commit_message=\"Add clause citation\",\n    model_config={\"model_name\": \"claude-sonnet-4-5-20250929\",   # a pinned snapshot\n                  \"temperature\": 0.2, \"max_tokens\": 800},\n)\n\n# Promote it after offline evals pass\nmlflow.genai.set_prompt_alias(name=\"claims-review\", alias=\"production\", version=p.version)\n\n# Application code loads by alias, never by pasted text\nprompt = mlflow.genai.load_prompt(\"prompts:/claims-review@production\")\ntext = prompt.format(claim=\"Hospitalisation, 3 days, cashless request ...\")\nmodel = prompt.model_config[\"model_name\"]\n\n# Rollback: point the alias at the previous version; no redeploy\nmlflow.genai.set_prompt_alias(name=\"claims-review\", alias=\"production\", version=p.version - 1)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A config uses a model alias. Overnight the provider starts serving a new snapshot to 80% of your traffic. The old snapshot succeeds on 94% of tasks and the new one on 84%. What is your overall success rate now, in percent?",
+    "answer": "0.8 × 84 + 0.2 × 94 = 67.2 + 18.8 = 86.0%. An 8-point drop with no deploy on your side; pinning the old snapshot restores 94%.",
+    "expected": {
+      "value": 86,
+      "tolerance": 0.1,
+      "label": "% overall ="
+    },
+    "interview": [
+      {
+        "question": "What belongs in a versioned agent release?",
+        "answer": "Everything that changes behaviour: the prompt text and version, the model snapshot, the tool definitions and their versions, and generation parameters such as temperature and max tokens. Hash them into one release id and stamp it on every trace, so any answer can be traced to exactly what produced it."
+      },
+      {
+        "question": "Why not always use the model alias to get improvements automatically?",
+        "answer": "Because the change arrives untested, on the provider’s schedule, and can shift behaviour your prompts depend on. Pin a dated snapshot, and move to a new one deliberately: run offline evals, then a canary, then promote. Also track the snapshot’s retirement date so the migration is planned."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Editing the live prompt in a dashboard without review",
+        "fix": "Promote a new version by moving a label only after evals pass"
+      },
+      {
+        "mistake": "Calling a moving alias in production",
+        "fix": "Pin a dated snapshot and upgrade through a canary"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "vr01",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A portfolio assistant’s config says model: claude-sonnet-4-5. Why is this risky in production?",
+      "options": [
+        "It is an alias, which the provider can point at a new snapshot without your deploy",
+        "It is a deprecated model",
+        "It disables prompt caching",
+        "It limits the context window"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "An alias can move; a dated snapshot such as claude-sonnet-4-5-20250929 stays fixed until you change it."
+    },
+    {
+      "id": "vr02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s letter-drafting prompt lives as a string in the code. A bad edit ships. What is the main cost of this setup during rollback?",
+      "options": [
+        "The model must be retrained",
+        "A code change and redeploy are needed to undo it",
+        "Traces are deleted",
+        "The registry label cannot move"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With prompts in code, rollback is a deploy; with a registry, it is a label move."
+    },
+    {
+      "id": "vr03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which set of items should one versioned agent release bundle?",
+      "options": [
+        "Only the prompt text",
+        "The prompt and the user’s question",
+        "Prompt version, model snapshot, tool definitions and generation parameters",
+        "The trace backend and the dashboard"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Anything that changes behaviour belongs in the release, so an answer can be tied to exactly what produced it."
+    },
+    {
+      "id": "vr04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A provider starts serving a new snapshot behind your alias to 60% of traffic. The old snapshot succeeds 95% of the time and the new one 85%. What is your overall success rate?",
+      "options": [
+        "85%",
+        "89%",
+        "90%",
+        "91%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.6 × 85 + 0.4 × 95 = 51 + 38 = 89%."
+    },
+    {
+      "id": "vr05",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "A SaaS team moves prompts to a registry. Which practices make that worthwhile? Select all that apply.",
+      "options": [
+        "Load prompts in code by label, such as production",
+        "Promote a new version only after evals pass",
+        "Let anyone edit the live production text directly",
+        "Copy the prompt text into each service for speed"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Loading by label and gated promotion give fast, safe rollout; direct edits and copies bypass the registry."
+    },
+    {
+      "id": "vr06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A team pins a dated snapshot. What ongoing work does that create?",
+      "options": [
+        "None; pinned snapshots are supported forever",
+        "Tracking the snapshot’s retirement date and planning upgrades",
+        "Re-registering the prompt every day",
+        "Disabling traces"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Providers retire snapshots on a schedule, so pinned releases need planned migrations."
+    },
+    {
+      "id": "vr07",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "An auditor asks which prompt produced a customer letter sent three weeks ago. What makes this answerable in seconds?",
+      "options": [
+        "Keeping the letter in email",
+        "The model’s own memory",
+        "The release id, including the prompt version, stamped on the trace for that request",
+        "Asking the engineer who wrote the prompt"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A release stamp on each trace ties every output to the exact prompt and model version."
+    },
+    {
+      "id": "vr08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "In MLflow’s prompt registry, how does application code usually load the live prompt?",
+      "options": [
+        "By the alias URI, such as prompts:/claims-review@production",
+        "By pasting the latest text into the code",
+        "By version number hard-coded in every service",
+        "By downloading it from the trace backend"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Loading by alias lets promotion and rollback happen by moving the alias."
+    },
+    {
+      "id": "vr09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A clinical-summary team needs to roll back a bad prompt quickly and prove what ran. Which do they need? Select all that apply.",
+      "options": [
+        "A registry with numbered versions and a production label",
+        "The prompt version recorded on every trace",
+        "A larger model",
+        "More examples in the prompt"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Versions plus labels give fast rollback; trace stamps give proof. Model size and examples are unrelated."
+    },
+    {
+      "id": "vr10",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Prompt v13 is live and misbehaving. Using a registry with aliases, what is the fastest safe rollback?",
+      "options": [
+        "Delete version 13",
+        "Point the production alias back at version 12",
+        "Edit version 13’s text in place",
+        "Restart the service"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Moving the alias restores v12 on the next request and keeps v13 for investigation."
+    },
+    {
+      "id": "vr11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Why store the model configuration, such as snapshot and temperature, with the prompt version?",
+      "options": [
+        "Prompts only work with one temperature",
+        "It makes the prompt shorter",
+        "The provider requires it",
+        "A prompt tuned for one model and setting can behave differently on another, so they change together"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Prompt and model settings interact, so versioning them together keeps a release reproducible."
+    },
+    {
+      "id": "vr12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank’s agent broke after the provider changed the model behind its alias. Which measures would have prevented or shortened this? Select all that apply.",
+      "options": [
+        "Pinning a dated snapshot",
+        "Recording the served model on traces",
+        "Adding a longer system prompt",
+        "Raising the temperature"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Pinning prevents the silent change; recording the served model makes it visible at once."
+    },
+    {
+      "id": "vr13",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "An EdTech company changes its tutoring prompt weekly. Which statement about using Git alone for prompts is correct?",
+      "options": [
+        "It gives review and history, but rollback still needs a deploy",
+        "It cannot store text files",
+        "It rolls back instantly without a deploy",
+        "It records which snapshot served each request"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Git gives history and review; runtime label moves need a registry or config service."
+    },
+    {
+      "id": "vr14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A team upgrades to a new model snapshot. What is the right order?",
+      "options": [
+        "Switch production, then run evals",
+        "Run offline evals, canary the new snapshot, then promote",
+        "Change the alias and wait for complaints",
+        "Upgrade only the prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Offline evals catch known problems, the canary catches live ones, and only then does everyone get it."
+    },
+    {
+      "id": "vr15",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which of these change an agent’s behaviour and should therefore be part of its versioned release? Select all that apply.",
+      "options": [
+        "The tool definitions and their descriptions",
+        "The generation temperature",
+        "The on-call rota",
+        "The colour of the admin dashboard"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Tool descriptions and parameters change what the model does; rotas and dashboards do not."
+    },
+    {
+      "id": "vr16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A release record is hashed into one id, cfg-7f3a. What is the main benefit?",
+      "options": [
+        "It compresses the prompt",
+        "It encrypts the release",
+        "It speeds up the model",
+        "One short id on every trace identifies the whole configuration that ran"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "A single id makes filtering traces and comparing releases simple."
+    },
+    {
+      "id": "vr17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Three teams edit the same support prompt in a shared dashboard, and a bad edit went live on a Friday. What is the best process fix?",
+      "options": [
+        "Lock the dashboard permanently",
+        "Let only one engineer edit prompts",
+        "Any edit creates a version; promotion to production needs review and passing evals",
+        "Stop changing the prompt"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Versioned drafts keep teams fast, while gated promotion keeps production safe."
+    },
+    {
+      "id": "vr18",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A fintech wants every answer traceable to what produced it. Which three things together make that true? Select all that apply.",
+      "options": [
+        "Prompts from a registry version",
+        "A pinned model snapshot",
+        "The release stamped on every trace",
+        "A bigger context window"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All three are needed: the prompt version, a fixed model and the stamp that records them."
+    },
+    {
+      "id": "vr19",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A pinned snapshot is announced for retirement in 60 days. What should the team do?",
+      "options": [
+        "Nothing until it stops working",
+        "Evaluate the replacement offline, canary it, and promote before the date",
+        "Switch to the alias permanently",
+        "Remove the model from the release"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retirements are scheduled, so migrate deliberately through evals and a canary."
+    },
+    {
+      "id": "vr20",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "An incident timeline shows: 90 minutes to find which prompt was live, 45 minutes to redeploy. Which changes cut both? Select all that apply.",
+      "options": [
+        "Stamping the prompt version on traces",
+        "Loading prompts from a registry by label",
+        "Doubling the on-call team",
+        "Writing longer prompts"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The stamp removes the search; the registry replaces the redeploy with a label move."
+    }
+  ]
+}

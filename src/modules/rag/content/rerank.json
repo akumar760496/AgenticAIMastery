@@ -1,0 +1,825 @@
+{
+  "id": "rerank",
+  "moduleSlug": "rag",
+  "name": "Re-ranking with Cross-Encoders",
+  "shortName": "Re-ranking",
+  "question": "Are the best passages at the top, not just somewhere in the pool?",
+  "summary": "A second stage after retrieval. Fast search, dense or hybrid, fetches a wide candidate set such as the top 50; a cross-encoder then reads the query and each candidate together and scores how well the passage answers it, and only the top few reach the prompt. Reading both texts together is far more precise than comparing two separate vectors, but it costs time per candidate, and it can only reorder what the first stage found.",
+  "useCases": [
+    "Help centres and knowledge bases where the top 3 to 5 decide the answer",
+    "Hindi, Hinglish and mixed-language queries (with a multilingual model)",
+    "Pipelines that must say “not found” instead of guessing"
+  ],
+  "keyFacts": {
+    "label": "Choices",
+    "items": [
+      {
+        "term": "Candidates in",
+        "detail": "how many first-stage results to score, often 30–100"
+      },
+      {
+        "term": "Passages out",
+        "detail": "how many reach the prompt, often 3–8"
+      },
+      {
+        "term": "Model",
+        "detail": "cross-encoder, multilingual cross-encoder or LLM re-ranker"
+      },
+      {
+        "term": "Latency",
+        "detail": "grows with candidates and passage length"
+      },
+      {
+        "term": "Score threshold",
+        "detail": "drop weak passages so the system can decline"
+      },
+      {
+        "term": "Late interaction",
+        "detail": "ColBERT-style models sit between bi- and cross-encoders"
+      }
+    ]
+  },
+  "steps": [
+    "Retrieve a wide candidate set with hybrid search",
+    "Score every candidate with a cross-encoder, multilingual if users mix languages",
+    "Keep the top 3 to 8 above a score threshold",
+    "Measure recall at the kept depth and p95 latency together"
+  ],
+  "pitfalls": [
+    "Re-ranking cannot rescue a passage the first stage never retrieved",
+    "English-only re-rankers hurt Hindi and Hinglish queries",
+    "Scores are not calibrated probabilities; tune the threshold on your data"
+  ],
+  "tools": [
+    "bge-reranker-v2-m3",
+    "Cohere Rerank",
+    "Jina Reranker",
+    "Voyage rerank",
+    "sentence-transformers CrossEncoder",
+    "RAGatouille (ColBERT)"
+  ],
+  "remember": "Retrieve wide, re-rank narrow.",
+  "caption": "Illustrative: Vyapar Mart, a fictional marketplace, answers seller questions from 8,000 help articles.",
+  "comparison": {
+    "scope": "After retrieval, before the prompt",
+    "cost": 2,
+    "needs": "Precision in the top few",
+    "best": "Latency; cannot fix recall"
+  },
+  "diagram": {
+    "file": "diagrams/rerank.svg"
+  },
+  "lesson": {
+    "file": "rerank.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from sentence_transformers import CrossEncoder",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "reranker = CrossEncoder(\"BAAI/bge-reranker-v2-m3\", max_length=512)    # multilingual",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def retrieve(query, k_in=50, k_out=5, min_score=0.20):",
+        "steps": []
+      },
+      {
+        "text": "    candidates = hybrid_search(query, k=k_in)          # cheap and wide: ~40 ms",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    pairs = [(query, c.text) for c in candidates]",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "    scores = reranker.predict(pairs, batch_size=32)    # ~2.5 ms a pair on a GPU",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    ranked = sorted(zip(scores, candidates), key=lambda x: -x[0])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    kept = [c for s, c in ranked[:k_out] if s >= min_score]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return kept or None               # None → say \"I could not find this\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "for k_in in (20, 50, 100):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    print(k_in, recall_at_k(lambda q: retrieve(q, k_in=k_in), eval_set, k=5),",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "          p95_ms(lambda q: retrieve(q, k_in=k_in)))",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Retrieve wide and cheap",
+        "text": "Hybrid search returns 50 candidates in about 40 ms. For “GST invoice kaise download karun?” the right help article is in the pool, but at rank 17."
+      },
+      {
+        "title": "See why the first stage misses",
+        "text": "A bi-encoder embeds the query and each article separately and compares two vectors. The article titled “Tax documents for sellers” never shares the question’s words."
+      },
+      {
+        "title": "Read query and passage together",
+        "text": "A cross-encoder scores each (query, passage) pair jointly, attending across both texts. A multilingual model such as bge-reranker-v2-m3 handles the Hinglish."
+      },
+      {
+        "title": "Sort by the new score",
+        "text": "The right article scores 0.94 and moves from rank 17 to rank 1. Articles that merely share words drop."
+      },
+      {
+        "title": "Keep the few, above a threshold",
+        "text": "Only the top 5 with a score of at least 0.20 reach the prompt. If none qualify, the bot says it could not find the answer instead of guessing."
+      },
+      {
+        "title": "Tune the depth on your data",
+        "text": "Recall at 5 rises from 0.64 to 0.86 for about 110 ms more at 50 candidates. Deeper pools add recall slowly and latency linearly."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"24\" text-anchor=\"middle\">“GST invoice kaise download karun?”</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"166\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"91\" y=\"54\">Hybrid search</text><text class=\"sb\" x=\"91\" y=\"69\">50 candidates · 40 ms</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx warn\" x=\"184\" y=\"44\" width=\"168\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"61\" text-anchor=\"middle\">right article: rank 17</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"84\" width=\"166\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"100\" text-anchor=\"middle\">query → vector</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"186\" y=\"84\" width=\"166\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"269\" y=\"100\" text-anchor=\"middle\">article → vector</text></g><text class=\"tl l a\" x=\"118\" y=\"124\" style=\"--d:0.2s\">compared separately: similarity 0.41</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"132\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"146\">Cross-encoder (query, passage) → score</text><text class=\"sb\" x=\"180\" y=\"161\">bge-reranker-v2-m3 · multilingual</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"174\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"190\" text-anchor=\"middle\">rank 17 → rank 1</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"174\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"190\" text-anchor=\"middle\">score 0.94</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"218\" style=\"--d:0s\">Top 5 ≥ 0.20 → prompt</text><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx pass\" x=\"180\" y=\"204\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"192\" y=\"218\" text-anchor=\"middle\" style=\"text-anchor:middle\">1</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx soft\" x=\"210\" y=\"204\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"222\" y=\"218\" text-anchor=\"middle\" style=\"text-anchor:middle\">2</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx soft\" x=\"240\" y=\"204\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"252\" y=\"218\" text-anchor=\"middle\" style=\"text-anchor:middle\">3</text></g><g class=\"a\" style=\"--d:0.42000000000000004s\"><rect class=\"bx soft\" x=\"270\" y=\"204\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"282\" y=\"218\" text-anchor=\"middle\" style=\"text-anchor:middle\">4</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"300\" y=\"204\" width=\"24\" height=\"20\" rx=\"4\"/><text class=\"mono\" x=\"312\" y=\"218\" text-anchor=\"middle\" style=\"text-anchor:middle\">5</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"234\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"249\" text-anchor=\"middle\">recall@5 0.64 → 0.86 · +110 ms</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Large gains in precision where it matters: the top few passages",
+      "Works on top of any retriever",
+      "A score threshold lets the system decline instead of guessing",
+      "Multilingual models handle Hindi and Hinglish queries"
+    ],
+    "cons": [
+      "Adds latency that grows with candidates and passage length",
+      "Cannot recover passages the first stage missed",
+      "Another model to host or pay for",
+      "Scores need tuning per corpus"
+    ],
+    "avoidWhen": [
+      "First-stage recall is already poor (fix parsing, chunking or query rewriting first)",
+      "Only one or two candidates ever come back, so there is nothing to reorder"
+    ],
+    "tools": [
+      {
+        "name": "bge-reranker-v2-m3",
+        "type": "Open model (BAAI)",
+        "what": "Multilingual cross-encoder you can self-host",
+        "url": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+      },
+      {
+        "name": "Cohere Rerank",
+        "type": "Hosted API",
+        "what": "Multilingual re-ranking of candidate lists",
+        "url": "https://docs.cohere.com/docs/rerank-overview"
+      },
+      {
+        "name": "Jina Reranker",
+        "type": "Hosted API and open models",
+        "what": "Re-ranking with long-document support",
+        "url": "https://jina.ai/reranker/"
+      },
+      {
+        "name": "Voyage rerank",
+        "type": "Hosted API",
+        "what": "Re-rankers tuned for retrieval quality",
+        "url": "https://docs.voyageai.com/docs/reranker"
+      },
+      {
+        "name": "sentence-transformers",
+        "type": "Open source",
+        "what": "CrossEncoder class for running open re-rankers",
+        "url": "https://www.sbert.net"
+      },
+      {
+        "name": "RAGatouille",
+        "type": "Open source",
+        "what": "ColBERT late-interaction retrieval and re-ranking",
+        "url": "https://github.com/AnswerDotAI/RAGatouille"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Vyapar Mart, a fictional marketplace, answers seller questions from 8,000 help articles. 200 test questions: 140 in English and 60 in Hinglish, plus 20 that the help centre cannot answer. Hybrid search takes 40 ms and the latency budget is 500 ms.",
+    "controls": [
+      "Choose the re-ranker: none, English cross-encoder, multilingual cross-encoder or an LLM re-ranker.",
+      "Drag how many candidates are scored and how many passages are kept.",
+      "Switch on the score threshold that lets the bot say “not found”."
+    ],
+    "outputs": [
+      {
+        "name": "Recall at the kept depth",
+        "meaning": "Questions with the right article among the passages kept, overall and for Hinglish."
+      },
+      {
+        "name": "Latency",
+        "meaning": "Search plus re-ranking, against the 500 ms budget."
+      },
+      {
+        "name": "No-answer questions declined",
+        "meaning": "Of the 20 the help centre cannot answer."
+      },
+      {
+        "name": "Tokens sent to the model",
+        "meaning": "Kept passages × about 300 tokens."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No re-ranker",
+        "expect": "About 56% recall at 5 in 40 ms; every no-answer question still gets an answer."
+      },
+      {
+        "k": "english",
+        "name": "English cross-encoder, 50 candidates",
+        "expect": "About 78% overall, but Hinglish only 63%; 115 ms."
+      },
+      {
+        "k": "multi",
+        "name": "Multilingual, 100 candidates, threshold",
+        "expect": "About 85% overall and 83% Hinglish in 290 ms; 16 of 20 no-answer questions declined."
+      },
+      {
+        "k": "llm",
+        "name": "LLM re-ranker, 100 candidates",
+        "expect": "About 87% recall, but 1,740 ms: far over budget."
+      }
+    ],
+    "missions": [
+      {
+        "k": "good",
+        "text": "Reach at least 85% recall and 80% on Hinglish within 500 ms, with the threshold on.",
+        "hint": "A multilingual cross-encoder over 100 candidates."
+      },
+      {
+        "k": "shallow",
+        "text": "Show that re-ranking cannot rescue passages the first stage never retrieved.",
+        "hint": "Pick any re-ranker and score only 10 candidates."
+      },
+      {
+        "k": "hinglish",
+        "text": "Show what an English-only re-ranker does to Hinglish questions.",
+        "hint": "Choose the English cross-encoder."
+      }
+    ],
+    "tools": [
+      {
+        "n": "bge-reranker-v2-m3",
+        "type": "Open model · BAAI",
+        "start": 3,
+        "prod": 3,
+        "best": "A multilingual cross-encoder you can self-host, good on Hindi and mixed-language text.",
+        "ex": "Re-rank the top 100 hybrid results for Hinglish seller questions.",
+        "pros": [
+          "Multilingual",
+          "Free to self-host"
+        ],
+        "cons": [
+          "Needs a GPU for low latency at depth",
+          "Long passages are truncated"
+        ],
+        "url": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+      },
+      {
+        "n": "Cohere Rerank",
+        "type": "Hosted API",
+        "start": 3,
+        "prod": 3,
+        "best": "Managed, multilingual re-ranking of candidate lists with one API call.",
+        "ex": "Send the query and 50 candidate passages; keep the top 5 by relevance score.",
+        "pros": [
+          "No hosting",
+          "Strong multilingual quality"
+        ],
+        "cons": [
+          "Per-search cost",
+          "Text leaves your systems"
+        ],
+        "url": "https://docs.cohere.com/docs/rerank-overview"
+      },
+      {
+        "n": "Jina Reranker",
+        "type": "Hosted API · open models",
+        "start": 3,
+        "prod": 2,
+        "best": "Re-rankers with long-context support and multilingual variants.",
+        "ex": "Re-rank long policy sections without cutting them to 512 tokens.",
+        "pros": [
+          "Long inputs",
+          "API or self-hosted"
+        ],
+        "cons": [
+          "Check licence terms for self-hosting"
+        ],
+        "url": "https://jina.ai/reranker/"
+      },
+      {
+        "n": "sentence-transformers",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "The CrossEncoder class for running and fine-tuning open re-rankers.",
+        "ex": "Fine-tune a cross-encoder on your own clicked results.",
+        "pros": [
+          "Standard Python API",
+          "Fine-tuning support"
+        ],
+        "cons": [
+          "You host and scale it"
+        ],
+        "url": "https://www.sbert.net"
+      },
+      {
+        "n": "RAGatouille",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "ColBERT late-interaction retrieval: more precise than bi-encoders, faster than cross-encoders.",
+        "ex": "Use ColBERT as a middle stage between BM25 and a cross-encoder.",
+        "pros": [
+          "Good precision at moderate cost",
+          "Token-level matching"
+        ],
+        "cons": [
+          "Larger indexes",
+          "Fewer managed options"
+        ],
+        "url": "https://github.com/AnswerDotAI/RAGatouille"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Self-hosted, multilingual",
+        "tool": "bge-reranker-v2-m3"
+      },
+      {
+        "need": "Managed, minimal effort",
+        "tool": "Cohere Rerank"
+      },
+      {
+        "need": "Middle ground on cost",
+        "tool": "ColBERT via RAGatouille"
+      }
+    ],
+    "goals": [
+      "Explain why a cross-encoder is more precise than a bi-encoder",
+      "Choose candidate depth by recall and latency together",
+      "Use a score threshold so the system can decline"
+    ]
+  },
+  "practice": {
+    "scenario": "Vyapar Mart, a fictional marketplace, answers seller questions from 8,000 help articles, many asked in Hinglish. Hybrid search fetches 100 candidates in about 40 ms; a multilingual cross-encoder scores each against the question, and only the top 5 scoring at least 0.20 reach the model. If none qualify, the bot says it could not find the answer.",
+    "industries": [
+      {
+        "industry": "E-commerce",
+        "use": "Seller and buyer help centres in several languages"
+      },
+      {
+        "industry": "Banking",
+        "use": "Product FAQs where the top answer must be the right one"
+      },
+      {
+        "industry": "Enterprise search",
+        "use": "Intranet search over policies, wikis and tickets"
+      }
+    ],
+    "analogy": "A recruiter and an interviewer. The recruiter skims 100 CVs in minutes and shortlists 50; the interviewer spends real time with each one and picks the best five.",
+    "library": {
+      "name": "sentence-transformers",
+      "what": "Runs open cross-encoder re-rankers such as BAAI/bge-reranker-v2-m3 locally, on CPU or GPU.",
+      "install": "pip install sentence-transformers"
+    },
+    "note": "The first run downloads the model. Scores are relative; tune the threshold on your own labelled questions.",
+    "samples": [
+      {
+        "file": "rerank.py",
+        "language": "python",
+        "code": "from sentence_transformers import CrossEncoder\n\nreranker = CrossEncoder(\"BAAI/bge-reranker-v2-m3\", max_length=512)\n\nquery = \"GST invoice kaise download karun?\"\ncandidates = [\n    \"Returns policy: how to accept or reject a customer return.\",\n    \"Tax documents for sellers: download your monthly GST invoice from Payments > Reports.\",\n    \"Seller fees: commission and shipping charges by category.\",\n]\nscores = reranker.predict([(query, c) for c in candidates])\nfor score, text in sorted(zip(scores, candidates), reverse=True):\n    print(f\"{score:.2f}  {text}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Search takes 40 ms and a cross-encoder takes 2.5 ms per candidate. What is the total latency for re-ranking 100 candidates, in milliseconds?",
+    "answer": "40 + 100 × 2.5 = 290 ms. Scoring 200 candidates would take 540 ms, over a 500 ms budget.",
+    "expected": {
+      "value": 290,
+      "tolerance": 1,
+      "label": "ms ="
+    },
+    "interview": [
+      {
+        "question": "When is a re-ranker worth adding?",
+        "answer": "When the right passage is usually retrieved but not in the top few. Measure recall at 50 and recall at 5: a large gap means re-ranking will help; a low recall at 50 means fix retrieval first."
+      },
+      {
+        "question": "Cross-encoder or LLM re-ranker?",
+        "answer": "Cross-encoders are fast and precise enough for most pipelines, at a few milliseconds per candidate on a GPU. LLM re-rankers can reason about harder relevance but add hundreds of milliseconds to seconds; use them offline, for small candidate sets, or where latency does not matter."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Re-ranking only the top 5 that will be kept",
+        "fix": "Score a wide pool, then keep the few"
+      },
+      {
+        "mistake": "Using an English re-ranker for Hinglish users",
+        "fix": "Use a multilingual model and report recall per language"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rr01",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does a cross-encoder do that a bi-encoder does not?",
+      "options": [
+        "Embeds documents in advance",
+        "Reads the query and a passage together to score relevance",
+        "Stores vectors",
+        "Generates answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Joint reading gives more precise relevance, at more cost per pair."
+    },
+    {
+      "id": "rr02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Recall at 50 is 92% and recall at 5 is 58%. What will help most?",
+      "options": [
+        "A re-ranker over the top 50",
+        "A bigger chunk size",
+        "Fewer candidates",
+        "A new vector database"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The right passage is usually retrieved but ranked too low: a re-ranking problem."
+    },
+    {
+      "id": "rr03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Recall at 50 is 45%. Will a re-ranker fix it?",
+      "options": [
+        "Yes",
+        "No: it can only reorder what was retrieved; fix retrieval first",
+        "Only an LLM re-ranker will",
+        "Only with a threshold"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Re-ranking cannot add passages to the pool."
+    },
+    {
+      "id": "rr04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Search takes 40 ms and re-ranking 2.5 ms per candidate. What is total latency for 100 candidates?",
+      "options": [
+        "140 ms",
+        "290 ms",
+        "250 ms",
+        "2,540 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "40 + 100 × 2.5 = 290 ms."
+    },
+    {
+      "id": "rr05",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Users write in Hinglish. Which re-ranker?",
+      "options": [
+        "An English cross-encoder",
+        "A multilingual cross-encoder such as bge-reranker-v2-m3",
+        "No re-ranker",
+        "BM25"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "English-only models score code-mixed queries poorly."
+    },
+    {
+      "id": "rr06",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are reasons to use a score threshold after re-ranking? Select all that apply.",
+      "options": [
+        "Let the system say “not found” when nothing is relevant",
+        "Avoid sending weak passages to the model",
+        "Reduce hallucinated answers on unanswerable questions",
+        "Make scores comparable across all corpora"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Scores are not universally calibrated; tune the threshold per corpus."
+    },
+    {
+      "id": "rr07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why not run a cross-encoder over the whole corpus?",
+      "options": [
+        "It is not accurate",
+        "It must score every query–document pair at query time, which is far too slow",
+        "It needs labelled data",
+        "It only works in English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cross-encoders cannot precompute document vectors."
+    },
+    {
+      "id": "rr08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "An LLM re-ranker takes 900 ms plus 8 ms per candidate. For 100 candidates, what is its latency?",
+      "options": [
+        "908 ms",
+        "1,700 ms",
+        "800 ms",
+        "9,800 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "900 + 100 × 8 = 1,700 ms, too slow for most live chat."
+    },
+    {
+      "id": "rr09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Where does ColBERT-style late interaction sit?",
+      "options": [
+        "Before parsing",
+        "Between bi-encoders and cross-encoders in precision and cost",
+        "After generation",
+        "It replaces the LLM"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Token-level matching with precomputed document embeddings."
+    },
+    {
+      "id": "rr10",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which should you measure when tuning candidate depth? Select all that apply.",
+      "options": [
+        "Recall at the kept depth",
+        "p95 latency",
+        "Recall per language or segment",
+        "The number of GPUs in the data centre"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Quality and latency together, sliced by segment."
+    },
+    {
+      "id": "rr11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A re-ranker keeps the top 5 of 5 candidates. What is wrong?",
+      "options": [
+        "Nothing",
+        "It reorders the same 5 it would keep anyway; retrieve a wider pool",
+        "It should keep 10",
+        "The threshold is missing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Score a wide pool, keep a few."
+    },
+    {
+      "id": "rr12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Re-ranking 200 candidates takes 540 ms against a 500 ms budget. What do you try first?",
+      "options": [
+        "Score about 100 candidates and check recall",
+        "Drop re-ranking",
+        "Use an LLM re-ranker",
+        "Increase chunk size"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Recall usually changes little between 100 and 200, while latency doubles."
+    },
+    {
+      "id": "rr13",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Cross-encoder scores for two different queries are 0.4 and 0.9. What can you conclude?",
+      "options": [
+        "The second answer is more than twice as likely to be right",
+        "Little: scores rank passages within a query, not across queries",
+        "The first query should be dropped",
+        "Nothing is relevant for the first query"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Treat scores as rankings; tune thresholds on labelled data."
+    },
+    {
+      "id": "rr14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which input format does a cross-encoder take?",
+      "options": [
+        "A single passage",
+        "(query, passage) pairs",
+        "A vector",
+        "A document ID"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It scores one pair at a time, batched for speed."
+    },
+    {
+      "id": "rr15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "After adding a re-ranker, answers improve but costs rise because the prompt still carries 20 passages. What should change?",
+      "options": [
+        "Keep only the top 3 to 8 after re-ranking",
+        "Re-rank twice",
+        "Use fewer candidates",
+        "Remove the re-ranker"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The point of re-ranking is to send fewer, better passages."
+    },
+    {
+      "id": "rr16",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which are hosted or open re-rankers? Select all that apply.",
+      "options": [
+        "Cohere Rerank",
+        "bge-reranker-v2-m3",
+        "Jina Reranker",
+        "HNSW"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "HNSW is an index, not a re-ranker."
+    },
+    {
+      "id": "rr17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Recall at 5 rises from 64% to 86% with re-ranking. How many more of 500 questions have the right passage in the top 5?",
+      "options": [
+        "22",
+        "110",
+        "86",
+        "430"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(0.86 − 0.64) × 500 = 110 questions."
+    },
+    {
+      "id": "rr18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why might a re-ranker hurt some queries?",
+      "options": [
+        "It never does",
+        "A domain or language mismatch can push good passages down; evaluate per segment",
+        "It adds tokens",
+        "It changes the index"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Measure by segment, not just overall."
+    },
+    {
+      "id": "rr19",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Long passages are truncated at 512 tokens by the re-ranker. What is the risk?",
+      "options": [
+        "None",
+        "The relevant sentence may be beyond the cut, so the passage scores low",
+        "Faster scoring",
+        "More recall"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Keep chunks within the re-ranker’s window, or use a long-context re-ranker."
+    },
+    {
+      "id": "rr20",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which question does re-ranking answer?",
+      "options": [
+        "Did we retrieve the right passage at all?",
+        "Are the best passages at the top of what we retrieved?",
+        "Is the answer grounded?",
+        "Is the document parsed?"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Ordering, not recall."
+    }
+  ]
+}

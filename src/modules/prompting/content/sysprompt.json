@@ -1,0 +1,843 @@
+{
+  "id": "sysprompt",
+  "moduleSlug": "prompting",
+  "name": "System Prompt Design",
+  "shortName": "System prompt",
+  "question": "What does the model need to know before the first message?",
+  "summary": "The system prompt is the agent’s standing brief: who it is, what it is for, what it knows, the rules it must follow, when to use each tool, the exact output format, and what to do when it is unsure. Clear sections, explicit reasons for rules and no contradictions matter more than clever wording. Put stable text first so it can be cached, and variable data and the question last.",
+  "useCases": [
+    "Every agent: it is the first thing to get right",
+    "Agents with several tools that are easy to confuse",
+    "Outputs that feed code, audits or customers"
+  ],
+  "keyFacts": {
+    "label": "Sections",
+    "items": [
+      {
+        "term": "Role and goal",
+        "detail": "who the agent is, who it serves, what success looks like"
+      },
+      {
+        "term": "Context",
+        "detail": "facts it needs, such as products, policies and dates"
+      },
+      {
+        "term": "Rules and limits",
+        "detail": "what it must and must not do, with the reason"
+      },
+      {
+        "term": "Tool guidance",
+        "detail": "when to use each tool and when not to"
+      },
+      {
+        "term": "Output format",
+        "detail": "the exact structure, or a schema for structured outputs"
+      },
+      {
+        "term": "Uncertainty",
+        "detail": "when to ask, refuse or escalate instead of guessing"
+      }
+    ]
+  },
+  "steps": [
+    "Write sections: role, context, rules, tools, format, uncertainty",
+    "Explain why each rule exists, and remove contradictions",
+    "Put stable text first and variables last, for caching and focus",
+    "Test on real cases and fix the failures, one change at a time"
+  ],
+  "pitfalls": [
+    "Rules added over months that now contradict each other",
+    "Vague instructions such as “be helpful” with no definition of done",
+    "Putting the user’s data before the instructions in long prompts, or timestamps at the top that break caching"
+  ],
+  "tools": [
+    "Anthropic prompt engineering guide",
+    "OpenAI prompting guide",
+    "promptfoo",
+    "Anthropic Console prompt tools",
+    "Langfuse prompt management"
+  ],
+  "remember": "Say who, what, rules with reasons, tools, format, and what to do when unsure.",
+  "caption": "Illustrative: a support agent’s accuracy with a vague prompt against a sectioned one.",
+  "comparison": {
+    "scope": "Unclear or inconsistent behaviour",
+    "cost": 1,
+    "needs": "Clear writing and tests",
+    "best": "Contradictions that accumulate"
+  },
+  "diagram": {
+    "file": "diagrams/sysprompt.svg"
+  },
+  "lesson": {
+    "file": "support_prompt.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "SYSTEM = \"\"\"<role>",
+        "steps": []
+      },
+      {
+        "text": "You are the billing support assistant for a mobile operator. You help",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "prepaid and postpaid customers understand charges and fix billing problems.",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "</role>",
+        "steps": []
+      },
+      {
+        "text": "<rules>",
+        "steps": []
+      },
+      {
+        "text": "- Never reveal another customer's data: verify the number belongs to the caller.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "- Do not promise refunds above Rs 500, because only the billing team can approve them.",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "</rules>",
+        "steps": []
+      },
+      {
+        "text": "<tools>",
+        "steps": []
+      },
+      {
+        "text": "- get_bill: postpaid bills and itemised charges.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "- get_recharges: prepaid recharge history. Never use get_bill for prepaid.",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "</tools>",
+        "steps": []
+      },
+      {
+        "text": "<format>",
+        "steps": []
+      },
+      {
+        "text": "At most 4 short sentences, then one line: \"Next step: ...\".",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "</format>",
+        "steps": []
+      },
+      {
+        "text": "<when_unsure>",
+        "steps": []
+      },
+      {
+        "text": "If the plan type is unclear, ask. If a tool fails twice, hand over to a human.",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "</when_unsure>\"\"\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def reply(customer: str, question: str):",
+        "steps": []
+      },
+      {
+        "text": "    return client.messages.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=\"claude-sonnet-4-5-20250929\", max_tokens=400,",
+        "steps": []
+      },
+      {
+        "text": "        system=SYSTEM,                                   # stable, cacheable",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        messages=[{\"role\": \"user\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                   \"content\": f\"<customer>{customer}</customer>\\n{question}\"}])",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "State the role and the goal",
+        "text": "Who the agent is, whom it serves and what a good outcome is. Without this, every later rule floats free of purpose."
+      },
+      {
+        "title": "Write rules with reasons",
+        "text": "“Because only the billing team can approve them” lets the model handle refund cases the rule did not list. Rules without reasons get applied too literally or not at all."
+      },
+      {
+        "title": "Say when to use each tool",
+        "text": "The two billing tools were being confused. One line each on what the tool is for, and one explicit “never”, fixes most tool-choice errors."
+      },
+      {
+        "title": "Pin down the format",
+        "text": "A maximum length and a fixed final line make replies consistent and easy to check automatically."
+      },
+      {
+        "title": "Say what to do when unsure",
+        "text": "Asking when the plan type is unclear, and handing over after two tool failures, replaces confident guesses with safe behaviour."
+      },
+      {
+        "title": "Stable first, variables last",
+        "text": "The system prompt never changes between calls, so it can be cached. The customer’s details and question go in the message, last, where the model reads them just before answering."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"21\" text-anchor=\"middle\">role and goal</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"34\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"49\" text-anchor=\"middle\">rules, with reasons</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"62\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"77\" text-anchor=\"middle\">tools: when to use each</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"90\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"105\" text-anchor=\"middle\">output format</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"118\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"133\" text-anchor=\"middle\">when unsure: ask, hand over</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<path class=\"ln draw acc\" pathLength=\"1\" d=\"M216 8 L216 138\" style=\"--d:0s\"/><text class=\"sb a\" x=\"224\" y=\"62\" style=\"text-anchor:start;--d:0.1s\">system: stable</text><text class=\"sb a\" x=\"224\" y=\"78\" style=\"text-anchor:start;--d:0.1s\">(cached)</text><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"8\" y=\"148\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"163\" text-anchor=\"middle\">message: customer data + question, last</text></g><text class=\"tl a\" x=\"112\" y=\"195\" style=\"text-anchor:end;--d:0.3s\">vague prompt</text><rect x=\"118\" y=\"185\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"185\" width=\"125.4\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.4s\"/><text class=\"mono a\" x=\"314\" y=\"195\" style=\"text-anchor:start;--d:0.5s\">66%</text><text class=\"tl a\" x=\"112\" y=\"217\" style=\"text-anchor:end;--d:0.4s\">sectioned</text><rect x=\"118\" y=\"207\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"207\" width=\"171\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.5s\"/><text class=\"mono a\" x=\"314\" y=\"217\" style=\"text-anchor:start;--d:0.6000000000000001s\">90%</text><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t\" x=\"180\" y=\"236\" style=\"text-anchor:middle;fill:var(--ink-2)\">task accuracy (illustrative)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Cheapest and fastest lever on quality",
+      "Makes behaviour predictable and reviewable",
+      "Cacheable when stable text comes first",
+      "Improves tool choice with a few lines"
+    ],
+    "cons": [
+      "Long prompts cost tokens on every call without caching",
+      "Rules accumulate and start to conflict",
+      "Wording changes can have surprising effects",
+      "Not a security boundary on its own"
+    ],
+    "avoidWhen": [
+      "Using the system prompt as the only defence against injection or misuse",
+      "Stuffing per-request data into the system prompt, which breaks caching"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic prompt engineering guide",
+        "type": "Documentation",
+        "what": "Structure, XML tags, examples and role prompts",
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview"
+      },
+      {
+        "name": "OpenAI prompt engineering guide",
+        "type": "Documentation",
+        "what": "Instruction hierarchy and message roles",
+        "url": "https://platform.openai.com/docs/guides/prompt-engineering"
+      },
+      {
+        "name": "promptfoo",
+        "type": "Open source",
+        "what": "Compare prompt variants on test cases",
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "name": "Langfuse prompt management",
+        "type": "Open source, cloud",
+        "what": "Version and compare prompts with traces",
+        "url": "https://langfuse.com/docs/prompt-management/overview"
+      },
+      {
+        "name": "Anthropic Console",
+        "type": "Web tool",
+        "what": "Draft, generate and evaluate prompts",
+        "url": "https://console.anthropic.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A telecom operator’s billing-support agent has two tools that are easy to confuse and often guesses when it is unsure. Build its system prompt section by section, add a contradiction the way prompts accumulate them, and choose where the customer’s data goes. The agent is evaluated on 400 real tickets and handles 85,000 calls a month.",
+    "controls": [
+      "Tick the sections to include: role, rules with reasons, tool guidance, output format, and what to do when unsure.",
+      "Add three worked examples, or two contradictory rules, to see what each does.",
+      "Choose whether customer data goes at the end (cacheable) or the top, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Task accuracy",
+        "meaning": "Share of tickets answered correctly with the right tool."
+      },
+      {
+        "name": "Format compliance",
+        "meaning": "Share of replies in the required format."
+      },
+      {
+        "name": "Right escalation when unsure",
+        "meaning": "Share of unclear cases where the agent asks or hands over instead of guessing."
+      },
+      {
+        "name": "Prompt tokens · cache hit · input cost",
+        "meaning": "Size of the prompt, how much is served from cache, and the monthly input cost at $3 per million tokens."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Role only",
+        "expect": "66% accuracy, 70% format compliance, 310 tokens, nothing cached: $79 a month."
+      },
+      {
+        "k": "lean",
+        "name": "All sections, no examples",
+        "expect": "90% accuracy, 96% format compliance, 1,230 tokens, 90% cached: about $60 a month."
+      },
+      {
+        "k": "everything",
+        "name": "Plus three examples",
+        "expect": "96% accuracy, 98% format, but 1,930 tokens: about $94 a month."
+      },
+      {
+        "k": "accreted",
+        "name": "Everything, a contradiction, data at the top",
+        "expect": "Accuracy falls to 81%, and nothing is cached: about $502 a month."
+      }
+    ],
+    "missions": [
+      {
+        "k": "good",
+        "text": "Reach 90% accuracy and 95% format compliance.",
+        "hint": "Rules, tool guidance, format and an uncertainty policy all add up."
+      },
+      {
+        "k": "lean",
+        "text": "Do it in 1,300 tokens or fewer.",
+        "hint": "Do you need the examples for this task?"
+      },
+      {
+        "k": "conflict",
+        "text": "Show that two contradictory rules pull a full prompt below 85% accuracy.",
+        "hint": "Tick every section and the examples, then add the contradiction."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic prompt engineering guide",
+        "type": "Documentation",
+        "start": 3,
+        "prod": 3,
+        "best": "Structure, XML tags, examples, role prompts and long-context tips.",
+        "ex": "Restructure a support prompt into tagged sections with rules and reasons.",
+        "pros": [
+          "Free and current",
+          "Specific to Claude models"
+        ],
+        "cons": [
+          "Guidance, not testing",
+          "Some tips are model-specific"
+        ],
+        "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview"
+      },
+      {
+        "n": "OpenAI prompt engineering guide",
+        "type": "Documentation",
+        "start": 3,
+        "prod": 3,
+        "best": "Message roles, instruction hierarchy and formatting advice.",
+        "ex": "Separate developer instructions from user content in a support agent.",
+        "pros": [
+          "Clear examples",
+          "Covers reasoning models"
+        ],
+        "cons": [
+          "Guidance, not testing",
+          "OpenAI-specific details"
+        ],
+        "url": "https://platform.openai.com/docs/guides/prompt-engineering"
+      },
+      {
+        "n": "promptfoo",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Compare prompt variants on the same test cases.",
+        "ex": "Score the one-paragraph and sectioned prompts on 400 tickets side by side.",
+        "pros": [
+          "Fast feedback on changes",
+          "Runs in CI"
+        ],
+        "cons": [
+          "You must write good tests",
+          "Model-graded tests cost money"
+        ],
+        "url": "https://www.promptfoo.dev/docs/intro/"
+      },
+      {
+        "n": "Langfuse prompt management",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Version prompts and compare their traces and scores.",
+        "ex": "Keep the new sectioned prompt as version 2 and compare its production scores with version 1.",
+        "pros": [
+          "Links prompts to results",
+          "Self-hostable"
+        ],
+        "cons": [
+          "Another system to run",
+          "Needs evals to be meaningful"
+        ],
+        "url": "https://langfuse.com/docs/prompt-management/overview"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I am writing my first system prompt",
+        "tool": "Follow a provider guide and use clear sections"
+      },
+      {
+        "need": "I want to compare two prompts",
+        "tool": "promptfoo on a set of real cases"
+      },
+      {
+        "need": "Prompts change often in production",
+        "tool": "Langfuse or MLflow prompt management"
+      }
+    ],
+    "goals": [
+      "Write a prompt in clear sections",
+      "See why contradictions and poor layout cost money and accuracy",
+      "Add examples only when they earn their tokens"
+    ]
+  },
+  "practice": {
+    "scenario": "A telecom operator’s support agent kept confusing its two billing tools and guessed when it did not know a customer’s plan. Its prompt was one paragraph that had grown by accretion. The team rewrote it in sections: role and goal, product facts, rules with reasons, when to use each tool, the exact reply format, and what to do when unsure. Accuracy on the eval set rose from 66% to 90%.",
+    "industries": [
+      {
+        "industry": "Telecom",
+        "use": "A support agent that must choose between billing, plan and outage tools correctly"
+      },
+      {
+        "industry": "Banking",
+        "use": "A service assistant with firm rules about what it may and may not disclose"
+      },
+      {
+        "industry": "EdTech",
+        "use": "A tutor that must hint rather than give answers, and escalate distressed students"
+      }
+    ],
+    "analogy": "A handover note for a new colleague: who you are here, what the job is, what never to do and why, which system to use for what, and whom to call when stuck.",
+    "library": {
+      "name": "Anthropic Python SDK",
+      "what": "System prompts go in the system parameter; structure them with clear sections or XML tags, and keep variable data out of the stable part.",
+      "install": "pip install anthropic"
+    },
+    "note": "Every rule states a reason or a limit the model can act on. Put per-request data in the messages, not in the system prompt.",
+    "samples": [
+      {
+        "file": "support_prompt.py",
+        "language": "python",
+        "code": "import anthropic\nclient = anthropic.Anthropic()\n\nSYSTEM = \"\"\"<role>\nYou are the billing support assistant for a mobile operator. You help prepaid\nand postpaid customers understand charges and fix billing problems.\n</role>\n<rules>\n- Never reveal another customer's data; verify the number belongs to the caller.\n- Do not promise refunds above Rs 500: only the billing team can approve them.\n</rules>\n<tools>\n- get_bill: postpaid bills and itemised charges.\n- get_recharges: prepaid recharge history. Never use get_bill for prepaid.\n</tools>\n<format>\nReply in at most 4 short sentences, then one line: \"Next step: ...\".\n</format>\n<when_unsure>\nIf the plan type is unclear, ask. If a tool fails twice, hand over to a human.\n</when_unsure>\"\"\"\n\ndef reply(customer_context: str, question: str):\n    return client.messages.create(\n        model=\"claude-sonnet-4-5-20250929\", max_tokens=400,\n        system=SYSTEM,                                  # stable: cacheable\n        messages=[{\"role\": \"user\",\n                   \"content\": f\"<customer>{customer_context}</customer>\\n{question}\"}])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A system prompt has 1,230 tokens of stable text and 60 tokens of per-request data. The data is moved from the top to the end, so the stable prefix can be cached. With cache reads at 0.1× the input price, what share of the prompt’s input cost remains per call, in percent? (Ignore the one-off cache write.)",
+    "answer": "Cached: 1,230 × 0.1 = 123 token-equivalents; uncached: 60. Total 183 of 1,290, or about 14.2% of the original input cost. Putting the variable data at the top would break the cache on every call.",
+    "expected": {
+      "value": 14.2,
+      "tolerance": 0.2,
+      "label": "% of input cost ="
+    },
+    "interview": [
+      {
+        "question": "What belongs in a system prompt, and what does not?",
+        "answer": "It holds the standing brief: role and goal, stable context, rules with reasons, tool guidance, output format and what to do when unsure. Per-request data such as the customer’s details and the question belong in the messages, after the stable text, so the prompt stays cacheable and the model sees the question last."
+      },
+      {
+        "question": "Why explain the reason for a rule?",
+        "answer": "A reason lets the model apply the rule to cases the wording did not anticipate and weigh it against other rules. “Never promise refunds above ₹500 because only the billing team can approve them” generalises better than “no refunds above ₹500”."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Adding rules for every incident until they contradict",
+        "fix": "Review the prompt as a whole and remove conflicts"
+      },
+      {
+        "mistake": "Putting a timestamp or user name at the top",
+        "fix": "Keep variable data at the end so the prefix can be cached"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sp01",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A billing assistant keeps using the postpaid bill tool for prepaid customers. What is the most direct fix in the system prompt?",
+      "options": [
+        "Make the prompt longer overall",
+        "Add tool guidance saying when to use each tool, and never get_bill for prepaid",
+        "Raise the temperature",
+        "Remove the tools"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Explicit tool guidance fixes most tool-choice errors."
+    },
+    {
+      "id": "sp02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which rule will generalise better to cases it does not list?",
+      "options": [
+        "“No refunds above ₹500.”",
+        "“No refunds above ₹500, because only the operations team can approve them.”",
+        "“Refunds: no.”",
+        "“Be careful with refunds.”"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A reason lets the model apply the rule sensibly to new cases."
+    },
+    {
+      "id": "sp03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A system prompt starts with “Current time: 14:32:07”. What is the main cost?",
+      "options": [
+        "The model gets confused about time",
+        "The prompt prefix changes every call, so it is never cached",
+        "The prompt becomes too long",
+        "It breaks tool use"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Variable text at the start defeats prefix caching."
+    },
+    {
+      "id": "sp04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A prompt has 1,230 stable tokens and 60 variable tokens at the end. Cache reads cost 0.1× the input price. What share of the input cost remains per call? (Ignore the cache write.)",
+      "options": [
+        "4.7%",
+        "14.2%",
+        "23.4%",
+        "90%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(1,230 × 0.1 + 60) ÷ 1,290 ≈ 14.2%."
+    },
+    {
+      "id": "sp05",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which belong in a tutoring agent’s system prompt? Select all that apply.",
+      "options": [
+        "What to do when a student seems distressed",
+        "The rule to hint rather than give answers, with its reason",
+        "The current student’s homework text",
+        "Today’s date and time to the second"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Standing rules and escalation belong in the system prompt; per-request data goes in messages."
+    },
+    {
+      "id": "sp06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Two rules in a prompt contradict each other on rounding. What happens?",
+      "options": [
+        "The model always follows the first",
+        "The model picks unpredictably, so outputs become inconsistent",
+        "The API rejects the prompt",
+        "Nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Contradictions produce inconsistent behaviour; resolve them."
+    },
+    {
+      "id": "sp07",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Which section most reduces confident wrong answers when information is missing?",
+      "options": [
+        "Output format",
+        "An uncertainty policy: ask, refuse or hand over when unsure",
+        "Role",
+        "A list of product names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Telling the model what to do when unsure replaces guessing."
+    },
+    {
+      "id": "sp08",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "For a long contract plus a question, what order usually works best?",
+      "options": [
+        "Question first, then the contract",
+        "The contract first, then the question at the end",
+        "Split the contract across several messages at random",
+        "Put the question inside the contract"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Long documents first and the query last tends to improve use of the context."
+    },
+    {
+      "id": "sp09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which make a system prompt easier to maintain? Select all that apply.",
+      "options": [
+        "Clear sections such as role, rules, tools, format",
+        "Reasons attached to rules",
+        "Adding a new rule after every incident without review",
+        "Copying the same rules into five different prompts"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Structure and reasons help; unreviewed accretion and copies drift into contradiction."
+    },
+    {
+      "id": "sp10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A prompt says “be helpful and concise”. What is the main weakness?",
+      "options": [
+        "It is too long",
+        "It does not define what a good answer or done looks like",
+        "It is rude",
+        "It breaks caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Vague goals leave the model guessing; specify the outcome and format."
+    },
+    {
+      "id": "sp11",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Is the system prompt a security boundary?",
+      "options": [
+        "Yes, instructions there cannot be overridden",
+        "No: it guides behaviour, but controls must also exist outside the model",
+        "Only with capital letters",
+        "Only for small models"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Prompts help but must be backed by real controls."
+    },
+    {
+      "id": "sp12",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A prompt rewrite raised accuracy from 66% to 90%. How should the team confirm it? Select all that apply.",
+      "options": [
+        "Measure both versions on the same fixed test set",
+        "Check format compliance and escalation, not only accuracy",
+        "Ask the model which prompt it prefers",
+        "Test on three hand-picked examples"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Compare on the same data and several metrics."
+    },
+    {
+      "id": "sp13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where should a customer’s account details go?",
+      "options": [
+        "At the top of the system prompt",
+        "In the user message, after the stable instructions",
+        "In the tool descriptions",
+        "Nowhere"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Per-request data goes in messages, keeping the system prompt stable."
+    },
+    {
+      "id": "sp14",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A prompt of 1,930 tokens, 90% cached, costs $94 a month. Removing 700 tokens of examples leaves accuracy above target. What is the likely effect?",
+      "options": [
+        "Cost rises",
+        "Cost falls, with accuracy still on target",
+        "Caching stops",
+        "Accuracy must fall below target"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Examples that do not earn their tokens are paid on every call."
+    },
+    {
+      "id": "sp15",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are good ways to state rules? Select all that apply.",
+      "options": [
+        "As specific, checkable statements",
+        "With the reason behind them",
+        "As long lists of adjectives",
+        "As contradictory alternatives"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Specific rules with reasons are followed more reliably."
+    },
+    {
+      "id": "sp16",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Why use XML-style tags such as <rules> and <format> in a prompt?",
+      "options": [
+        "They are required by every API",
+        "They make sections clear to the model and to maintainers",
+        "They reduce the price",
+        "They disable tools"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tags separate parts of the prompt clearly."
+    },
+    {
+      "id": "sp17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A prompt gives format rules only in prose, and 30% of replies miss the required final line. What helps most?",
+      "options": [
+        "A dedicated output-format section with the exact structure",
+        "A longer role description",
+        "More tools",
+        "A higher max_tokens"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "An explicit format section raises compliance."
+    },
+    {
+      "id": "sp18",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "Which statements about system-prompt length are correct? Select all that apply.",
+      "options": [
+        "Every token is paid on each call unless cached",
+        "Longer is not automatically better",
+        "Longer prompts are always more accurate",
+        "Caching makes length irrelevant for quality"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Length costs money and does not guarantee quality."
+    },
+    {
+      "id": "sp19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An agent calls a tool that fails twice. What should the prompt tell it to do?",
+      "options": [
+        "Keep calling it",
+        "Hand over to a human or explain the problem",
+        "Invent a result",
+        "End the conversation silently"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A clear fallback beats loops or invention."
+    },
+    {
+      "id": "sp20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which change is most likely to break prompt caching?",
+      "options": [
+        "Adding a line at the end of the user message",
+        "Changing a word in the first paragraph of the system prompt",
+        "Changing max_tokens",
+        "Changing the temperature"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Any change early in the prefix invalidates the cache."
+    }
+  ]
+}

@@ -1,0 +1,926 @@
+{
+  "id": "bm25",
+  "moduleSlug": "embeddings",
+  "name": "Sparse Keyword Search (BM25)",
+  "shortName": "Sparse keywords",
+  "question": "Which documents contain these exact words?",
+  "summary": "BM25 is the classic ranking function behind most keyword search engines. It scores a document by how often the query terms appear (with diminishing returns), how rare those terms are across the collection, and the document’s length. It needs no training, runs fast, and excels at exact matches.",
+  "useCases": [
+    "Queries with error codes, SKUs, product names or people’s names",
+    "Technical jargon the embedding model has never seen",
+    "As the sparse half of a hybrid search"
+  ],
+  "keyFacts": {
+    "label": "How it scores",
+    "items": [
+      {
+        "term": "Term frequency",
+        "detail": "more occurrences help, with saturation (k1 ≈ 1.2–2.0)"
+      },
+      {
+        "term": "Inverse document frequency",
+        "detail": "rare terms count more than common ones"
+      },
+      {
+        "term": "Length normalization",
+        "detail": "long documents aren’t unfairly favoured (b ≈ 0.75)"
+      },
+      {
+        "term": "Sparse vector",
+        "detail": "one dimension per vocabulary term, mostly zeros"
+      },
+      {
+        "term": "Learned sparse",
+        "detail": "SPLADE adds learned term expansion to the sparse idea"
+      }
+    ]
+  },
+  "steps": [
+    "Tokenize consistently: lowercase, stemming, language-aware analyzers",
+    "Index fields separately (title, body) and boost the important ones",
+    "Keep BM25 alongside vector search and fuse the results",
+    "Test on queries with codes, names and exact phrases"
+  ],
+  "pitfalls": [
+    "No synonyms: “car” doesn’t match “automobile”",
+    "Sensitive to tokenization and language",
+    "Keyword stuffing can game the ranking"
+  ],
+  "tools": [
+    "Elasticsearch",
+    "OpenSearch",
+    "Apache Lucene",
+    "rank_bm25",
+    "Tantivy",
+    "Postgres full-text search"
+  ],
+  "remember": "Exact words, rare terms, fast answers.",
+  "caption": "IDF values are illustrative. The rare token E1045 dominates the score.",
+  "comparison": {
+    "scope": "Exact terms",
+    "cost": 1,
+    "needs": "IDs, codes, names, jargon",
+    "best": "No synonyms or paraphrase"
+  },
+  "diagram": {
+    "file": "diagrams/bm25.svg"
+  },
+  "lesson": {
+    "file": "bm25_score.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import math",
+        "steps": []
+      },
+      {
+        "text": "from collections import Counter",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "docs = [d.lower().split() for d in knowledge_base]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "N = len(docs)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "avgdl = sum(len(d) for d in docs) / N",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "df = Counter(t for d in docs for t in set(d))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def idf(t):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return math.log(1 + (N - df[t] + 0.5) / (df[t] + 0.5))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def bm25(query, doc, k1=1.2, b=0.75):",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    tf = Counter(doc)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    norm = k1 * (1 - b + b * len(doc) / avgdl)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    score = 0.0",
+        "steps": []
+      },
+      {
+        "text": "    for t in query:",
+        "steps": []
+      },
+      {
+        "text": "        f = tf[t]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        score += idf(t) * f * (k1 + 1) / (f + norm)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    return score",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "q = \"E1045 login error\".lower().split()",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "bm25_rank = sorted(range(N), key=lambda i: bm25(q, docs[i]), reverse=True)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def rrf(rankings, k=60):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    fused = Counter()",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    for ranking in rankings:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        for r, doc_id in enumerate(ranking, start=1):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            fused[doc_id] += 1 / (k + r)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return [doc_id for doc_id, _ in fused.most_common()]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "hybrid = rrf([bm25_rank, vector_rank])",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Tokenize query and documents the same way",
+        "text": "Lowercase and split both with one analyzer. “E1045 login error” becomes three terms: e1045, login and error."
+      },
+      {
+        "title": "Weigh each term by rarity (IDF)",
+        "text": "Across 1,000 documents, e1045 appears in 3, login in 120 and error in 300. Rare terms get the most weight: IDF 5.66 versus 1.20."
+      },
+      {
+        "title": "Count term frequency, with saturation",
+        "text": "More occurrences help, but with diminishing returns. With k1 = 1.2 a term’s contribution can never exceed 2.2 times its IDF."
+      },
+      {
+        "title": "Normalize for document length",
+        "text": "b = 0.75 scales the saturation point by document length, so a 420-word post doesn’t win just by containing more words."
+      },
+      {
+        "title": "Rank the documents",
+        "text": "Sum the term scores per document. The short runbook with e1045 scores 14.5; the long blog post without it scores 5.8."
+      },
+      {
+        "title": "Fuse with vector search",
+        "text": "Reciprocal rank fusion adds 1 ÷ (60 + rank) from each list. Exact matches from BM25 and paraphrase matches from vectors both surface."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"150\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"83\" y=\"25\" text-anchor=\"middle\">“E1045 login error”</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M160 21L176 21\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"180\" y=\"8\" width=\"54\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"207\" y=\"25\" text-anchor=\"middle\">e1045</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx \" x=\"238\" y=\"8\" width=\"54\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"265\" y=\"25\" text-anchor=\"middle\">login</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx \" x=\"296\" y=\"8\" width=\"54\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"323\" y=\"25\" text-anchor=\"middle\">error</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"mono a\" x=\"207\" y=\"50\" text-anchor=\"middle\" style=\"--d:0s;text-anchor:middle\">IDF 5.66</text><text class=\"mono a\" x=\"265\" y=\"50\" text-anchor=\"middle\" style=\"--d:0.1s;text-anchor:middle\">IDF 2.12</text><text class=\"mono a\" x=\"323\" y=\"50\" text-anchor=\"middle\" style=\"--d:0.2s;text-anchor:middle\">IDF 1.20</text><text class=\"tl l a\" x=\"8\" y=\"70\" style=\"--d:0.35s\">e1045 is in 3 of 1,000 docs: rare, so it weighs most</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln\" d=\"M22 104V170H160\"/><path d=\"M22 108H160\" class=\"ln\" style=\"stroke-dasharray:3 3;opacity:.6\"/></g><path class=\"ln draw acc\" pathLength=\"1\" d=\"M22.0 170.0L25.4 159.3L28.8 151.8L32.1 146.2L35.5 141.8L38.9 138.4L42.3 135.6L45.6 133.2L49.0 131.3L52.4 129.6L55.8 128.1L59.1 126.8L62.5 125.7L65.9 124.7L69.3 123.8L72.6 123.0L76.0 122.3L79.4 121.7L82.8 121.1L86.1 120.5L89.5 120.0L92.9 119.5L96.3 119.1L99.6 118.7L103.0 118.3L106.4 118.0L109.8 117.7L113.1 117.4L116.5 117.1L119.9 116.8L123.3 116.6L126.6 116.3L130.0 116.1L133.4 115.9L136.8 115.7L140.1 115.5L143.5 115.3L146.9 115.1L150.3 115.0L153.6 114.8L157.0 114.6\" style=\"--d:0.1s\"/><text class=\"sb a\" x=\"92\" y=\"184\" text-anchor=\"middle\" style=\"--d:0.2s;text-anchor:middle\">occurrences of the term →</text><text class=\"sb a\" x=\"26\" y=\"98\" text-anchor=\"start\" style=\"--d:0.3s;text-anchor:start\">max 2.2 × IDF</text><text class=\"mono a\" x=\"120\" y=\"150\" text-anchor=\"middle\" style=\"--d:0.4s;text-anchor:middle\">k1 = 1.2</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl l a\" x=\"186\" y=\"104\" style=\"--d:0s\">Two matches each</text><text class=\"mono a\" x=\"186\" y=\"124\" style=\"--d:0.1s\">A · 40 words</text><rect x=\"186\" y=\"130\" width=\"166\" height=\"10\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"186\" y=\"130\" width=\"15.80952380952381\" height=\"10\" rx=\"3\" class=\"bar grow \" style=\"--d:0.15s\"/><text class=\"mono a\" x=\"186\" y=\"156\" style=\"--d:0.2s\">B · 420 words</text><rect x=\"186\" y=\"162\" width=\"166\" height=\"10\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"186\" y=\"162\" width=\"166\" height=\"10\" rx=\"3\" class=\"bar grow fail\" style=\"--d:0.25s\"/><text class=\"sb a\" x=\"186\" y=\"184\" text-anchor=\"start\" style=\"--d:0.35s;text-anchor:start\">b = 0.75 discounts length</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"mono a\" x=\"8\" y=\"207\" text-anchor=\"start\" style=\"--d:0s;text-anchor:start\">A</text><rect x=\"22\" y=\"196\" width=\"150\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"22\" y=\"196\" width=\"150\" height=\"14\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono a\" x=\"180\" y=\"207\" text-anchor=\"start\" style=\"--d:0.3s;text-anchor:start\">14.5</text><text class=\"mono a\" x=\"8\" y=\"227\" text-anchor=\"start\" style=\"--d:0.1s;text-anchor:start\">B</text><rect x=\"22\" y=\"216\" width=\"150\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"22\" y=\"216\" width=\"60\" height=\"14\" rx=\"3\" class=\"bar grow \" style=\"--d:0.22s\"/><text class=\"mono a\" x=\"180\" y=\"227\" text-anchor=\"start\" style=\"--d:0.42s;text-anchor:start\">5.8</text><text class=\"mono a\" x=\"8\" y=\"247\" text-anchor=\"start\" style=\"--d:0.2s;text-anchor:start\">D</text><rect x=\"22\" y=\"236\" width=\"150\" height=\"14\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"22\" y=\"236\" width=\"57.93103448275862\" height=\"14\" rx=\"3\" class=\"bar grow \" style=\"--d:0.33999999999999997s\"/><text class=\"mono a\" x=\"180\" y=\"247\" text-anchor=\"start\" style=\"--d:0.54s;text-anchor:start\">5.6</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"232\" y=\"194\" width=\"120\" height=\"56\" rx=\"7\"/><text class=\"lb\" x=\"292\" y=\"219\">RRF fusion</text><text class=\"sb\" x=\"292\" y=\"234\">BM25 + vector lists</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Exact matches on codes, IDs, names and rare jargon",
+      "No training or GPUs; fast on huge indexes",
+      "Explainable: you can see which terms matched and why",
+      "Built into Elasticsearch, OpenSearch, Lucene and Postgres"
+    ],
+    "cons": [
+      "No understanding of synonyms or paraphrases",
+      "Sensitive to tokenization, stemming and language",
+      "Long, repetitive documents can still rank well",
+      "Keyword stuffing can game the ranking"
+    ],
+    "avoidWhen": [
+      "Users describe problems in their own words (add dense vectors)",
+      "Content is images or scans without text"
+    ],
+    "tools": [
+      {
+        "name": "Elasticsearch",
+        "type": "Search engine",
+        "what": "BM25 by default, plus vector search and RRF fusion",
+        "url": "https://www.elastic.co/elasticsearch"
+      },
+      {
+        "name": "OpenSearch",
+        "type": "Open source search engine",
+        "what": "BM25 and hybrid search, Apache 2.0 licensed",
+        "url": "https://opensearch.org"
+      },
+      {
+        "name": "rank_bm25",
+        "type": "Python library",
+        "what": "Learning and small prototypes",
+        "url": "https://github.com/dorianbrown/rank_bm25"
+      },
+      {
+        "name": "bm25s",
+        "type": "Python library",
+        "what": "Fast in-memory BM25 with NumPy",
+        "url": "https://github.com/xhluca/bm25s"
+      },
+      {
+        "name": "Tantivy",
+        "type": "Rust library",
+        "what": "An embedded Lucene-style engine",
+        "url": "https://github.com/quickwit-oss/tantivy"
+      },
+      {
+        "name": "Postgres full-text search",
+        "type": "Database feature",
+        "what": "Keyword search next to your relational data",
+        "url": "https://www.postgresql.org/docs/current/textsearch.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A support engineer at a stockbroker searches the knowledge base for a failing login. Four documents match at least one term. The table shows each document’s length and how often it contains each term; the ranking on the right is computed live with the real BM25 formula.",
+    "controls": [
+      "Tick which terms are in the query: the rare error code e1045 and the common words login and error.",
+      "Drag k1 to change how quickly repeated terms stop adding score.",
+      "Drag b to change how strongly long documents are penalised."
+    ],
+    "outputs": [
+      {
+        "name": "BM25 ranking",
+        "meaning": "Each document’s score, broken down into the contribution of every matching term."
+      },
+      {
+        "name": "Top document",
+        "meaning": "The document that would appear first."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Why the ranking came out this way."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "“login error”",
+        "expect": "Without the code, B, the 420-word blog post, ranks first with 5.78; C scores 5.29, A 4.74 and D 1.56."
+      },
+      {
+        "k": "code",
+        "name": "Add the error code",
+        "expect": "With e1045 in the query, the runbook A jumps to 14.54, far ahead of B at 5.78."
+      },
+      {
+        "k": "nolen",
+        "name": "No length penalty",
+        "expect": "b = 0 widens B’s margin: B 6.57, C 4.79, A 3.32."
+      },
+      {
+        "k": "flat",
+        "name": "Slow saturation",
+        "expect": "k1 = 3 lets repeats keep counting: A 19.16, B 8.00, C 7.11, D 5.37."
+      }
+    ],
+    "missions": [
+      {
+        "k": "focus",
+        "text": "With only login and error in the query, get the short help page C above the long blog post B.",
+        "hint": "Set b to 1 so length counts fully, then raise k1 to 2.5 or more."
+      },
+      {
+        "k": "tie",
+        "text": "Make three documents tie for first place.",
+        "hint": "Use only login and error, and set k1 to 0: every document containing both words then scores the same."
+      },
+      {
+        "k": "notes",
+        "text": "With all three terms in the query, get the 300-word release notes D into second place.",
+        "hint": "Add e1045 and switch off length normalization with b = 0."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Elasticsearch",
+        "type": "Search engine · Elastic",
+        "start": 2,
+        "prod": 3,
+        "best": "Production keyword search with BM25 by default, plus vector search and reciprocal rank fusion.",
+        "ex": "An e-commerce search cluster serving SKU and product-name queries, fused with a vector query.",
+        "pros": [
+          "Mature, scalable and well documented",
+          "BM25, vectors and RRF in one engine"
+        ],
+        "cons": [
+          "Cluster operations take expertise",
+          "Licensing and hosting costs at scale"
+        ],
+        "url": "https://www.elastic.co/elasticsearch"
+      },
+      {
+        "n": "OpenSearch",
+        "type": "Open source · Apache 2.0",
+        "start": 2,
+        "prod": 3,
+        "best": "An Apache-licensed search engine with BM25, vector search and hybrid queries.",
+        "ex": "A self-hosted log and ticket search for an IT help desk, with hybrid search for natural-language queries.",
+        "pros": [
+          "Permissive licence",
+          "Managed options on major clouds"
+        ],
+        "cons": [
+          "Operational effort like any search cluster",
+          "Some features lag or differ from Elasticsearch"
+        ],
+        "url": "https://opensearch.org"
+      },
+      {
+        "n": "rank_bm25",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 1,
+        "best": "Learning BM25 and quick experiments on small corpora.",
+        "ex": "Score 2,000 FAQ entries in a notebook to compare with a vector baseline.",
+        "pros": [
+          "Tiny and readable",
+          "pip install and go"
+        ],
+        "cons": [
+          "Scores the whole corpus in Python; slow at scale",
+          "No index persistence or analyzers"
+        ],
+        "url": "https://github.com/dorianbrown/rank_bm25"
+      },
+      {
+        "n": "bm25s",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 2,
+        "best": "Fast in-process BM25 on large corpora with NumPy, several BM25 variants included.",
+        "ex": "Index a few million product titles inside a Python service without running a search cluster.",
+        "pros": [
+          "Much faster than pure-Python BM25",
+          "Memory-mapped indexes"
+        ],
+        "cons": [
+          "A library, not a distributed engine",
+          "Fewer text analyzers than Lucene"
+        ],
+        "url": "https://github.com/xhluca/bm25s"
+      },
+      {
+        "n": "Tantivy",
+        "type": "Open source · Rust",
+        "start": 2,
+        "prod": 3,
+        "best": "An embedded Lucene-style full-text engine for Rust services.",
+        "ex": "Add fast keyword search to a Rust API without a separate search cluster.",
+        "pros": [
+          "Very fast; runs in-process",
+          "BM25 scoring and rich query syntax"
+        ],
+        "cons": [
+          "Rust-first; Python bindings are thinner",
+          "You build distribution yourself"
+        ],
+        "url": "https://github.com/quickwit-oss/tantivy"
+      },
+      {
+        "n": "Postgres full-text search",
+        "type": "Database feature",
+        "start": 3,
+        "prod": 2,
+        "best": "Keyword search next to your relational data, without another system to run.",
+        "ex": "Search insurance policy clauses stored in Postgres with tsvector columns and a GIN index.",
+        "pros": [
+          "No extra infrastructure",
+          "Transactions and joins with your data"
+        ],
+        "cons": [
+          "Its built-in ranking (ts_rank) is not BM25",
+          "Less tuning than a dedicated engine"
+        ],
+        "url": "https://www.postgresql.org/docs/current/textsearch.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Learn and prototype",
+        "tool": "rank_bm25 or bm25s"
+      },
+      {
+        "need": "Production search with hybrid",
+        "tool": "Elasticsearch or OpenSearch"
+      },
+      {
+        "need": "Already on Postgres",
+        "tool": "Postgres full-text search"
+      }
+    ],
+    "goals": [
+      "Explain the roles of IDF, term frequency with saturation (k1) and length normalization (b)",
+      "Calculate an IDF value and predict which document ranks first",
+      "Explain why BM25 and dense vectors are fused rather than chosen between"
+    ]
+  },
+  "practice": {
+    "scenario": "A support engineer searches “ERR_ORD_1045 order rejected”. Vector search returns general articles about order errors; BM25 returns the one runbook that contains that exact code.",
+    "industries": [
+      {
+        "industry": "IT support",
+        "use": "Error codes, ticket IDs, hostnames"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "SKUs and model numbers"
+      },
+      {
+        "industry": "Legal",
+        "use": "Section numbers and case citations"
+      }
+    ],
+    "analogy": "The index at the back of a textbook. Fast and exact for a word you know, no help if you don't know the word.",
+    "library": {
+      "name": "rank_bm25",
+      "what": "Tiny pure-Python BM25 for learning and prototypes. In production the same scoring comes from Elasticsearch, OpenSearch or Postgres.",
+      "install": "pip install rank_bm25"
+    },
+    "samples": [
+      {
+        "file": "bm25.py",
+        "language": "python",
+        "code": "from rank_bm25 import BM25Okapi\n\ndocs = [\"Runbook ERR_ORD_1045 margin check failed at exchange gateway\",\n        \"Common order errors and what they mean\",\n        \"Login errors after a password reset\"]\nbm25 = BM25Okapi([d.lower().split() for d in docs])   # k1=1.5, b=0.75 by default\n\nquery = \"err_ord_1045 margin rejected\".split()\nfor score, doc in sorted(zip(bm25.get_scores(query), docs), reverse=True):\n    print(f\"{score:.2f}  {doc}\")\n# the runbook with the exact code ranks first"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "In 1,000 documents, “error” appears in 400 and “E1045” in 2. Using IDF ≈ ln(N ÷ df), how many times more does “E1045” weigh than “error”?",
+    "answer": "ln(1000 ÷ 400) ≈ 0.92 and ln(1000 ÷ 2) ≈ 6.21, so “E1045” weighs about 6.8× more. (BM25's exact IDF formula differs slightly; the idea is the same.)",
+    "expected": {
+      "value": 6.8,
+      "tolerance": 0.2,
+      "label": "ratio ="
+    },
+    "interview": [
+      {
+        "question": "Why keep BM25 when you have embeddings?",
+        "answer": "Embeddings blur exact tokens like error codes, SKUs, names and rare jargon, which BM25 matches precisely. Hybrid search combines both and usually beats either alone."
+      },
+      {
+        "question": "What do k1 and b control in BM25?",
+        "answer": "k1 sets term-frequency saturation (how much repeats keep adding); b sets document-length normalization (0 none, 1 full). Typical values are k1 ≈ 1.2–2.0 and b ≈ 0.75."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Different tokenization at index and query time",
+        "fix": "Use the same analyzer for both"
+      },
+      {
+        "mistake": "BM25 alone for natural-language questions",
+        "fix": "Pair it with dense retrieval in a hybrid"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "bm01",
+      "kind": "single",
+      "industry": "IT support",
+      "question": "Engineers search for “ERR_ORD_1045”, and vector search returns generic error articles. What is the fix?",
+      "options": [
+        "A bigger embedding model",
+        "Add BM25 and fuse it with vector search",
+        "Lower the similarity threshold",
+        "Multimodal embeddings"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Rare exact tokens are BM25’s strength. Hybrid search keeps both kinds of match."
+    },
+    {
+      "id": "bm02",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A term appears in 10 of 10,000 case files. Using IDF = ln(N ÷ df), what is its IDF?",
+      "options": [
+        "6.91",
+        "3.00",
+        "2.30",
+        "9.21"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ln(10,000 ÷ 10) = ln(1,000) ≈ 6.91."
+    },
+    {
+      "id": "bm03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why does the word “the” add almost nothing to a product’s BM25 score?",
+      "options": [
+        "It is filtered by length normalization",
+        "Its IDF is tiny because it appears in almost every document",
+        "k1 caps it at zero",
+        "It is shorter than four characters"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "IDF rewards rare terms; a word in every document carries no signal."
+    },
+    {
+      "id": "bm04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which setups can make BM25 miss documents that do contain the query terms? Select all that apply.",
+      "options": [
+        "The index lowercases text but the query does not",
+        "Stemming is applied at index time but not at query time",
+        "The same analyzer is used for index and query",
+        "“UPI-ID” is split into different tokens at index and query time"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Index and query must be tokenized identically. The same analyzer on both sides is the fix, not a cause."
+    },
+    {
+      "id": "bm05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What happens to BM25 scoring when k1 = 0?",
+      "options": [
+        "Only whether a term appears matters, not how often",
+        "Rare terms stop counting",
+        "Long documents are always favoured",
+        "Every document scores zero"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "With k1 = 0 the term-frequency factor is 1 for any f > 0, so repeats add nothing."
+    },
+    {
+      "id": "bm06",
+      "kind": "single",
+      "industry": "Media",
+      "question": "A news archive sets b = 0. What changes?",
+      "options": [
+        "Rare terms lose their weight",
+        "Document length no longer affects scores, so long articles gain",
+        "Term frequency is ignored",
+        "Scores become probabilities"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "b controls length normalization; b = 0 switches it off."
+    },
+    {
+      "id": "bm07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "With k1 = 1.2 and a document of average length (b has no effect), what is the term-frequency factor f × (k1 + 1) ÷ (f + k1) for f = 3?",
+      "options": [
+        "1.57",
+        "3.00",
+        "2.20",
+        "0.79"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "3 × 2.2 ÷ (3 + 1.2) = 6.6 ÷ 4.2 ≈ 1.57."
+    },
+    {
+      "id": "bm08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "With k1 = 1.2, what is the most a single term’s frequency factor can ever reach, however often it repeats?",
+      "options": [
+        "2.2",
+        "1.2",
+        "There is no limit",
+        "1.0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "f × (k1 + 1) ÷ (f + k1 × (1 − b + b × len ÷ avgdl)) approaches k1 + 1 = 2.2 as f grows."
+    },
+    {
+      "id": "bm09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which queries are better served by BM25 than by dense vectors? Select all that apply.",
+      "options": [
+        "“Dapagliflozin 10 mg”",
+        "ICD-10 code “E11.9”",
+        "“feeling dizzy after meals”",
+        "Medical record number “MRN 0048213”"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Drug names, codes and record numbers are exact tokens. The symptom description is a meaning query."
+    },
+    {
+      "id": "bm10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A document is ranked 1st by BM25 and 3rd by vector search. With RRF and k = 60, what is its fused score?",
+      "options": [
+        "0.0323",
+        "0.0164",
+        "0.25",
+        "0.0645"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1 ÷ 61 + 1 ÷ 63 ≈ 0.01639 + 0.01587 ≈ 0.0323."
+    },
+    {
+      "id": "bm11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why fuse BM25 and vector results with reciprocal rank fusion instead of adding the raw scores?",
+      "options": [
+        "RRF is more accurate by definition",
+        "The two scores are on very different, uncalibrated scales",
+        "Raw scores cannot be added in Python",
+        "BM25 scores are always below 1"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "BM25 scores are unbounded while cosine lies in [−1, 1]. RRF uses only ranks, so no calibration is needed."
+    },
+    {
+      "id": "bm12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A search for “car accident” misses judgments that only say “motor vehicle collision”. What addresses this?",
+      "options": [
+        "Raising k1",
+        "Adding dense retrieval or learned sparse expansion alongside BM25",
+        "Lowering b to 0",
+        "Removing stop words"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "BM25 has no notion of synonyms. Dense vectors or a learned sparse model such as SPLADE add them."
+    },
+    {
+      "id": "bm13",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Matches in shipment-manual titles matter more than matches in the body. What is the standard approach?",
+      "options": [
+        "Index title and body as separate fields and boost the title",
+        "Repeat the title ten times in the body",
+        "Set b = 1 for all fields",
+        "Remove the body from the index"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Per-field indexing with boosts expresses importance without distorting term frequencies."
+    },
+    {
+      "id": "bm14",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which statements describe SPLADE? Select all that apply.",
+      "options": [
+        "It produces learned sparse representations",
+        "It can add relevant terms the text does not contain",
+        "It can be served from an inverted index like BM25",
+        "It requires image inputs"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "SPLADE learns term weights and expansions but keeps the sparse, inverted-index form."
+    },
+    {
+      "id": "bm15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments team already runs Postgres and needs basic keyword search over dispute notes with no new infrastructure. Which tool fits?",
+      "options": [
+        "Postgres full-text search",
+        "A multimodal embedding API",
+        "FAISS product quantization",
+        "A cross-encoder re-ranker"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Postgres full-text search runs next to the data. Note that its ts_rank ranking is not BM25."
+    },
+    {
+      "id": "bm16",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A BM25 search for booking reference “X7K2PQ” misses a document that contains it. What is the most likely cause?",
+      "options": [
+        "The IDF of the code is too high",
+        "Index and query analyzers tokenize the code differently",
+        "b is set to 0.75",
+        "The document is too short"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Codes are fragile under tokenization. Use the same analyzer, or a keyword field that keeps the code intact."
+    },
+    {
+      "id": "bm17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "With b = 0.75, a 300-word document and an average length of 150 words, what is the length factor 1 − b + b × len ÷ avgdl?",
+      "options": [
+        "1.75",
+        "2.00",
+        "1.50",
+        "0.75"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.25 + 0.75 × 2 = 1.75."
+    },
+    {
+      "id": "bm18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A seller repeats “iphone” 50 times in a listing. Which part of BM25 limits the benefit?",
+      "options": [
+        "Term-frequency saturation controlled by k1",
+        "The IDF of “iphone”",
+        "Reciprocal rank fusion",
+        "Stemming"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Each extra occurrence adds less, so stuffing gains little beyond the first few repeats."
+    },
+    {
+      "id": "bm19",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which statements about IDF are true? Select all that apply.",
+      "options": [
+        "Rare terms get a higher IDF",
+        "A term in every document gets an IDF close to 0 with Lucene’s formula",
+        "IDF depends on the length of the query",
+        "IDF is computed across the whole collection"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "IDF measures rarity across the collection; the query length does not affect it."
+    },
+    {
+      "id": "bm20",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "You are building a test set to compare BM25-only with hybrid search. What should it include? Select all that apply.",
+      "options": [
+        "Queries containing error codes and ISINs",
+        "Paraphrased natural-language questions",
+        "The known correct documents for every query",
+        "Only queries that already succeed today"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Cover both failure types, with labelled answers. Only-successful queries hide the problems."
+    }
+  ]
+}

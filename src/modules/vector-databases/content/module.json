@@ -1,0 +1,345 @@
+{
+  "slug": "vector-databases",
+  "number": 5,
+  "techniqueOrder": [
+    "ivf",
+    "hnsw",
+    "diskann",
+    "las",
+    "hybrid",
+    "metafilter",
+    "tenancy",
+    "compress",
+    "choosevs"
+  ],
+  "glossary": [
+    {
+      "term": "ANN",
+      "definition": "Approximate nearest neighbour search: finds close vectors fast by accepting a small recall loss."
+    },
+    {
+      "term": "centroid",
+      "definition": "The average vector of a cluster; IVF compares queries with centroids first."
+    },
+    {
+      "term": "lists",
+      "definition": "In IVF, the number of clusters the vectors are divided into."
+    },
+    {
+      "term": "probes",
+      "definition": "In IVF, how many of the nearest clusters are scanned per query."
+    },
+    {
+      "term": "HNSW",
+      "definition": "Hierarchical Navigable Small World: a layered graph index for fast ANN search."
+    },
+    {
+      "term": "ef_search",
+      "definition": "HNSW's query-time candidate list size; higher means better recall and slower queries."
+    },
+    {
+      "term": "Vamana",
+      "definition": "The graph construction algorithm used by DiskANN."
+    },
+    {
+      "term": "product quantization",
+      "definition": "Compressing vectors by splitting them into sub-vectors and storing codebook IDs."
+    },
+    {
+      "term": "RRF",
+      "definition": "Reciprocal Rank Fusion: combines rankings by summing 1 ÷ (k + rank)."
+    },
+    {
+      "term": "oversampling",
+      "definition": "Fetching more candidates than needed early so later stages can recover recall."
+    },
+    {
+      "term": "pre-filtering",
+      "definition": "Applying metadata filters before or during the vector search rather than after it."
+    },
+    {
+      "term": "self-querying",
+      "definition": "An LLM turns a request into a semantic query plus structured filters."
+    },
+    {
+      "term": "selectivity",
+      "definition": "The share of items that match a filter. A 0.5% filter keeps 10,000 of 20 lakh chunks; rarer filters need a different strategy."
+    },
+    {
+      "term": "post-filtering",
+      "definition": "Running the vector search first and dropping non-matching results afterwards. Expected survivors are k × selectivity, so rare filters return few results."
+    },
+    {
+      "term": "payload index",
+      "definition": "An index on a metadata field (keyword, number or date) that lets a vector database filter quickly and estimate how many items match."
+    },
+    {
+      "term": "filtered ANN",
+      "definition": "Approximate nearest-neighbour search that checks the filter while walking the index, so every result returned matches."
+    },
+    {
+      "term": "row-level security",
+      "definition": "A database feature that applies a policy to every query on a table, such as tenant_id = the current tenant, so rows from other tenants are never returned."
+    },
+    {
+      "term": "namespace",
+      "definition": "A named partition inside one vector index; queries and deletes run within one namespace, which suits one namespace per tenant."
+    },
+    {
+      "term": "ACL sync",
+      "definition": "Copying document permissions from the source system into the vector store’s metadata, nightly, hourly or on each change."
+    },
+    {
+      "term": "noisy neighbour",
+      "definition": "A tenant whose heavy load, such as a bulk re-index, slows searches for other tenants on shared infrastructure."
+    },
+    {
+      "term": "scalar quantisation",
+      "definition": "Mapping each float dimension to a small integer, usually int8, after clipping to a range."
+    },
+    {
+      "term": "binary quantisation",
+      "definition": "Keeping only the sign of each dimension, one bit, and comparing vectors by Hamming distance."
+    },
+    {
+      "term": "rescoring",
+      "definition": "Re-ranking candidates found with compressed vectors using the original full-precision vectors."
+    },
+    {
+      "term": "oversampling",
+      "definition": "Fetching more candidates than needed, such as 4 × k, so rescoring can recover the true top k."
+    },
+    {
+      "term": "residency requirement",
+      "definition": "A rule that data must stay in a given country, region or cloud account."
+    },
+    {
+      "term": "total cost of ownership",
+      "definition": "Infrastructure or service fees plus the staff time needed to run a system."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "HNSW: Efficient and robust approximate nearest neighbor search using hierarchical navigable small world graphs (Malkov and Yashunin, 2016)",
+      "url": "https://arxiv.org/abs/1603.09320"
+    },
+    {
+      "id": "S2",
+      "title": "Microsoft DiskANN: repository and papers (DiskANN, NeurIPS 2019)",
+      "url": "https://github.com/microsoft/DiskANN"
+    },
+    {
+      "id": "S3",
+      "title": "FreshDiskANN: A fast and accurate graph-based ANN index for streaming similarity search (Singh et al., 2021)",
+      "url": "https://arxiv.org/abs/2105.09613"
+    },
+    {
+      "id": "S4",
+      "title": "The Faiss library (Douze et al., 2024)",
+      "url": "https://arxiv.org/abs/2401.08281"
+    },
+    {
+      "id": "S5",
+      "title": "Faiss wiki: Faiss indexes",
+      "url": "https://github.com/facebookresearch/faiss/wiki/Faiss-indexes"
+    },
+    {
+      "id": "S6",
+      "title": "Billion-scale similarity search with GPUs (Johnson, Douze and Jégou, 2017)",
+      "url": "https://arxiv.org/abs/1702.08734"
+    },
+    {
+      "id": "S7",
+      "title": "pgvector: IVFFlat, HNSW, filtering and iterative index scans",
+      "url": "https://github.com/pgvector/pgvector"
+    },
+    {
+      "id": "S8",
+      "title": "pgvectorscale: StreamingDiskANN and statistical binary quantization for Postgres",
+      "url": "https://github.com/timescale/pgvectorscale"
+    },
+    {
+      "id": "S9",
+      "title": "hnswlib: header-only HNSW for C++ and Python",
+      "url": "https://github.com/nmslib/hnswlib"
+    },
+    {
+      "id": "S10",
+      "title": "ANN-Benchmarks: A benchmarking tool for approximate nearest neighbor algorithms (Aumüller et al., 2018)",
+      "url": "https://arxiv.org/abs/1807.05614"
+    },
+    {
+      "id": "S11",
+      "title": "Qdrant: Quantization guide (oversampling and rescoring)",
+      "url": "https://qdrant.tech/documentation/guides/quantization/"
+    },
+    {
+      "id": "S12",
+      "title": "Hugging Face: Binary and scalar embedding quantization",
+      "url": "https://huggingface.co/blog/embedding-quantization"
+    },
+    {
+      "id": "S13",
+      "title": "Vespa: Phased ranking",
+      "url": "https://docs.vespa.ai/en/ranking/phased-ranking.html"
+    },
+    {
+      "id": "S14",
+      "title": "Reciprocal rank fusion (Cormack, Clarke and Büttcher, 2009)",
+      "url": "https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf"
+    },
+    {
+      "id": "S15",
+      "title": "Elasticsearch reference: Reciprocal rank fusion",
+      "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+    },
+    {
+      "id": "S16",
+      "title": "Weaviate: Hybrid search",
+      "url": "https://docs.weaviate.io/weaviate/search/hybrid"
+    },
+    {
+      "id": "S17",
+      "title": "Weaviate: Query Agent overview",
+      "url": "https://docs.weaviate.io/query-agent"
+    },
+    {
+      "id": "S18",
+      "title": "Pydantic documentation: models and validators",
+      "url": "https://docs.pydantic.dev"
+    },
+    {
+      "id": "S19",
+      "title": "Qdrant: Filtering",
+      "url": "https://qdrant.tech/documentation/concepts/filtering/"
+    },
+    {
+      "id": "S20",
+      "title": "Qdrant: Indexing (payload indexes and filterable HNSW)",
+      "url": "https://qdrant.tech/documentation/concepts/indexing/"
+    },
+    {
+      "id": "S21",
+      "title": "Weaviate: Filtering (pre-filtered search and ACORN)",
+      "url": "https://docs.weaviate.io/weaviate/concepts/filtering"
+    },
+    {
+      "id": "S22",
+      "title": "Pinecone: Filter by metadata",
+      "url": "https://docs.pinecone.io/guides/search/filter-by-metadata"
+    },
+    {
+      "id": "S23",
+      "title": "Filtered-DiskANN: Graph algorithms for approximate nearest neighbor search with filters (Gollapudi et al., WWW 2023)",
+      "url": "https://dl.acm.org/doi/10.1145/3543507.3583552"
+    },
+    {
+      "id": "S24",
+      "title": "ACORN: Performant and predicate-agnostic search over vector embeddings and structured data (Patel et al., SIGMOD 2024)",
+      "url": "https://arxiv.org/abs/2403.04871"
+    },
+    {
+      "id": "S28",
+      "title": "PostgreSQL documentation: Row security policies",
+      "url": "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+    },
+    {
+      "id": "S29",
+      "title": "Pinecone: Implement multitenancy",
+      "url": "https://docs.pinecone.io/guides/index-data/implement-multitenancy"
+    },
+    {
+      "id": "S30",
+      "title": "Weaviate: Multi-tenancy operations",
+      "url": "https://docs.weaviate.io/weaviate/manage-collections/multi-tenancy"
+    },
+    {
+      "id": "S31",
+      "title": "Qdrant: Configure multitenancy",
+      "url": "https://qdrant.tech/documentation/guides/multitenancy/"
+    },
+    {
+      "id": "S32",
+      "title": "MeitY: Data protection framework (DPDP Act, 2023 and Rules)",
+      "url": "https://www.meity.gov.in/data-protection-framework"
+    },
+    {
+      "id": "S33",
+      "title": "Qdrant: Quantization guide",
+      "url": "https://qdrant.tech/documentation/guides/quantization/"
+    },
+    {
+      "id": "S34",
+      "title": "Product quantization for nearest neighbor search (Jégou, Douze and Schmid, 2011)",
+      "url": "https://ieeexplore.ieee.org/document/5432202"
+    },
+    {
+      "id": "S35",
+      "title": "Hugging Face: Binary and scalar embedding quantization",
+      "url": "https://huggingface.co/blog/embedding-quantization"
+    },
+    {
+      "id": "S36",
+      "title": "pgvector on GitHub",
+      "url": "https://github.com/pgvector/pgvector"
+    },
+    {
+      "id": "S37",
+      "title": "ANN-Benchmarks",
+      "url": "https://ann-benchmarks.com"
+    },
+    {
+      "id": "S38",
+      "title": "VectorDBBench on GitHub",
+      "url": "https://github.com/zilliztech/VectorDBBench"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "We need fast index builds on a moderate dataset in Postgres",
+      "techniqueId": "ivf",
+      "advice": "Use IVFFlat with lists ≈ rows ÷ 1,000 and tune probes for recall."
+    },
+    {
+      "symptom": "We want the lowest latency and highest recall, and the data fits in RAM",
+      "techniqueId": "hnsw",
+      "advice": "Use HNSW and tune ef_search to hit your recall target."
+    },
+    {
+      "symptom": "We have billions of vectors and limited memory",
+      "techniqueId": "diskann",
+      "advice": "Keep the graph and full vectors on SSD with compressed codes in RAM."
+    },
+    {
+      "symptom": "We have a huge corpus and a strict latency budget",
+      "techniqueId": "las",
+      "advice": "Search cheap compressed vectors first, then rescore a shrinking candidate set."
+    },
+    {
+      "symptom": "Queries mix meaning with product codes or names",
+      "techniqueId": "hybrid",
+      "advice": "Run vector and keyword search together and fuse the ranks with RRF."
+    },
+    {
+      "symptom": "Filtered searches return fewer than k results, or none, when the filter is strict",
+      "techniqueId": "metafilter",
+      "advice": "Stop filtering after a small top-k: filter inside the search with payload indexes, or pre-filter and scan exactly when few chunks match."
+    },
+    {
+      "symptom": "Many client companies or users share one vector store",
+      "techniqueId": "tenancy",
+      "advice": "Enforce the tenant in the database (RLS, namespace or tenant index), filter tenant-qualified ACLs inside the query, and sync ACL changes on events."
+    },
+    {
+      "symptom": "The vector index needs more RAM than you can afford",
+      "techniqueId": "compress",
+      "advice": "Quantise the vectors (int8, binary or PQ), keep full vectors on SSD, and oversample then rescore to recover recall."
+    },
+    {
+      "symptom": "The team cannot agree which vector database to use",
+      "techniqueId": "choosevs",
+      "advice": "List hard constraints (scale, filters, residency, ops, cost), shortlist two families, and benchmark both on your own queries."
+    }
+  ]
+}

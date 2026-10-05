@@ -1,0 +1,897 @@
+{
+  "id": "search",
+  "moduleSlug": "architectures",
+  "name": "Search-Based Reasoning",
+  "shortName": "Search",
+  "question": "Should I try several paths before committing?",
+  "summary": "Instead of committing to one line of reasoning, the model proposes several candidate thoughts at each step, a value function scores them, and a search (breadth-first, depth-first or Monte Carlo tree search) expands the promising ones and backs out of dead ends. Tree of Thoughts applies this to reasoning; LATS adds tool actions, environment feedback and reflection.",
+  "useCases": [
+    "Early wrong choices commit you and are costly to undo",
+    "There is a reliable way to score partial solutions",
+    "Accuracy matters more than cost or latency"
+  ],
+  "keyFacts": {
+    "label": "Knobs",
+    "items": [
+      {
+        "term": "k (proposals)",
+        "detail": "candidate thoughts generated from each state"
+      },
+      {
+        "term": "b (beam)",
+        "detail": "how many top candidates survive each level"
+      },
+      {
+        "term": "d (depth)",
+        "detail": "how many steps deep the search goes"
+      },
+      {
+        "term": "Value function",
+        "detail": "scores a state: sure, likely or impossible, or a number"
+      },
+      {
+        "term": "Search algorithm",
+        "detail": "BFS, DFS with backtracking, or MCTS with UCT"
+      },
+      {
+        "term": "Self-consistency",
+        "detail": "the cheapest cousin: sample several chains and take a majority vote"
+      }
+    ]
+  },
+  "steps": [
+    "Define a thought: one step small enough to evaluate on its own",
+    "Write a value prompt or check that can prune impossible states",
+    "Start small, such as k = 3 and b = 2, with a depth that fits the problem",
+    "Count model calls per solved task and compare with a single chain"
+  ],
+  "pitfalls": [
+    "Calls multiply with k, b and d, so costs rise fast",
+    "A noisy value function prunes good branches and keeps bad ones",
+    "Overkill for tasks a single chain already solves"
+  ],
+  "tools": [
+    "Tree of Thoughts (code)",
+    "LATS (code)",
+    "llm-reasoners",
+    "LangGraph",
+    "vLLM parallel sampling"
+  ],
+  "remember": "Branch when mistakes commit you. Prune with a good judge.",
+  "caption": "Illustrative: 3 proposals per state, the best 2 kept; branches scored as impossible are pruned.",
+  "comparison": {
+    "scope": "A search over scored branches",
+    "cost": 4,
+    "needs": "High: a value function",
+    "best": "The call count explodes"
+  },
+  "diagram": {
+    "file": "diagrams/search.svg"
+  },
+  "lesson": {
+    "file": "tot_bfs.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import math",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def propose(route, k):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    out = ask(f\"Stops so far: {route}\\nSuggest {k} possible next stops, one per line.\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return out.splitlines()[:k]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def value(route):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    v = ask(f\"Route: {route}\\nCan every time window still be met? \"",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            \"Answer sure, likely or impossible.\").strip().lower()",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return {\"sure\": 20, \"likely\": 1, \"impossible\": 0.001}.get(v, 0.001)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def tot_bfs(start, k=3, b=2, depth=3):",
+        "steps": []
+      },
+      {
+        "text": "    frontier = [[start]]",
+        "steps": []
+      },
+      {
+        "text": "    for _ in range(depth):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        cands = [r + [s] for r in frontier for s in propose(r, k)]",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "        scored = [(value(c), c) for c in cands]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        scored = [x for x in scored if x[1] and x[0] > 0.001]  # prune",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        scored.sort(key=lambda x: x[0], reverse=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        frontier = [c for _, c in scored[:b]]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if not frontier:",
+        "steps": []
+      },
+      {
+        "text": "            return None",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return frontier[0]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def uct(child, parent_visits, c=1.4):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if child.visits == 0:",
+        "steps": []
+      },
+      {
+        "text": "        return float(\"inf\")                     # try unvisited first",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    exploit = child.value / child.visits",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    explore = c * math.sqrt(math.log(parent_visits) / child.visits)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return exploit + explore",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Propose k candidate thoughts",
+        "text": "From the depot, the model proposes k = 3 possible first stops: the hospital, the pharmacy or the cold-chain drop. Each is one small, checkable step."
+      },
+      {
+        "title": "Evaluate each candidate",
+        "text": "A value prompt rates each partial route as sure, likely or impossible, mapped to 20, 1 and 0.001 as in the Tree of Thoughts code. Pharmacy first is impossible: it opens after the hospital's deadline."
+      },
+      {
+        "title": "Select the best b",
+        "text": "Only the top b = 2 candidates survive: hospital first (sure) and cold-chain first (likely). The impossible branch is dropped, so no more calls are spent on it."
+      },
+      {
+        "title": "Expand level by level",
+        "text": "Each kept route gets 3 new proposals, so the second level has 6 candidates. The search repeats propose, evaluate and select until the depth limit."
+      },
+      {
+        "title": "Prune dead ends",
+        "text": "Two of the six second-level routes break a time window and are pruned. The surviving branch from the hospital reaches a valid route at depth 3."
+      },
+      {
+        "title": "MCTS variant: balance value and exploration",
+        "text": "Monte Carlo tree search, as in LATS, picks which node to expand with UCT: average value plus an exploration bonus that is largest for rarely visited nodes. Unvisited nodes go first."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<circle class=\"a\" cx=\"180\" cy=\"16\" r=\"9\" style=\"fill:var(--accent);--d:0s\"/><text class=\"sb a\" x=\"194\" y=\"20\" style=\"text-anchor:start;--d:0s\">depot</text><path class=\"ln draw \" pathLength=\"1\" d=\"M180 25 L70 60\" style=\"--d:0.1s\"/><circle class=\"a\" cx=\"70\" cy=\"68\" r=\"8\" style=\"fill:var(--rule-strong);--d:0.2s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M180 25 L180 60\" style=\"--d:0.18s\"/><circle class=\"a\" cx=\"180\" cy=\"68\" r=\"8\" style=\"fill:var(--rule-strong);--d:0.28s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M180 25 L290 60\" style=\"--d:0.26s\"/><circle class=\"a\" cx=\"290\" cy=\"68\" r=\"8\" style=\"fill:var(--rule-strong);--d:0.36s\"/><text class=\"sb a\" x=\"58\" y=\"72\" style=\"text-anchor:end;--d:0.4s\">hospital</text><text class=\"sb a\" x=\"168\" y=\"72\" style=\"text-anchor:end;--d:0.45s\">pharmacy</text><text class=\"sb a\" x=\"278\" y=\"72\" style=\"text-anchor:end;--d:0.5s\">cold-chain</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tag-t\" x=\"82\" y=\"60\" style=\"text-anchor:start;fill:var(--pass)\">sure</text></g><g class=\"a\" style=\"--d:0.1s\"><text class=\"tag-t\" x=\"192\" y=\"60\" style=\"text-anchor:start;fill:var(--fail)\">impossible</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"302\" y=\"60\" style=\"text-anchor:start;fill:var(--warn)\">likely</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<circle class=\"a\" cx=\"70\" cy=\"68\" r=\"8\" style=\"fill:var(--accent);--d:0s\"/><circle class=\"a\" cx=\"290\" cy=\"68\" r=\"8\" style=\"fill:var(--accent);--d:0.05s\"/><circle class=\"a\" cx=\"180\" cy=\"68\" r=\"8\" style=\"fill:var(--fail);--d:0.1s\"/><path class=\"ln a\" d=\"M172 60 L188 76 M188 60 L172 76\" style=\"stroke:var(--fail);--d:0.15s\"/><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"108\" style=\"text-anchor:middle;fill:var(--accent)\">keep top b = 2</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw \" pathLength=\"1\" d=\"M70 77 L30 124\" style=\"--d:0s\"/><circle class=\"a\" cx=\"30\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.1s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M70 77 L70 124\" style=\"--d:0.06s\"/><circle class=\"a\" cx=\"70\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.16s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M70 77 L110 124\" style=\"--d:0.12s\"/><circle class=\"a\" cx=\"110\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.22s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M290 77 L250 124\" style=\"--d:0.18s\"/><circle class=\"a\" cx=\"250\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.28s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M290 77 L290 124\" style=\"--d:0.24s\"/><circle class=\"a\" cx=\"290\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.33999999999999997s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M290 77 L330 124\" style=\"--d:0.3s\"/><circle class=\"a\" cx=\"330\" cy=\"132\" r=\"7\" style=\"fill:var(--rule-strong);--d:0.4s\"/>"
+      },
+      {
+        "step": 5,
+        "svg": "<circle class=\"a\" cx=\"70\" cy=\"132\" r=\"7\" style=\"fill:var(--fail);--d:0s\"/><circle class=\"a\" cx=\"330\" cy=\"132\" r=\"7\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"tag-t fail a\" x=\"70\" y=\"154\" style=\"text-anchor:middle;--d:0.2s\">pruned</text><text class=\"tag-t fail a\" x=\"330\" y=\"154\" style=\"text-anchor:middle;--d:0.25s\">pruned</text><circle class=\"a\" cx=\"30\" cy=\"132\" r=\"7\" style=\"fill:var(--accent);--d:0.3s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M30 139 L30 178\" style=\"--d:0.35s\"/><circle class=\"a\" cx=\"30\" cy=\"186\" r=\"8\" style=\"fill:var(--pass);--d:0.45s\"/><text class=\"tag-t pass a\" x=\"44\" y=\"190\" style=\"text-anchor:start;--d:0.5s\">valid route at depth 3</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"214\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"231\" text-anchor=\"middle\">UCT = value / visits + c · √(ln N / visits)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Recovers from early wrong choices by backtracking",
+      "Large accuracy gains on puzzles, planning and code with tests",
+      "Knobs (k, b, depth) trade cost for accuracy explicitly",
+      "Works with any model and a value prompt or checker"
+    ],
+    "cons": [
+      "Model calls multiply with k, b and depth",
+      "Only as good as the value function",
+      "Hard to stream or bound latency",
+      "Overkill where a single chain already succeeds"
+    ],
+    "avoidWhen": [
+      "A single chain already solves most cases (measure first)",
+      "There is no way to score partial solutions"
+    ],
+    "tools": [
+      {
+        "name": "Tree of Thoughts (code)",
+        "type": "Open source (research code)",
+        "what": "BFS and DFS over thoughts with propose and value prompts",
+        "url": "https://github.com/princeton-nlp/tree-of-thought-llm"
+      },
+      {
+        "name": "LATS (code)",
+        "type": "Open source (research code)",
+        "what": "MCTS with tool actions, environment feedback and reflection",
+        "url": "https://github.com/lapisrocks/LanguageAgentTreeSearch"
+      },
+      {
+        "name": "llm-reasoners",
+        "type": "Open source",
+        "what": "A library of search-based reasoning algorithms",
+        "url": "https://github.com/maitrix-org/llm-reasoners"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Custom search loops and LATS-style examples",
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "name": "vLLM",
+        "type": "Open source",
+        "what": "Fast parallel sampling of many candidates",
+        "url": "https://docs.vllm.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A logistics firm sequences a van's delivery drops under time windows. A plain chain of reasoning commits to the first stop the model likes best, which here is the wrong one. You set how many next stops the model proposes per state (k), how many partial routes survive each level (b), how deep the search goes and how good the evaluator is, then watch whether the search finds a valid route and what it costs.",
+    "controls": [
+      "Drag the sliders to set k (proposals per state), b (beam) and d (depth limit).",
+      "Choose a noisy value prompt or a good checker as the evaluator.",
+      "Or load a scenario, including a plain chain with k = b = 1."
+    ],
+    "outputs": [
+      {
+        "name": "Solved",
+        "meaning": "Whether a valid route was found at depth 3."
+      },
+      {
+        "name": "Model calls · cost",
+        "meaning": "Two calls per proposal (generate and evaluate), at ₹0.20 per call."
+      },
+      {
+        "name": "Tree",
+        "meaning": "Candidates at each level: kept, dropped and pruned. The ring marks the right branch, green while it survives."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "k = 3, b = 2, noisy evaluator",
+        "expect": "The noisy evaluator ranks the right branch 3rd at level 2, so a beam of 2 drops it: unsolved after 30 calls."
+      },
+      {
+        "k": "chain",
+        "name": "Plain chain (k = b = 1)",
+        "expect": "Only the favourite first stop is tried, and it is wrong: unsolved after 6 calls."
+      },
+      {
+        "k": "good",
+        "name": "k = 3, b = 2, good checker",
+        "expect": "The checker ranks the right branch first at every level: solved in 30 calls (₹6.00)."
+      },
+      {
+        "k": "wide",
+        "name": "k = 5, b = 2, noisy evaluator",
+        "expect": "More proposals do not help a narrow beam with a noisy judge: unsolved after 50 calls."
+      }
+    ],
+    "missions": [
+      {
+        "k": "under",
+        "text": "Solve the route in under 40 model calls.",
+        "hint": "A good checker with k = 3 and b = 2 solves it in 30 calls."
+      },
+      {
+        "k": "beam",
+        "text": "With the noisy evaluator, keep k at 3 and find the beam that solves it. (Raising k alone will not.)",
+        "hint": "The right branch is ranked as low as 3rd, so the beam must keep at least 3 states."
+      },
+      {
+        "k": "chain",
+        "text": "Run a plain chain (k = b = 1) and see it fail, then solve the route with the fewest calls possible.",
+        "hint": "The third stop is only the 3rd proposal, so k must be 3. With a good checker, b = 1 is enough: 18 calls."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Tree of Thoughts (code)",
+        "type": "Open source · research code",
+        "start": 2,
+        "prod": 1,
+        "best": "Reference BFS and DFS over thoughts, with propose and value prompts and n_generate, n_evaluate and n_select settings.",
+        "ex": "Run the Game of 24 task with BFS, 3 value samples and 5 kept states.",
+        "pros": [
+          "Faithful to the paper",
+          "Clear knobs for k, evaluation and beam"
+        ],
+        "cons": [
+          "Tasks are research puzzles",
+          "Needs adapting to real tools"
+        ],
+        "url": "https://github.com/princeton-nlp/tree-of-thought-llm"
+      },
+      {
+        "n": "LATS (code)",
+        "type": "Open source · research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Monte Carlo tree search over agent actions with an LM value function, environment feedback and reflection.",
+        "ex": "Search over candidate code fixes, using test results as feedback, as in the HumanEval experiments.",
+        "pros": [
+          "Combines search, acting and reflection",
+          "Strong published results"
+        ],
+        "cons": [
+          "Expensive per task",
+          "Research code"
+        ],
+        "url": "https://github.com/lapisrocks/LanguageAgentTreeSearch"
+      },
+      {
+        "n": "llm-reasoners",
+        "type": "Open source library",
+        "start": 2,
+        "prod": 2,
+        "best": "A library of search-based reasoning algorithms, such as MCTS and beam search, behind one interface.",
+        "ex": "Compare beam search and MCTS on a planning task with the same world model and reward.",
+        "pros": [
+          "Several algorithms to compare",
+          "Designed for reasoning research"
+        ],
+        "cons": [
+          "Research-oriented API",
+          "Smaller community than agent frameworks"
+        ],
+        "url": "https://github.com/maitrix-org/llm-reasoners"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · LangChain",
+        "start": 2,
+        "prod": 2,
+        "best": "Custom search loops in a graph, including a LATS-style tutorial.",
+        "ex": "A node that expands the best route, a node that scores children, and a loop until a solution or budget.",
+        "pros": [
+          "State and loops built in",
+          "Production features around the search"
+        ],
+        "cons": [
+          "You write the search logic",
+          "Easy to blow up call counts"
+        ],
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "n": "vLLM",
+        "type": "Open source · inference engine",
+        "start": 2,
+        "prod": 3,
+        "best": "Fast parallel sampling of many candidates from one prompt when you self-host models.",
+        "ex": "Generate 5 candidate next steps per state in one batched request with n=5.",
+        "pros": [
+          "High throughput for many samples",
+          "Prefix caching helps shared prompts"
+        ],
+        "cons": [
+          "You run the GPUs",
+          "Only for open models"
+        ],
+        "url": "https://docs.vllm.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Learn the method",
+        "tool": "Tree of Thoughts code"
+      },
+      {
+        "need": "Search over tool actions",
+        "tool": "LATS"
+      },
+      {
+        "need": "Cheapest first try",
+        "tool": "Self-consistency voting"
+      }
+    ],
+    "goals": [
+      "Explain how k, b and depth drive the number of model calls",
+      "Explain why the value function matters more than the number of proposals",
+      "Decide when search beats a single chain or a larger thinking budget"
+    ]
+  },
+  "practice": {
+    "scenario": "A logistics firm in Pune sequences multi-drop deliveries for vans with time windows: a hospital before 10:00, a pharmacy after 11:00, a cold-chain drop within 40 minutes of loading. A single chain of reasoning often commits to a bad first stop. A breadth-first search proposes three next stops at each step, scores partial routes with a checker, keeps the best two and prunes routes that already break a window.",
+    "industries": [
+      {
+        "industry": "Logistics",
+        "use": "Sequence drops, slots and loads where an early choice commits the route"
+      },
+      {
+        "industry": "Software engineering",
+        "use": "Try several candidate fixes and keep the one that passes the tests (as in LATS)"
+      },
+      {
+        "industry": "Operations research",
+        "use": "Explore candidate schedules for crews or machines with a feasibility check"
+      }
+    ],
+    "analogy": "A chess player who considers three candidate moves, looks a few moves ahead on the best two, and drops lines that lose a piece.",
+    "library": {
+      "name": "Tree of Thoughts (reference code)",
+      "what": "The official implementation from the paper, with BFS search and propose/value prompts for Game of 24 and other tasks.",
+      "install": "pip install tree-of-thoughts-llm"
+    },
+    "note": "The first file is a plain-Python BFS you can adapt; propose and value stand for model calls (or a checker). The second runs the reference package on Game of 24 and needs an OpenAI API key.",
+    "samples": [
+      {
+        "file": "route_bfs.py",
+        "language": "python",
+        "code": "def bfs(start, k=3, b=2, depth=4):\n    frontier = [start]                                   # partial routes\n    calls = 0\n    for _ in range(depth):\n        candidates = []\n        for state in frontier:\n            for nxt in propose(state, k):                # k thoughts per state\n                calls += 1\n                candidates.append((value(state + [nxt]), state + [nxt]))\n        candidates = [c for c in candidates if c[0] > 0]  # prune impossible\n        candidates.sort(key=lambda c: c[0], reverse=True)\n        frontier = [route for _, route in candidates[:b]] # keep the beam\n        if not frontier:\n            return None, calls\n    return frontier[0], calls"
+      },
+      {
+        "file": "game24.py",
+        "language": "python",
+        "code": "import argparse\nfrom tot.methods.bfs import solve\nfrom tot.tasks.game24 import Game24Task\n\nargs = argparse.Namespace(backend=\"gpt-4\", temperature=0.7, task=\"game24\",\n    naive_run=False, prompt_sample=None, method_generate=\"propose\",\n    method_evaluate=\"value\", method_select=\"greedy\",\n    n_generate_sample=1, n_evaluate_sample=3, n_select_sample=5)\n\ntask = Game24Task()\nys, infos = solve(args, task, 900)     # puzzle index 900\nprint(ys[0])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A breadth-first search uses k = 3 proposals per state, beam b = 2 and depth d = 3. Each proposal costs one call to generate and one call to evaluate. Level 1 expands only the root; later levels expand the 2 kept states. How many model calls does the search make in total?",
+    "answer": "Level 1: 1 × 3 = 3 proposals, 6 calls. Levels 2 and 3: 2 × 3 = 6 proposals each, 12 calls each. Total 6 + 12 + 12 = 30 calls, against 3 for a single chain of depth 3.",
+    "expected": {
+      "value": 30,
+      "tolerance": 0,
+      "label": "model calls ="
+    },
+    "interview": [
+      {
+        "question": "When is Tree of Thoughts worth its cost?",
+        "answer": "When an early wrong choice commits you to a dead end and there is a reliable way to score partial solutions, as in puzzles, planning and code with tests. If a single chain already succeeds, or you cannot evaluate partial states, the extra calls are wasted."
+      },
+      {
+        "question": "How does self-consistency relate to tree search?",
+        "answer": "Self-consistency samples several complete reasoning chains and takes a majority vote on the final answer. It is breadth without intermediate scoring or backtracking, so it is cheaper and simpler, but it cannot prune a bad path halfway through."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Raising k and b without checking the evaluator",
+        "fix": "Test the value function first; a noisy judge prunes good branches"
+      },
+      {
+        "mistake": "Searching tasks a single chain already solves",
+        "fix": "Measure a single chain first and search only the failures"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ts01",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A delivery planner often commits to a bad first stop that makes later time windows impossible. Which approach fits?",
+      "options": [
+        "A single chain with a longer prompt",
+        "Tree search: propose several next stops, score them and back out of dead ends",
+        "Voting on the final route only",
+        "A fixed workflow"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When early choices commit you, exploring and scoring several branches beats a single chain."
+    },
+    {
+      "id": "ts02",
+      "kind": "single",
+      "industry": "Operations",
+      "question": "A BFS uses k = 3 proposals, beam b = 2 and depth 3. Each proposal costs one generate and one evaluate call. Level 1 expands only the root. How many calls in total?",
+      "options": [
+        "30",
+        "18",
+        "36",
+        "24"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Level 1: 3 proposals, 6 calls. Levels 2 and 3: 2 × 3 = 6 proposals, 12 calls each. Total 30."
+    },
+    {
+      "id": "ts03",
+      "kind": "single",
+      "industry": "Education",
+      "question": "On Game of 24 with GPT-4, what success rates did the Tree of Thoughts paper report for chain of thought and ToT?",
+      "options": [
+        "4% and 74%",
+        "40% and 74%",
+        "4% and 44%",
+        "14% and 94%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Chain of thought solved 4%; Tree of Thoughts solved 74%."
+    },
+    {
+      "id": "ts04",
+      "kind": "single",
+      "industry": "Software",
+      "question": "A UCT function returns exploit − explore. What happens?",
+      "options": [
+        "Unexplored nodes are penalised, so the search keeps expanding the same branch",
+        "The search explores more",
+        "Nothing changes",
+        "The search stops immediately"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The exploration bonus must be added; subtracting it discourages exploring rarely visited nodes."
+    },
+    {
+      "id": "ts05",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "With a noisy value prompt, a search keeps losing the right branch. Which changes help? Select all that apply.",
+      "options": [
+        "Widen the beam so more states survive",
+        "Improve the value function, for example with a rule-based checker",
+        "Raise k while keeping a beam of 1",
+        "Reduce depth below what the problem needs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A wider beam or a better evaluator keeps the right branch. More proposals with a narrow beam, or too little depth, do not."
+    },
+    {
+      "id": "ts06",
+      "kind": "single",
+      "industry": "Finance",
+      "question": "Self-consistency samples several reasoning chains and takes a majority vote. What does it lack compared with Tree of Thoughts?",
+      "options": [
+        "Scoring and pruning of intermediate steps",
+        "Multiple samples",
+        "A final answer",
+        "Any model calls"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Self-consistency votes on final answers; it cannot prune a bad path halfway through."
+    },
+    {
+      "id": "ts07",
+      "kind": "single",
+      "industry": "Software",
+      "question": "LATS reported what pass@1 on HumanEval with GPT-4?",
+      "options": [
+        "92.7%",
+        "74.0%",
+        "85.0%",
+        "99.1%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "LATS combined MCTS, an LM value function and reflection to reach 92.7% pass@1 on HumanEval."
+    },
+    {
+      "id": "ts08",
+      "kind": "single",
+      "industry": "Operations",
+      "question": "In the Tree of Thoughts code, which value mapping is used for sure, likely and impossible?",
+      "options": [
+        "20, 1 and 0.001",
+        "1, 0.5 and 0",
+        "10, 5 and 1",
+        "100, 10 and 0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The Game of 24 value prompt maps sure to 20, likely to 1 and impossible to 0.001."
+    },
+    {
+      "id": "ts09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A scheduling search for operating theatres is too expensive. Which reduce model calls? Select all that apply.",
+      "options": [
+        "Lower k where the right step is usually a top proposal",
+        "Prune impossible states early with a cheap code check",
+        "Raise the beam from 2 to 5",
+        "Increase depth beyond what the schedule needs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fewer proposals and early pruning cut calls. A wider beam and extra depth multiply them."
+    },
+    {
+      "id": "ts10",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A single chain of depth 3 costs 6 calls (generate and evaluate per step). A search that solves the task costs 30. When is the search worth it?",
+      "options": [
+        "When the chain fails often and a failure is costly",
+        "Always, because it is more thorough",
+        "Never, because it costs five times as much",
+        "Only when depth is 1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Search pays off when a single chain fails often and mistakes are expensive; otherwise the extra calls are waste."
+    },
+    {
+      "id": "ts11",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A BFS uses k = 4, beam b = 3, depth 2, with one generate and one evaluate call per proposal. How many calls?",
+      "options": [
+        "32",
+        "24",
+        "40",
+        "28"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Level 1: 4 proposals, 8 calls. Level 2: 3 × 4 = 12 proposals, 24 calls. Total 32."
+    },
+    {
+      "id": "ts12",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which are Tree of Thoughts search settings in the official code? Select all that apply.",
+      "options": [
+        "n_generate_sample",
+        "n_select_sample",
+        "max_turns",
+        "budget_tokens"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "n_generate_sample and n_select_sample (with n_evaluate_sample) control the ToT search. max_turns and budget_tokens belong to other tools."
+    },
+    {
+      "id": "ts13",
+      "kind": "single",
+      "industry": "Education",
+      "question": "Self-consistency improved chain of thought on GSM8K by about how much in its paper?",
+      "options": [
+        "17.9%",
+        "1.9%",
+        "47.9%",
+        "7.9%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The paper reports a +17.9% gain on GSM8K from majority voting over sampled chains."
+    },
+    {
+      "id": "ts14",
+      "kind": "single",
+      "industry": "Operations",
+      "question": "A route search’s right third stop is only the model’s 3rd most likely proposal. With k = 2, what happens regardless of the beam?",
+      "options": [
+        "The right route is never found",
+        "The beam compensates",
+        "The evaluator finds it anyway",
+        "It is found at depth 4"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "If the right step is never proposed, no amount of beam or scoring can keep it."
+    },
+    {
+      "id": "ts15",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which signs suggest search is the wrong tool? Select all that apply.",
+      "options": [
+        "A single chain already solves 98% of cases",
+        "There is no way to score a partial solution",
+        "Early mistakes are costly and hard to undo",
+        "A reliable checker for partial states exists"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "If chains already work or partial states cannot be scored, search adds cost for little gain. The other two favour search."
+    },
+    {
+      "id": "ts16",
+      "kind": "single",
+      "industry": "Software",
+      "question": "In MCTS with UCT, an unvisited child is usually given what score?",
+      "options": [
+        "Infinite, so it is tried first",
+        "Zero",
+        "The parent’s score",
+        "Negative infinity"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Unvisited children get top priority so every option is tried at least once."
+    },
+    {
+      "id": "ts17",
+      "kind": "single",
+      "industry": "Finance",
+      "question": "Search spends compute on breadth outside the model. Which spends extra compute inside a single call instead?",
+      "options": [
+        "A larger thinking budget on a reasoning model",
+        "Self-consistency voting",
+        "Beam search",
+        "MCTS"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reasoning models think within one call; voting, beam search and MCTS make many calls."
+    },
+    {
+      "id": "ts18",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A search with 5 proposals per state and beam 2 examines how many candidates at level 3, if levels 2 and 3 each expand the 2 kept states?",
+      "options": [
+        "10",
+        "25",
+        "5",
+        "20"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Each level after the first expands b × k = 2 × 5 = 10 candidates."
+    },
+    {
+      "id": "ts19",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "LATS combines which ideas? Select all that apply.",
+      "options": [
+        "Monte Carlo tree search",
+        "An LM-powered value function",
+        "Environment feedback and reflection",
+        "A fixed prompt chain with no search"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "LATS uses MCTS with an LM value function, environment feedback and self-reflection."
+    },
+    {
+      "id": "ts20",
+      "kind": "single",
+      "industry": "Operations",
+      "question": "With a noisy evaluator, raising k from 3 to 5 while keeping b = 2 changed nothing except cost. Why?",
+      "options": [
+        "The right branch was already proposed but the evaluator ranked it below the beam",
+        "k has no effect on cost",
+        "The depth was too large",
+        "The evaluator ignores new proposals"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "More proposals cannot help if the evaluator keeps dropping the right one; widen the beam or fix the evaluator."
+    }
+  ]
+}

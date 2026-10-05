@@ -1,0 +1,921 @@
+{
+  "id": "post",
+  "moduleSlug": "guardrails",
+  "name": "Output Guardrails",
+  "shortName": "Output rails",
+  "question": "Is this response safe and true enough to send?",
+  "summary": "Checks on the model’s draft before it reaches the user or triggers an action. They catch hallucinated facts, toxic or off-brand language, leaked secrets or personal data, and output that breaks the expected format.",
+  "useCases": [
+    "Answers that state facts, figures or policy, especially from RAG",
+    "Customer-facing channels where tone and brand safety matter",
+    "Output that feeds other systems: JSON, SQL, API calls"
+  ],
+  "keyFacts": {
+    "label": "What it checks",
+    "items": [
+      {
+        "term": "Grounding / hallucination",
+        "detail": "every claim supported by the retrieved context"
+      },
+      {
+        "term": "Toxicity & harm",
+        "detail": "hate, harassment, unsafe advice"
+      },
+      {
+        "term": "Data leakage",
+        "detail": "PII, secrets, system-prompt disclosure"
+      },
+      {
+        "term": "Format & schema",
+        "detail": "valid JSON, required fields, allowed values"
+      },
+      {
+        "term": "Policy & brand",
+        "detail": "no promises the business can’t keep, approved tone"
+      }
+    ]
+  },
+  "steps": [
+    "Validate structure first with a schema, which is exact and cheap",
+    "Check grounding against the retrieved context for factual answers",
+    "Run toxicity and leakage checks on every user-visible reply",
+    "Choose an action per failure: block, redact, retry with feedback, or hand to a person"
+  ],
+  "pitfalls": [
+    "Streaming shows text before a full-output check can finish. Check in chunks or buffer",
+    "Retry loops multiply cost and latency, so cap them",
+    "Grounding checks can’t catch an error that is in the source itself"
+  ],
+  "tools": [
+    "Guardrails AI validators",
+    "NeMo Guardrails",
+    "Llama Guard",
+    "Azure AI Content Safety",
+    "Amazon Bedrock Guardrails",
+    "Pydantic"
+  ],
+  "remember": "Check the draft before anyone sees it.",
+  "caption": "The draft is checked on four fronts. The unsupported claim triggers a retry instead of reaching the customer.",
+  "comparison": {
+    "scope": "After the model, before the user",
+    "cost": 2,
+    "needs": "Hallucination, toxicity, leaks, bad format",
+    "best": "Adds latency; awkward with streaming"
+  },
+  "diagram": {
+    "file": "diagrams/post.svg"
+  },
+  "lesson": {
+    "file": "output_rail.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from pydantic import BaseModel, Field, ValidationError",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Reply(BaseModel):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    claim_id: str = Field(pattern=r\"^CLM-\\d{6}$\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    message: str",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    promised_days: int | None = None",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def output_rail(draft_json: str, policy_chunks: list[str], tries: int = 0):",
+        "steps": []
+      },
+      {
+        "text": "    try:",
+        "steps": []
+      },
+      {
+        "text": "        reply = Reply.model_validate_json(draft_json)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    except ValidationError as e:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return retry(f\"Fix the JSON: {e.errors()[0]['msg']}\", tries)",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    claims = split_into_claims(reply.message)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    unsupported = [c for c in claims if not entails(policy_chunks, c)]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    problems = [f\"unsupported: {c}\" for c in unsupported]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if toxicity(reply.message) > 0.5:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        problems.append(\"tone breaks the style guide\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if find_pii_or_secrets(reply.message):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        problems.append(\"leaks personal data\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    log_checks(reply.claim_id, problems)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if not problems:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return send(reply)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if problems == [\"leaks personal data\"]:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return send(redact(reply))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return retry(\"; \".join(problems), tries)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def retry(feedback: str, tries: int):",
+        "steps": []
+      },
+      {
+        "text": "    if tries >= 1:                                   # cap: one retry",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return escalate_to_agent(feedback)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    draft = llm(PROMPT + f\"\\nYour last draft failed: {feedback}\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return output_rail(draft, POLICY_CHUNKS, tries + 1)",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Validate structure first",
+        "text": "A Pydantic schema checks field names, types and the claim ID format. It is exact and costs microseconds, so it runs first."
+      },
+      {
+        "title": "Check grounding claim by claim",
+        "text": "The reply is split into claims and each is checked against the policy text. “Payout in 1 day” is unsupported: the policy says 5–7 days."
+      },
+      {
+        "title": "Screen tone and leakage",
+        "text": "A toxicity model and a PII and secrets scan run on every reply the customer will see. Both pass here."
+      },
+      {
+        "title": "Choose an action for each failure",
+        "text": "Block, redact, retry or escalate. A lone leak is redacted; an unsupported claim is sent back with the reason."
+      },
+      {
+        "title": "Retry once, then escalate",
+        "text": "The retry includes the failure reason, and the new draft says 5–7 days. A second failure would go to a person, never a loop."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx\" x=\"8\" y=\"10\" width=\"200\" height=\"120\" rx=\"7\"/><text class=\"lb\" x=\"108\" y=\"28\">Draft reply</text><text class=\"mono\" x=\"20\" y=\"50\">\"claim_id\": \"CLM-104471\"</text><text class=\"mono\" x=\"20\" y=\"70\">\"message\": \"Approved.</text><text class=\"mono\" x=\"20\" y=\"88\"> Payout in 1 day.\"</text><text class=\"mono\" x=\"20\" y=\"112\">\"promised_days\": 1</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"222\" y=\"14\" width=\"104\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"31\" text-anchor=\"middle\">schema</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"343\" cy=\"27\" r=\"9\" class=\"bd-pass\"/><path d=\"M339 27l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"222\" y=\"50\" width=\"104\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"67\" text-anchor=\"middle\">grounding</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"343\" cy=\"63\" r=\"9\" class=\"bd-fail\"/><path d=\"M339.5 59.5l7 7M346.5 59.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"8\" y=\"140\" width=\"200\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"156\" text-anchor=\"middle\">policy: payout in 5–7 days</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"222\" y=\"86\" width=\"104\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"103\" text-anchor=\"middle\">toxicity</text></g><g class=\"a\" style=\"--d:0.15s\"><circle cx=\"343\" cy=\"99\" r=\"9\" class=\"bd-pass\"/><path d=\"M339 99l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx \" x=\"222\" y=\"122\" width=\"104\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"139\" text-anchor=\"middle\">leakage</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"343\" cy=\"135\" r=\"9\" class=\"bd-pass\"/><path d=\"M339 135l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"184\" style=\"--d:0s\">On failure:</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"76\" y=\"170\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"109\" y=\"186\" text-anchor=\"middle\">block</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"146\" y=\"170\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"186\" text-anchor=\"middle\">redact</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx warn\" x=\"216\" y=\"170\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"249\" y=\"186\" text-anchor=\"middle\">retry</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"286\" y=\"170\" width=\"66\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"319\" y=\"186\" text-anchor=\"middle\">escalate</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"210\" width=\"262\" height=\"30\" rx=\"6\"/><text class=\"tl\" x=\"139\" y=\"229\" text-anchor=\"middle\">retry 1: “Payout in 5–7 days.” all pass</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx acc\" x=\"278\" y=\"210\" width=\"74\" height=\"30\" rx=\"6\"/><text class=\"mono\" x=\"315\" y=\"229\" text-anchor=\"middle\">sent</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Catches what no input check can see: hallucinations, leaks, broken format",
+      "Schema checks are exact and nearly free",
+      "Retrying with the failure reason often fixes the draft without a person",
+      "Every failure is logged, which feeds evaluation and prompt fixes"
+    ],
+    "cons": [
+      "Adds latency after generation, which users feel directly",
+      "Streaming shows text before a full check can finish",
+      "Retries multiply cost and latency",
+      "Grounding checks can’t catch an error that is in the source itself"
+    ],
+    "avoidWhen": [
+      "The output never reaches a person or another system directly, such as internal scratch work",
+      "The risk is in the action rather than the text (a policy gate on the tool call is more direct)"
+    ],
+    "tools": [
+      {
+        "name": "Guardrails AI",
+        "type": "Open source",
+        "what": "Validators from a hub, with on-fail actions such as reask and fix",
+        "url": "https://github.com/guardrails-ai/guardrails"
+      },
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Exact schema validation for structured output",
+        "url": "https://docs.pydantic.dev/latest/"
+      },
+      {
+        "name": "NeMo Guardrails",
+        "type": "Open source (NVIDIA)",
+        "what": "Output rails, including fact-checking and self-check flows",
+        "url": "https://github.com/NVIDIA/NeMo-Guardrails"
+      },
+      {
+        "name": "Llama Guard",
+        "type": "Open model (Meta)",
+        "what": "Classifies model responses against a hazard taxonomy",
+        "url": "https://huggingface.co/meta-llama/Llama-Guard-4-12B"
+      },
+      {
+        "name": "Amazon Bedrock Guardrails",
+        "type": "Managed service (AWS)",
+        "what": "Content filters, PII redaction and contextual grounding checks",
+        "url": "https://aws.amazon.com/bedrock/guardrails/"
+      },
+      {
+        "name": "Azure AI Content Safety",
+        "type": "Managed service (Microsoft)",
+        "what": "Harm categories, protected material and groundedness detection",
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An insurer’s claims bot produced ten draft replies. Six have a defect: two state things the policy doesn’t support, two break the JSON schema, one leaks another customer’s phone number and one is rude. You choose which checks run on each draft, what happens when a check fails, and whether text streams to the customer.",
+    "controls": [
+      "Switch each of the four output checks on or off; each shows the latency it adds.",
+      "Choose the action on failure: block with a fallback, retry once with the reason, or escalate to a person.",
+      "Toggle streaming, which shows text before the checks can finish."
+    ],
+    "outputs": [
+      {
+        "name": "Defective replies seen by customers",
+        "meaning": "Defective drafts that reached a customer, including ones glimpsed while streaming."
+      },
+      {
+        "name": "Good answers delivered",
+        "meaning": "Drafts that reached the customer correct, first time or after a retry."
+      },
+      {
+        "name": "Added wait before text appears",
+        "meaning": "Average time the checks and retries add before a reply is shown."
+      },
+      {
+        "name": "Model calls",
+        "meaning": "10 drafts plus one call per retry."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Schema and tone only",
+        "expect": "Grounding and leakage checks are off. Expect 3 defective replies to reach customers, 7 good answers, 13 model calls and +391 ms."
+      },
+      {
+        "k": "all",
+        "name": "All checks, retry",
+        "expect": "Every check on, one retry. Expect no defects shown, 9 good answers (the flood-cover claim fails its retry and gets a fallback), 16 model calls and +1,039 ms."
+      },
+      {
+        "k": "block",
+        "name": "All checks, block",
+        "expect": "Every check on, but failures get a fallback. Expect no defects shown, only 4 good answers, 10 model calls and +237 ms."
+      },
+      {
+        "k": "stream",
+        "name": "All checks, streaming",
+        "expect": "Every check on with streaming. Expect 6 defects glimpsed by customers before retraction, even though 9 end up correct, and 0 ms added wait."
+      }
+    ],
+    "missions": [
+      {
+        "k": "zero",
+        "text": "Make sure no defective reply reaches a customer.",
+        "hint": "Turn on every check and switch streaming off."
+      },
+      {
+        "k": "nine",
+        "text": "Deliver at least 9 good answers with no defect shown.",
+        "hint": "Every check on, no streaming, and retry once on failure."
+      },
+      {
+        "k": "fast",
+        "text": "Show no defects while keeping the added wait at or below 300 ms.",
+        "hint": "Retries cost a full model call each. Block with a fallback or escalate instead."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Guardrails AI",
+        "type": "Open source · optional hosted hub",
+        "start": 3,
+        "prod": 2,
+        "best": "Wrapping model calls with validators from a hub, each with an on-fail action such as exception, fix, filter or reask.",
+        "ex": "A Guard with a toxic-language validator and a regex validator on the claim ID, re-asking the model once on failure.",
+        "pros": [
+          "Many ready-made validators",
+          "On-fail actions built in"
+        ],
+        "cons": [
+          "Some validators call models and add latency",
+          "Validator quality varies; test on your data"
+        ],
+        "url": "https://github.com/guardrails-ai/guardrails"
+      },
+      {
+        "n": "Pydantic",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Exact validation of structured output: field names, types, patterns and ranges.",
+        "ex": "Reply.model_validate_json(draft) rejects a claim ID with five digits instead of six.",
+        "pros": [
+          "Exact, fast and widely known",
+          "Error messages make good retry feedback"
+        ],
+        "cons": [
+          "Checks structure, not meaning",
+          "Complex cross-field rules need custom validators"
+        ],
+        "url": "https://docs.pydantic.dev/latest/"
+      },
+      {
+        "n": "NeMo Guardrails",
+        "type": "Open source · NVIDIA",
+        "start": 2,
+        "prod": 3,
+        "best": "Output rails such as self-check, fact-checking against retrieved chunks and sensitive-data detection.",
+        "ex": "An output rail that checks each RAG answer against its retrieved chunks before it is returned.",
+        "pros": [
+          "Input and output rails in one configuration",
+          "Supports streaming with chunked checks"
+        ],
+        "cons": [
+          "LLM-based rails add a model call",
+          "Configuration has a learning curve"
+        ],
+        "url": "https://github.com/NVIDIA/NeMo-Guardrails"
+      },
+      {
+        "n": "Llama Guard",
+        "type": "Open model · Meta",
+        "start": 2,
+        "prod": 3,
+        "best": "Classifying the model’s response, not just the prompt, against a standard hazard taxonomy.",
+        "ex": "Run Llama Guard on every chatbot response and replace any labelled unsafe with a safe refusal.",
+        "pros": [
+          "Self-hosted; responses never leave your systems",
+          "Returns the violated category"
+        ],
+        "cons": [
+          "Needs a GPU to run at low latency",
+          "Custom policies need prompt changes or fine-tuning"
+        ],
+        "url": "https://huggingface.co/meta-llama/Llama-Guard-4-12B"
+      },
+      {
+        "n": "Amazon Bedrock Guardrails",
+        "type": "Managed service · AWS",
+        "start": 3,
+        "prod": 3,
+        "best": "Configurable content filters, denied topics, PII redaction and a contextual grounding check for Bedrock applications.",
+        "ex": "Apply one guardrail to a claims assistant that masks phone numbers and blocks answers with low grounding scores.",
+        "pros": [
+          "No infrastructure to run",
+          "Grounding and relevance checks built in"
+        ],
+        "cons": [
+          "Tied to AWS",
+          "Per-use charges on every check"
+        ],
+        "url": "https://aws.amazon.com/bedrock/guardrails/"
+      },
+      {
+        "n": "Azure AI Content Safety",
+        "type": "Managed service · Microsoft",
+        "start": 3,
+        "prod": 3,
+        "best": "Harm-category severity scores, protected-material detection and groundedness detection as an API.",
+        "ex": "Check every generated reply for severity and for groundedness against the source policy text.",
+        "pros": [
+          "Several output checks behind one service",
+          "Enterprise compliance features"
+        ],
+        "cons": [
+          "Tied to Azure",
+          "Text is sent to the service"
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Structured output",
+        "tool": "Pydantic"
+      },
+      {
+        "need": "Ready-made validators with retry",
+        "tool": "Guardrails AI"
+      },
+      {
+        "need": "Managed checks on AWS",
+        "tool": "Amazon Bedrock Guardrails"
+      }
+    ],
+    "goals": [
+      "Order output checks from cheapest and most exact to slowest",
+      "Choose between block, redact, retry and escalate for a given failure",
+      "Explain why streaming conflicts with full-output checks, and two ways to handle it"
+    ]
+  },
+  "practice": {
+    "scenario": "An insurer's claims bot drafts replies as JSON. Before sending, a schema check confirms the claim ID format, a toxicity check runs on the message, and a grounding rule compares any promised timeline with the policy. A draft promising “payout in 1 day” when the policy says 5–7 days goes back for revision.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Block replies that promise payouts or timelines the policy doesn’t support"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Validate structured order updates before they reach downstream systems"
+      },
+      {
+        "industry": "Media & publishing",
+        "use": "Screen generated copy for toxicity and brand safety"
+      }
+    ],
+    "analogy": "An editor reading an article before it goes to print: facts checked, tone checked, layout checked.",
+    "library": {
+      "name": "Guardrails AI + Pydantic",
+      "what": "Pydantic enforces structure exactly; Guardrails AI adds ready-made validators such as toxic language from its hub.",
+      "install": "pip install guardrails-ai pydantic && guardrails hub install hub://guardrails/toxic_language"
+    },
+    "samples": [
+      {
+        "file": "output_rail.py",
+        "language": "python",
+        "code": "from pydantic import BaseModel, Field\nfrom guardrails import Guard\nfrom guardrails.hub import ToxicLanguage\n\nclass Reply(BaseModel):\n    claim_id: str = Field(pattern=r\"^CLM-\\d{6}$\")\n    message: str\n    promised_days: int | None = None\n\ntoxicity = Guard().use(ToxicLanguage(threshold=0.5,\n                                     validation_method=\"sentence\",\n                                     on_fail=\"exception\"))\n\ndef output_rail(draft_json: str, policy_min_days: int) -> Reply:\n    reply = Reply.model_validate_json(draft_json)       # 1. schema\n    toxicity.validate(reply.message)                    # 2. toxicity\n    if reply.promised_days is not None and reply.promised_days < policy_min_days:\n        raise ValueError(f\"Ungrounded: policy says {policy_min_days}+ days\")  # 3. grounding\n    return reply"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Draft: {\"claim_id\": \"CLM-00447\", \"message\": \"Paid in 2 days\", \"promised_days\": 2}. Policy minimum is 5 days. Which checks fail?",
+    "answer": "Schema fails: claim_id needs six digits after CLM- and has five. Grounding fails: 2 days is below the 5-day policy. Toxicity passes. Retry once with feedback naming both problems.",
+    "interview": [
+      {
+        "question": "How do you run output guardrails when responses stream?",
+        "answer": "Buffer and check before showing, check sentence by sentence and stop the stream on failure, or stream only low-risk content. Each option trades latency against the risk of showing text you later retract."
+      },
+      {
+        "question": "What should happen when an output check fails?",
+        "answer": "Choose per failure: block with a safe message, redact the offending part, retry with the failure reason as feedback (capped at one or two retries), or escalate to a person. Log every failure for evaluation."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Retrying indefinitely on failed checks",
+        "fix": "Cap retries at 1–2, then fall back or escalate"
+      },
+      {
+        "mistake": "Checking only the format",
+        "fix": "Also check grounding, toxicity and leakage on user-visible text"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "po01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims bot drafts “Your payout will arrive in 1 day.” The retrieved policy says 5–7 days. Which output check catches this?",
+      "options": [
+        "Schema validation of the reply object",
+        "Grounding against the retrieved policy",
+        "Toxicity screening of the message text",
+        "Input PII masking before the model runs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The claim is not supported by the source text. A grounding check compares each claim with the retrieved context."
+    },
+    {
+      "id": "po02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "20% of drafts fail an output check and are retried once with feedback. 25% of retries fail again and go to a person. Per 1,000 replies, how many model calls and escalations are there?",
+      "options": [
+        "1,200 calls and 50 escalations",
+        "1,200 calls and 250 escalations",
+        "1,250 calls and 50 escalations",
+        "1,000 calls and 200 escalations"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,000 first drafts + 200 retries = 1,200 calls. Escalations = 200 × 25% = 50."
+    },
+    {
+      "id": "po03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Model output is JSON that feeds the order system directly. Which output check should run first?",
+      "options": [
+        "Grounding against the product catalogue",
+        "Schema validation, for example with Pydantic",
+        "A toxicity model",
+        "A human review queue"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Schema checks are exact and cost microseconds, so malformed output fails fast before any slower check runs."
+    },
+    {
+      "id": "po04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which checks belong in the output rail of a customer-facing bank chatbot? Select all that apply.",
+      "options": [
+        "A leakage scan for account numbers and system-prompt text",
+        "A toxicity check on every reply",
+        "Grounding of quoted rates and fees against the retrieved tariff sheet",
+        "Scanning the user’s message for PAN numbers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Leakage, toxicity and grounding apply to the draft. Scanning the user’s message is the input rail’s job."
+    },
+    {
+      "id": "po05",
+      "kind": "single",
+      "industry": "Media & streaming",
+      "question": "Replies stream to viewers token by token, and the toxicity check needs complete text. What is the usual approach?",
+      "options": [
+        "Check the full reply once streaming has finished",
+        "Check each sentence as it completes and stop the stream if one fails",
+        "Switch off output checks while streaming",
+        "Stream only the first half of each reply"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Checking in chunks limits how much unsafe text can appear. Checking only at the end shows it all first; buffering is the alternative for high-risk content."
+    },
+    {
+      "id": "po06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A validator is set to re-ask the model on failure with no limit. Some drafts loop nine times. What is the fix?",
+      "options": [
+        "Raise the model temperature so retries differ",
+        "Cap retries at one or two, then fall back or escalate to a person",
+        "Remove the validator",
+        "Retry on a larger model until it passes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Uncapped retries multiply cost and latency. A retry with the failure reason, then escalation, is the standard pattern."
+    },
+    {
+      "id": "po07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A RAG answer quotes a dosage exactly as written in a leaflet that was withdrawn last year. The grounding check passes. Why?",
+      "options": [
+        "The grounding model is broken and must be replaced",
+        "Grounding checks agreement with the source, and the source is wrong",
+        "The schema check should have rejected the dosage field",
+        "A toxicity check should have flagged the unsafe dosage"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The answer is faithful to a wrong document. Fix the knowledge base: remove outdated sources and track document dates."
+    },
+    {
+      "id": "po08",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A legal assistant’s draft begins: “As LexBot, my internal rule is never to mention…” Which output check should stop it?",
+      "options": [
+        "Leakage detection for system-prompt disclosure",
+        "Grounding against the retrieved case law",
+        "Schema validation of the reply format",
+        "Toxicity screening of the reply text"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Revealing system instructions is data leakage. The leakage check scans for secrets, personal data and prompt text."
+    },
+    {
+      "id": "po09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Output checks: schema 1 ms, grounding 120 ms, toxicity 40 ms, PII scan 15 ms. Schema runs first; the other three then run in parallel. What latency do they add to a draft that passes?",
+      "options": [
+        "121 ms",
+        "176 ms",
+        "120 ms",
+        "161 ms"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Schema (1 ms) then the slowest parallel check (120 ms): 121 ms. Running all four in sequence would be 176 ms."
+    },
+    {
+      "id": "po10",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which failure actions are sensible for a payments support bot? Select all that apply.",
+      "options": [
+        "Redact a leaked card number and send the rest of the reply",
+        "Retry with the failure reason when a fee is ungrounded",
+        "Hand the conversation to a person after the retry also fails",
+        "Retry until every check passes, however long it takes"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Choose an action per failure: redact, retry with feedback, or escalate. Unbounded retries are a cost and latency defect."
+    },
+    {
+      "id": "po11",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A team on AWS wants a managed service with content filters, PII redaction and contextual grounding checks on model output. Which fits?",
+      "options": [
+        "Amazon Bedrock Guardrails",
+        "Open Policy Agent",
+        "Microsoft Presidio",
+        "Firecracker"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Bedrock Guardrails offers those output checks as a managed service. OPA authorizes actions, Presidio is PII only, Firecracker is a sandbox."
+    },
+    {
+      "id": "po12",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "Draft reply after a cancellation: “Hello! Your refund of INR 12,450 will reach your account in 3 days. Have a pleasant day!” Which parts need a grounding check against the retrieved booking and policy? Select all that apply.",
+      "options": [
+        "“Hello!”",
+        "The refund amount of INR 12,450",
+        "The 3-day timeline",
+        "“Have a pleasant day!”"
+      ],
+      "correct": [
+        1,
+        2
+      ],
+      "explanation": "Factual claims about money and timelines must be supported by the source. Greetings carry no claim to verify."
+    },
+    {
+      "id": "po13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Of 200 labelled answers, 40 contain a hallucination. The grounding checker flags 45: 36 truly hallucinated and 9 fine. What are its recall and precision?",
+      "options": [
+        "Recall 90%, precision 80%",
+        "Recall 80%, precision 90%",
+        "Recall 90%, precision 90%",
+        "Recall 18%, precision 80%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Recall = 36 ÷ 40 = 90%. Precision = 36 ÷ 45 = 80%."
+    },
+    {
+      "id": "po14",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Schema: order_id must match ^ORD-\\d{6}$, status must be one of placed, shipped or delivered, refund_inr must be ≥ 0. The draft is {\"order_id\":\"ORD-1234\",\"status\":\"shiped\",\"refund_inr\":-200}. Which fields fail? Select all that apply.",
+      "options": [
+        "order_id",
+        "status",
+        "refund_inr",
+        "None: the JSON parses, so it is valid"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "ORD-1234 has four digits instead of six, “shiped” is not an allowed value, and −200 is below zero. Valid JSON is not the same as a valid object."
+    },
+    {
+      "id": "po15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why does the output rail validate the schema before running the grounding model?",
+      "options": [
+        "Grounding models cannot read JSON, so it must be parsed first",
+        "It is exact and nearly free, so malformed drafts fail before slow checks",
+        "Data-protection rules require the schema check to run first",
+        "A schema check also detects most hallucinated facts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cheap, exact checks first mean the expensive checks only run on drafts that are worth checking."
+    },
+    {
+      "id": "po16",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "To save cost, a children’s tutoring app runs its toxicity check on a random 10% of replies. What is wrong with this?",
+      "options": [
+        "Nothing: 10% is a statistically representative sample",
+        "Every reply a child sees needs checking; sampling suits audit only",
+        "The sample is too small and should be raised to 50%",
+        "Toxicity checks belong on the input, not on replies"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A sampled check lets 90% of harmful replies through. Sample for audit and drift, but check every user-visible reply inline."
+    },
+    {
+      "id": "po17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims bot sends 10,000 replies a day. 6% of drafts have a defect, and the output checks catch 95% of defects. How many defective replies reach customers each day?",
+      "options": [
+        "30",
+        "570",
+        "600",
+        "5"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "10,000 × 6% = 600 defective drafts; 5% slip through: 600 × 0.05 = 30."
+    },
+    {
+      "id": "po18",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A reporting agent writes SQL that runs against the trades database. Which output check fits best before execution?",
+      "options": [
+        "A toxicity check on the generated SQL text",
+        "A structural check: one SELECT on allow-listed tables only",
+        "A grounding check of the SQL against the user’s question",
+        "None: the database itself will reject harmful SQL"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Output that feeds another system needs a format check. Allowing only a read statement on approved tables blocks deletes and data exfiltration."
+    },
+    {
+      "id": "po19",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "Which problems can only an output rail catch, not an input rail? Select all that apply.",
+      "options": [
+        "A hallucinated dosage in the draft",
+        "Part of the system prompt repeated in the reply",
+        "An invalid field in the appointment JSON the model produced",
+        "A jailbreak phrase in the user’s message"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The first three are defects in the model’s draft, so only a check on the draft can see them. A jailbreak phrase in the user’s message is visible before the model runs."
+    },
+    {
+      "id": "po20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "In Guardrails AI, which on_fail action sends the failure back to the model so it can regenerate?",
+      "options": [
+        "reask",
+        "noop",
+        "exception",
+        "filter"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "reask re-prompts the model with the validation error. noop only logs, exception raises, and filter drops the failing value."
+    }
+  ]
+}

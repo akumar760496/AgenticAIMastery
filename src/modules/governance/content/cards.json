@@ -1,0 +1,812 @@
+{
+  "id": "cards",
+  "moduleSlug": "governance",
+  "name": "Model and System Cards",
+  "shortName": "System cards",
+  "question": "How do we document what the system is and where it fails?",
+  "summary": "A model card documents a model’s intended use, training data, evaluation results by subgroup and limitations. A system card does the same for the whole deployed agent: purpose and out-of-scope uses, data and legal basis, results overall and by segment, known failure modes, human oversight and kill switch, versions and a grievance contact. Different audiences get different versions: a full card for auditors and a plain one-page notice for customers.",
+  "useCases": [
+    "Before launch and at every material change",
+    "Regulator inspections and client due diligence",
+    "Customer-facing AI disclosures"
+  ],
+  "keyFacts": {
+    "label": "Sections",
+    "items": [
+      {
+        "term": "Intended use",
+        "detail": "and explicit out-of-scope uses"
+      },
+      {
+        "term": "Data",
+        "detail": "sources, legal basis, known gaps"
+      },
+      {
+        "term": "Results",
+        "detail": "overall and by segment"
+      },
+      {
+        "term": "Limitations",
+        "detail": "known failure modes and mitigations"
+      },
+      {
+        "term": "Oversight",
+        "detail": "human review, kill switch, escalation"
+      },
+      {
+        "term": "Change log",
+        "detail": "versions, dates, what changed"
+      }
+    ]
+  },
+  "steps": [
+    "Draft the card from the eval suite and the inventory, not from memory",
+    "Break results down by segment: language, region, document type",
+    "State limitations plainly, with mitigations",
+    "Version the card with the system and publish a customer summary"
+  ],
+  "pitfalls": [
+    "Reporting only an overall average",
+    "Cards written once at launch and never updated",
+    "A customer notice written in legal language"
+  ],
+  "tools": [
+    "Hugging Face model card templates",
+    "Google Model Card Toolkit",
+    "Datasheets for Datasets",
+    "Your eval reports (Panel 1) as the source"
+  ],
+  "remember": "What it is for, how well it works, for whom it fails, who to call.",
+  "caption": "Illustrative: 94% overall hides 71% on scanned regional-language documents.",
+  "comparison": {
+    "scope": "Each deployed system",
+    "cost": 1,
+    "needs": "Eval results by segment",
+    "best": "Averages that hide failures"
+  },
+  "diagram": {
+    "file": "diagrams/cards.svg"
+  },
+  "lesson": {
+    "file": "system_card.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def system_card(system, evals, min_ok=0.85):",
+        "steps": []
+      },
+      {
+        "text": "    overall = evals.accuracy()",
+        "steps": []
+      },
+      {
+        "text": "    by_segment = evals.accuracy_by([\"language\", \"doc_type\", \"region\"])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    weak = {s: a for s, a in by_segment.items() if a < min_ok}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return {",
+        "steps": []
+      },
+      {
+        "text": "        \"intended_use\": system.intended_use,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"out_of_scope\": system.out_of_scope,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"data\": {\"sources\": system.data_sources,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                 \"legal_basis\": system.legal_basis},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"results\": {\"overall\": overall, \"by_segment\": by_segment},",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"limitations\": [f\"{s}: {a:.0%}, routed to human review\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                        for s, a in weak.items()],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"oversight\": {\"review\": system.review_rule,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                      \"kill_switch\": system.flag},",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        \"version\": system.version, \"change_log\": system.changes,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        \"grievance_contact\": system.grievance_officer,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    }",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Purpose and limits of use",
+        "text": "What the agent is for, what it must not be used for, and the data and legal basis behind it."
+      },
+      {
+        "title": "Results by segment",
+        "text": "Language, document type and region. Overall accuracy was 94%."
+      },
+      {
+        "title": "Say where it fails",
+        "text": "Scanned regional-language documents scored 71% and were rejected three times as often. The card says so, with the mitigation: human review."
+      },
+      {
+        "title": "Oversight and kill switch",
+        "text": "Who reviews what, and how the system is stopped. An auditor asks this early."
+      },
+      {
+        "title": "Versions and changes",
+        "text": "The card is generated for each release, so it matches the system that is actually running."
+      },
+      {
+        "title": "Who to call",
+        "text": "A grievance contact, and a one-page plain summary for customers."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"21\" text-anchor=\"middle\">KYC document agent · v14 · not for credit decisions</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"49\" style=\"text-anchor:end;--d:0s\">overall</text><rect x=\"118\" y=\"39\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"39\" width=\"141\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"49\" style=\"text-anchor:start;--d:0.2s\">94%</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"71\" style=\"text-anchor:end;--d:0s\">scanned, regional</text><rect x=\"118\" y=\"61\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"61\" width=\"106.5\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"71\" style=\"text-anchor:start;--d:0.2s\">71%</text><text class=\"tl a\" x=\"112\" y=\"93\" style=\"text-anchor:end;--d:0.1s\">other documents</text><rect x=\"118\" y=\"83\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"83\" width=\"144.9\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"93\" style=\"text-anchor:start;--d:0.30000000000000004s\">96.6%</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">below 85% → human review · kill switch: ai.kyc</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"140\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"155\" text-anchor=\"middle\">v14 · 2026-09-02 · new OCR for Tamil and Bengali</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"170\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"185\" text-anchor=\"middle\">Grievance officer · one-page customer summary</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--ink-2)\">segments reveal what averages hide</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Auditors get answers in one document",
+      "Segment results expose hidden failures",
+      "Customers get a plain explanation",
+      "Forces teams to state limits honestly"
+    ],
+    "cons": [
+      "Needs eval data broken down by segment",
+      "Must be regenerated with each release",
+      "Two or three versions for different audiences",
+      "Honest limitations need sign-off"
+    ],
+    "avoidWhen": [
+      "Marketing copy presented as documentation",
+      "Cards without segment results"
+    ],
+    "tools": [
+      {
+        "name": "Hugging Face model cards",
+        "type": "Open source",
+        "what": "Card template and metadata",
+        "url": "https://huggingface.co/docs/hub/model-cards"
+      },
+      {
+        "name": "Model Card Toolkit",
+        "type": "Open source",
+        "what": "Generate cards from evaluation data",
+        "url": "https://github.com/tensorflow/model-card-toolkit"
+      },
+      {
+        "name": "Mitchell et al.: Model Cards (2019)",
+        "type": "Paper",
+        "what": "The original model card proposal",
+        "url": "https://arxiv.org/abs/1810.03993"
+      },
+      {
+        "name": "Gebru et al.: Datasheets for Datasets",
+        "type": "Paper",
+        "what": "Documentation for datasets",
+        "url": "https://arxiv.org/abs/1803.09010"
+      },
+      {
+        "name": "Anthropic and OpenAI system cards",
+        "type": "Examples",
+        "what": "Published system cards for frontier models",
+        "url": "https://www.anthropic.com/transparency"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A small finance bank’s KYC document agent is 94% accurate overall but only 71% on scanned regional-language documents. Write its system card for an auditor, then a version for customers, and see how many audit questions it answers, how long it is, and whether it hides the failing segment.",
+    "controls": [
+      "Choose the audience: auditor or customers.",
+      "Tick the sections to include.",
+      "Or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Auditor questions answered",
+        "meaning": "Points out of 20 that the card answers."
+      },
+      {
+        "name": "Length",
+        "meaning": "Approximate pages for this audience."
+      },
+      {
+        "name": "Failing segment disclosed",
+        "meaning": "Whether the 71% segment and its mitigation are both stated."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Audit-ready, hides a failure, or too long for customers."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Purpose and average",
+        "expect": "5 of 20 points, and the 71% segment is hidden."
+      },
+      {
+        "k": "eng",
+        "name": "Engineer’s card",
+        "expect": "10 of 20 points; shows the segment but not what is done about it."
+      },
+      {
+        "k": "avg",
+        "name": "Everything but segments",
+        "expect": "17 of 20 points, and the 94% average still hides the failure."
+      },
+      {
+        "k": "cust",
+        "name": "Full card for customers",
+        "expect": "2 pages: too long for a customer notice."
+      }
+    ],
+    "missions": [
+      {
+        "k": "audit",
+        "text": "Answer at least 18 of 20 points for an auditor.",
+        "hint": "Which sections carry 3 points?"
+      },
+      {
+        "k": "gap",
+        "text": "Disclose the failing segment and what is done about it.",
+        "hint": "Segments and limitations together."
+      },
+      {
+        "k": "cust",
+        "text": "Write a one-page customer version with purpose, limitations, oversight and contact.",
+        "hint": "Four short sections fit on one page."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Hugging Face model cards",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "A standard card template with metadata.",
+        "ex": "Start the KYC agent’s card from the template and extend it to the system.",
+        "pros": [
+          "Widely used",
+          "Machine-readable metadata"
+        ],
+        "cons": [
+          "Model-focused",
+          "Needs system sections added"
+        ],
+        "url": "https://huggingface.co/docs/hub/model-cards"
+      },
+      {
+        "n": "Model Card Toolkit",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Generates cards from evaluation data.",
+        "ex": "Produce segment tables automatically from the eval run.",
+        "pros": [
+          "Automates the tables",
+          "Consistent format"
+        ],
+        "cons": [
+          "TensorFlow-centric",
+          "Less active"
+        ],
+        "url": "https://github.com/tensorflow/model-card-toolkit"
+      },
+      {
+        "n": "Model Cards paper (Mitchell et al.)",
+        "type": "Paper",
+        "start": 3,
+        "prod": 3,
+        "best": "The original proposal, with disaggregated evaluation.",
+        "ex": "Use its sections as the auditor-facing structure.",
+        "pros": [
+          "Clear rationale",
+          "Widely cited"
+        ],
+        "cons": [
+          "Model, not system, focus",
+          "Research framing"
+        ],
+        "url": "https://arxiv.org/abs/1810.03993"
+      },
+      {
+        "n": "Published system cards",
+        "type": "Examples",
+        "start": 3,
+        "prod": 3,
+        "best": "Frontier labs’ system cards as examples of depth and honesty.",
+        "ex": "Borrow the structure for limitations and safety testing.",
+        "pros": [
+          "Real examples",
+          "Detailed"
+        ],
+        "cons": [
+          "Very long",
+          "Written for different risks"
+        ],
+        "url": "https://www.anthropic.com/transparency"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "An auditor asks what the system does",
+        "tool": "A full system card from the eval data"
+      },
+      {
+        "need": "Customers need to know",
+        "tool": "A one-page plain summary"
+      },
+      {
+        "need": "Averages look good",
+        "tool": "Break results down by segment"
+      }
+    ],
+    "goals": [
+      "Document a system honestly",
+      "Use segments to expose hidden failures",
+      "Write different versions for different audiences"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional small finance bank drafted a system card for its KYC document agent from its eval suite. The overall accuracy was 94%, but broken down by segment, scanned documents in regional languages scored 71% and were rejected three times as often. The card now states that limitation, and those documents go to human review. It also records the model and prompt versions and the grievance contact. A one-page plain-language version is shown to customers.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "System cards for KYC and credit agents"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "Documentation for research and advisory assistants"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Cards for claims-document readers, broken down by region"
+      }
+    ],
+    "analogy": "The label and leaflet in a medicine box: what it is for, who should not take it, known side effects and how common they are, and whom to call.",
+    "library": {
+      "name": "Hugging Face model cards",
+      "what": "A standard card template and metadata fields; the same sections extend naturally to a system card for a deployed agent.",
+      "install": "pip install huggingface_hub"
+    },
+    "note": "Generate the card from the same eval data used for release decisions, and regenerate it at every material change.",
+    "samples": [
+      {
+        "file": "system_card.py",
+        "language": "python",
+        "code": "def system_card(system, evals, min_ok=0.85):\n    overall = evals.accuracy()\n    by_segment = evals.accuracy_by([\"language\", \"doc_type\", \"region\"])\n    weak = {seg: acc for seg, acc in by_segment.items() if acc < min_ok}\n    return {\n        \"name\": system.name, \"version\": system.version,\n        \"intended_use\": system.intended_use,\n        \"out_of_scope\": system.out_of_scope,\n        \"data\": {\"sources\": system.data_sources, \"legal_basis\": system.legal_basis},\n        \"results\": {\"overall\": overall, \"by_segment\": by_segment},\n        \"limitations\": system.known_limitations + [\n            f\"Below {min_ok:.0%} on {seg} ({acc:.0%}); routed to human review\"\n            for seg, acc in weak.items()],\n        \"oversight\": {\"human_review\": system.review_rule, \"kill_switch\": system.flag},\n        \"change_log\": system.changes,\n        \"grievance_contact\": system.grievance_officer,\n    }"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A KYC agent is 94% accurate overall. Scanned regional-language documents are 10% of volume and score 71%. What is the accuracy on the other 90% of documents, in percent?",
+    "answer": "0.94 = 0.10 × 0.71 + 0.90 × x, so x = (0.94 − 0.071) ÷ 0.90 ≈ 96.6%. The average looks healthy because the weak segment is small, which is exactly why a system card must report results by segment.",
+    "expected": {
+      "value": 96.6,
+      "tolerance": 0.2,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "What is the difference between a model card and a system card?",
+        "answer": "A model card documents one model: intended use, training data, evaluation results by subgroup and limitations. A system card documents the whole deployed system around it: the agent’s purpose and out-of-scope uses, the data and legal basis, results by segment, failure modes, human oversight and kill switch, versions and a grievance contact."
+      },
+      {
+        "question": "How do you keep a system card honest?",
+        "answer": "Generate it from the same eval results used for release decisions, break results down by the segments customers differ on, state limitations with their mitigations, and version it with the system so every material change produces a new card."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Reporting only the overall average",
+        "fix": "Show results by language, region and document type"
+      },
+      {
+        "mistake": "A card written once at launch",
+        "fix": "Regenerate it with every release"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cd01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is a system card?",
+      "options": [
+        "A business card",
+        "Documentation of a deployed AI system: purpose, data, results, limits, oversight",
+        "A GPU spec",
+        "A credit card"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Documents the whole system."
+    },
+    {
+      "id": "cd02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Overall accuracy is 94%; scanned regional-language documents score 71%. What must the card show?",
+      "options": [
+        "Only 94%",
+        "Results by segment and the limitation",
+        "Nothing",
+        "Only the model name"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Segments expose hidden failures."
+    },
+    {
+      "id": "cd03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Who proposed model cards?",
+      "options": [
+        "Mitchell et al., 2019",
+        "Rafailov et al., 2023",
+        "Hu et al., 2021",
+        "Vaswani et al., 2017"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Model Cards for Model Reporting."
+    },
+    {
+      "id": "cd04",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which sections belong in a system card? Select all that apply.",
+      "options": [
+        "Intended and out-of-scope uses",
+        "Results by segment",
+        "The team’s salaries",
+        "Unrelated marketing claims"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Purpose and disaggregated results."
+    },
+    {
+      "id": "cd05",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "10% of documents score 71% and overall is 94%. Accuracy on the rest?",
+      "options": [
+        "About 91%",
+        "About 96.6%",
+        "About 99%",
+        "About 94%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(0.94 − 0.071) ÷ 0.9."
+    },
+    {
+      "id": "cd06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When should a system card be updated?",
+      "options": [
+        "Never",
+        "At every material release",
+        "Only on request",
+        "Every ten years"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Match the running system."
+    },
+    {
+      "id": "cd07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a customer version need most?",
+      "options": [
+        "The full technical card",
+        "A plain one-page summary with purpose, limits, human route and contact",
+        "Model weights",
+        "Training code"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Plain and short."
+    },
+    {
+      "id": "cd08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What are Datasheets for Datasets?",
+      "options": [
+        "Documentation for datasets: motivation, composition, collection, uses",
+        "Spreadsheets",
+        "A database engine",
+        "A GPU"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Gebru et al."
+    },
+    {
+      "id": "cd09",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which segments matter for a KYC agent in India? Select all that apply.",
+      "options": [
+        "Document language",
+        "Scanned versus digital documents",
+        "The colour of the website",
+        "Server brand"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Segments customers differ on."
+    },
+    {
+      "id": "cd10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What makes a card honest?",
+      "options": [
+        "Generated from the same eval data used for release decisions",
+        "Written by marketing",
+        "Written once",
+        "Kept secret"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Same data as release decisions."
+    },
+    {
+      "id": "cd11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What should the limitations section include?",
+      "options": [
+        "Known failure modes with mitigations",
+        "Only strengths",
+        "Nothing",
+        "Competitors’ weaknesses"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "State failures and what is done."
+    },
+    {
+      "id": "cd12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An auditor asks how the system can be stopped. Which section answers?",
+      "options": [
+        "Human oversight and kill switch",
+        "Change log",
+        "Data sources",
+        "Contact"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Oversight."
+    },
+    {
+      "id": "cd13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How does a model card differ from a system card?",
+      "options": [
+        "A model card covers one model; a system card covers the deployed system around it",
+        "They are identical",
+        "A system card is for images",
+        "A model card is legal advice"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scope differs."
+    },
+    {
+      "id": "cd14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which tool provides a standard card template?",
+      "options": [
+        "Hugging Face model cards",
+        "Excel macros",
+        "Redis",
+        "Nginx"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Hugging Face templates."
+    },
+    {
+      "id": "cd15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why include the legal basis for data?",
+      "options": [
+        "Auditors and regulators ask whether the data was lawfully used",
+        "It is decorative",
+        "To hide it",
+        "For speed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Lawful basis is an audit question."
+    },
+    {
+      "id": "cd16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A card lists results only overall. What is the risk?",
+      "options": [
+        "None",
+        "Failures on small groups stay hidden",
+        "It is too long",
+        "It breaks the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Averages hide segments."
+    },
+    {
+      "id": "cd17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does a change log in the card give auditors?",
+      "options": [
+        "What changed, when and in which version",
+        "The team roster",
+        "Stock prices",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Traceability."
+    },
+    {
+      "id": "cd18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Who is the grievance contact for?",
+      "options": [
+        "Customers who want to challenge an outcome",
+        "Engineers only",
+        "Vendors",
+        "Nobody"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Redress route."
+    },
+    {
+      "id": "cd19",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which sources should feed the card? Select all that apply.",
+      "options": [
+        "The eval suite results",
+        "The AI inventory entry",
+        "Memory of the launch meeting",
+        "Guesses"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Generate from records."
+    },
+    {
+      "id": "cd20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Frontier labs’ published system cards are useful as…",
+      "options": [
+        "Examples of depth and honesty in documenting limits",
+        "Legal templates",
+        "Marketing only",
+        "Model weights"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Examples to learn from."
+    }
+  ]
+}

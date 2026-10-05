@@ -1,0 +1,979 @@
+{
+  "id": "toolauth",
+  "moduleSlug": "tool-use",
+  "name": "Tool Authentication and Scoped Permissions",
+  "shortName": "Tool auth",
+  "question": "Whose credentials does each tool call carry, and for what?",
+  "summary": "Each tool call the agent makes reaches a real API with some credential. Instead of one shared service key that can touch every customer, the user signs in and consents through OAuth 2.1 with PKCE, and the agent receives a delegated token for that user only. Each tool gets the narrowest scope it needs, access tokens live minutes and are renewed silently, and tokens sit in a vault that the tool layer reads, never in the prompt. Disconnecting revokes them, and every call is logged under the user. The MCP technique covers what a server must check; action policies decide whether a call is allowed; this is about the credentials the call carries.",
+  "useCases": [
+    "Agents that act on a customer’s own accounts: portfolios, bank data, email, calendars",
+    "Connecting to remote MCP servers or SaaS APIs on behalf of many users",
+    "Anywhere an auditor asks which user a tool call acted for"
+  ],
+  "keyFacts": {
+    "label": "Parts",
+    "items": [
+      {
+        "term": "Delegated token",
+        "detail": "issued to the agent for one user after that user consents; calls act as that user"
+      },
+      {
+        "term": "OAuth 2.1 + PKCE",
+        "detail": "authorization code flow with an S256 code challenge, so a stolen code cannot be redeemed"
+      },
+      {
+        "term": "Scopes",
+        "detail": "one per tool and verb, such as portfolio:read or redeem:write; writes asked for when needed"
+      },
+      {
+        "term": "Lifetimes",
+        "detail": "access tokens last minutes to an hour; rotating refresh tokens renew them silently"
+      },
+      {
+        "term": "Token vault",
+        "detail": "encrypted, per user, outside the prompt; the tool layer attaches the token to the call"
+      },
+      {
+        "term": "Revoke and audit",
+        "detail": "disconnecting revokes the refresh token; each call is logged with user, tool and scope"
+      }
+    ]
+  },
+  "steps": [
+    "List each tool with the API it calls and the narrowest scope it needs",
+    "Get a per-user token with OAuth 2.1 + PKCE, asking for read scopes first and writes only when needed",
+    "Keep tokens in a vault; the tool layer attaches them, the model only sees results",
+    "Use short-lived access tokens with rotating refresh, revoke on disconnect, and log every call under the user"
+  ],
+  "pitfalls": [
+    "One shared service key lets any prompt injection reach every customer’s account",
+    "A token pasted into the prompt can be echoed out by the model or land in traces and logs",
+    "Asking for every scope at sign-up means a read-only question carries redeem rights"
+  ],
+  "tools": [
+    "MCP Python SDK OAuthClientProvider",
+    "Auth0 Token Vault",
+    "Keycloak",
+    "HashiCorp Vault",
+    "Arcade"
+  ],
+  "remember": "Act as the user, only for this tool, only for a few minutes. Keep the key out of the prompt.",
+  "caption": "Illustrative: Dhan Disha, a fictional wealth app, with 50,000 users who connected their accounts to its assistant.",
+  "comparison": {
+    "scope": "Credentials each tool call carries",
+    "cost": 3,
+    "needs": "Medium: an authorization server, a vault, refresh handling",
+    "best": "Shared keys and scopes granted once and forgotten"
+  },
+  "diagram": {
+    "file": "diagrams/toolauth.svg"
+  },
+  "lesson": {
+    "file": "dhan_disha_tools.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import base64, hashlib, secrets, time",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "MCP_URL = \"https://mcp.dhandisha.example/mcp\"",
+        "steps": []
+      },
+      {
+        "text": "TOOL_SCOPES = {",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"get_portfolio\":  \"portfolio:read\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"get_statements\": \"statements:read\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"start_sip\":      \"sip:write\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"redeem_units\":   \"redeem:write\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    \"update_mandate\": \"mandate:write\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "}",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def pkce_pair():",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    verifier = secrets.token_urlsafe(64)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    digest = hashlib.sha256(verifier.encode()).digest()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    challenge = base64.urlsafe_b64encode(digest).rstrip(b\"=\").decode()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return verifier, challenge",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def connect(user_id):",
+        "steps": []
+      },
+      {
+        "text": "    verifier, challenge = pkce_pair()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    url = authorize_url(code_challenge=challenge, code_challenge_method=\"S256\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                        scope=\"portfolio:read statements:read\",       #@3  reads only, for now",
+        "steps": []
+      },
+      {
+        "text": "                        resource=MCP_URL)                             #@1  token is for this server",
+        "steps": []
+      },
+      {
+        "text": "    code = wait_for_redirect(user_id, url)        # the user signs in and consents",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    vault.put(user_id, exchange_code(code, verifier))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def token_for(user_id, tool):",
+        "steps": []
+      },
+      {
+        "text": "    tok = vault.get(user_id)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if tok.expires_at - time.time() < 60:         # 15-minute access tokens",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        tok = refresh(tok.refresh_token)          # silent; rotates the refresh token",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        vault.put(user_id, tok)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    need = TOOL_SCOPES[tool]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if need not in tok.scopes:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        raise StepUpConsent(user_id, need)        # ask the user; never widen silently",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return downscope(tok, need)                   # a token for this one tool",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def call_tool(user_id, tool, args):",
+        "steps": []
+      },
+      {
+        "text": "    token = token_for(user_id, tool)              # the model never sees this",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    result = mcp_call(MCP_URL, tool, args, bearer=token)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    audit.log(user=user_id, tool=tool, scope=TOOL_SCOPES[tool])",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return result                                 # only data goes back to the model",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def disconnect(user_id):",
+        "steps": []
+      },
+      {
+        "text": "    revoke(vault.get(user_id).refresh_token)      # RFC 7009 revocation",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    vault.delete(user_id)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Sign in with OAuth 2.1 and PKCE",
+        "text": "connect() sends the user to the authorization server with a PKCE challenge: the SHA-256 of a random verifier. Only the holder of the verifier can swap the returned code for a token, so a code stolen from the redirect is useless. The resource parameter names the MCP server, so the token is valid there and nowhere else."
+      },
+      {
+        "title": "One scope per tool",
+        "text": "Each of Dhan Disha’s five tools maps to one scope. Reading a portfolio needs portfolio:read; redeeming units needs redeem:write. downscope() hands each call a token carrying only its tool’s scope, so a read call cannot redeem."
+      },
+      {
+        "title": "Consent to reads now, writes when needed",
+        "text": "At sign-up the user grants only the two read scopes. The first time the agent needs to redeem or change a mandate, token_for() raises StepUpConsent and the user sees exactly what is being added. The token is never widened silently."
+      },
+      {
+        "title": "Short-lived tokens, silent refresh",
+        "text": "Access tokens last 15 minutes. When one is about to expire, the refresh token gets a new one without asking the user, and the refresh token itself is rotated. A leaked access token works for minutes, not days, and the user sees no extra prompts."
+      },
+      {
+        "title": "Keep secrets in the vault, not the prompt",
+        "text": "Tokens live in an encrypted vault keyed by user. call_tool() fetches the token and attaches it to the HTTP call; the model only receives the tool’s result. A prompt injection can steer a call, but it cannot make the model reveal a secret it never saw."
+      },
+      {
+        "title": "Log every call, revoke on disconnect",
+        "text": "Each call is logged with the user, tool and scope, so an auditor can see who each action was for. When a user disconnects, the refresh token is revoked at the authorization server and deleted from the vault, and access ends within 15 minutes."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"22\">connect(U-1042) · OAuth 2.1 + PKCE</text><text class=\"sb\" x=\"180\" y=\"37\">S256 challenge · resource = this MCP server</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"52\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"67\" text-anchor=\"middle\">portfolio:read</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"122\" y=\"52\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"67\" text-anchor=\"middle\">statements:read</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"52\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"67\" text-anchor=\"middle\">redeem:write</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"84\" width=\"200\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"108\" y=\"99\" text-anchor=\"middle\">consent: read scopes now</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"214\" y=\"84\" width=\"138\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"283\" y=\"99\" text-anchor=\"middle\">write → step-up</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"116\" width=\"164\" height=\"32\" rx=\"7\"/><text class=\"lb\" x=\"90\" y=\"129\">Access token</text><text class=\"sb\" x=\"90\" y=\"144\">15 minutes</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln acc\" d=\"M174 132L196 132\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"198\" y=\"121\" width=\"154\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"275\" y=\"136\" text-anchor=\"middle\">refresh · rotate</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"160\" width=\"166\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"91\" y=\"175\" text-anchor=\"middle\">vault: U-1042 tokens</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"180\" y=\"160\" width=\"172\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"266\" y=\"175\" text-anchor=\"middle\">model sees results only</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a dark-t\" style=\"--d:0s\"><rect class=\"bx dark\" x=\"8\" y=\"194\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"208\">log: U-1042 · get_statements · statements:read</text><text class=\"sb\" x=\"180\" y=\"223\">disconnect → refresh token revoked</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "A leaked token exposes one user, one scope, for minutes",
+      "Prompt injection cannot reach other customers or copy a secret it never saw",
+      "Every call is attributable to a named user who consented",
+      "Users can see and revoke what the agent may do"
+    ],
+    "cons": [
+      "Needs an authorization server, a vault and refresh handling",
+      "Consent screens and step-up prompts add friction if scopes are badly designed",
+      "Refresh failures and revoked tokens must be handled in every tool",
+      "Downstream APIs must support per-user tokens and fine-grained scopes"
+    ],
+    "avoidWhen": [
+      "The agent only reads public or company-wide data with no per-user rights (a service identity with read-only scope is enough)",
+      "A one-off internal script run by one engineer against a sandbox"
+    ],
+    "tools": [
+      {
+        "name": "MCP Python SDK",
+        "type": "Open source (MCP)",
+        "what": "OAuthClientProvider handles discovery, PKCE, token exchange and refresh; you supply token storage",
+        "url": "https://github.com/modelcontextprotocol/python-sdk"
+      },
+      {
+        "name": "Auth0 Token Vault",
+        "type": "Commercial (Okta)",
+        "what": "Stores users’ third-party tokens and hands the agent a fresh, scoped one when a tool needs it",
+        "url": "https://auth0.com/ai"
+      },
+      {
+        "name": "Keycloak",
+        "type": "Open source",
+        "what": "Authorization server with scopes, consent, token exchange and revocation",
+        "url": "https://www.keycloak.org"
+      },
+      {
+        "name": "HashiCorp Vault",
+        "type": "Open source, commercial",
+        "what": "Encrypted secret storage with per-path policies and an audit log",
+        "url": "https://developer.hashicorp.com/vault"
+      },
+      {
+        "name": "Arcade",
+        "type": "Commercial",
+        "what": "Agent tool platform that runs per-user OAuth for each tool call",
+        "url": "https://www.arcade.dev"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Dhan Disha, a fictional wealth app, has 50,000 users connected to its assistant, which uses five tools: get_portfolio, get_statements, start_sip, redeem_units and update_mandate. You decide whose credential each call carries, how narrow its scopes are, how long access tokens last and where secrets are kept, then see what a leak or a prompt injection could reach.",
+    "controls": [
+      "Choose one shared API key for everyone, or a per-user OAuth token that each user consents to.",
+      "Choose broad scopes (every call carries all five) or one scope per tool, with write scopes added by step-up consent.",
+      "Pick the access-token lifetime and whether secrets sit in the system prompt or in a vault, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Accounts exposed if a credential leaks",
+        "meaning": "How many users’ accounts one leaked key or token opens, for how long, and with which rights."
+      },
+      {
+        "name": "Exposure (accounts × hours)",
+        "meaning": "Accounts exposed multiplied by the hours the leaked credential keeps working."
+      },
+      {
+        "name": "Accounts a prompt injection can reach",
+        "meaning": "How many accounts an injected instruction can steer the agent to act on, and whether it can copy the credential out."
+      },
+      {
+        "name": "Re-auth prompts per user per day",
+        "meaning": "Sign-in and consent screens a user sees, with the silent refreshes behind them."
+      },
+      {
+        "name": "Calls attributable to a user",
+        "meaning": "Share of tool calls the API can tie to the user who consented."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Shared key in the prompt",
+        "expect": "50,000 accounts exposed for 2,160 hours (108,000,000 account-hours) with redeem rights; an injection reaches all 50,000 and can copy the key; 0 prompts; 0% attributable."
+      },
+      {
+        "k": "oauth",
+        "name": "Per-user token, broad, 24 h, vault",
+        "expect": "1 account for 24 hours (24 account-hours), still with redeem rights; injection reaches 1 account and cannot copy the token; 0.03 prompts a day; 100% attributable."
+      },
+      {
+        "k": "scoped",
+        "name": "Per-user, per-tool, 1 h, vault",
+        "expect": "1 account for 1 hour, read-only (1 account-hour); 0.23 prompts a day (about one every 4 days); 3 silent refreshes each, 150,000 in all; 100% attributable."
+      },
+      {
+        "k": "leaky",
+        "name": "Per-user, per-tool, 15 min, token in the prompt",
+        "expect": "1 account for 15 minutes, read-only (0.25 account-hours), but an injection can make the model echo the token; 0.23 prompts and 6 silent refreshes a day (300,000 in all)."
+      }
+    ],
+    "missions": [
+      {
+        "k": "contain",
+        "text": "Make a leaked credential expose one account, read-only, for an hour or less.",
+        "hint": "Per-user OAuth tokens, one scope per tool, and a 1-hour or 15-minute lifetime."
+      },
+      {
+        "k": "inject",
+        "text": "Make a prompt injection reach only the current user, unable to copy the credential or redeem units.",
+        "hint": "Per-user tokens, per-tool scopes, and secrets in a vault instead of the prompt."
+      },
+      {
+        "k": "short",
+        "text": "Use 15-minute tokens while users see no more than one re-auth prompt every 4 days and every call is attributable.",
+        "hint": "Per-user OAuth with a 15-minute lifetime: refresh is silent, so short tokens add no prompts."
+      }
+    ],
+    "tools": [
+      {
+        "n": "MCP Python SDK",
+        "type": "Open source · MCP",
+        "best": "OAuthClientProvider runs discovery, PKCE, token exchange and refresh for MCP clients; you supply the token storage.",
+        "pros": [
+          "Follows the MCP authorization spec",
+          "Plug in your own vault through TokenStorage"
+        ],
+        "cons": [
+          "Client side only: scopes and consent live on the authorization server",
+          "APIs change between SDK releases"
+        ],
+        "ex": "A per-user VaultTokenStorage so each investor’s tokens are stored and refreshed separately.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://github.com/modelcontextprotocol/python-sdk"
+      },
+      {
+        "n": "Auth0 Token Vault",
+        "type": "Commercial · Okta",
+        "best": "Stores users’ tokens for third-party APIs and hands the agent a fresh one per tool call.",
+        "pros": [
+          "Refresh and storage handled for you",
+          "Many connections ready to use"
+        ],
+        "cons": [
+          "A vendor in your token path",
+          "Priced per user or connection"
+        ],
+        "ex": "An assistant that reads a user’s Google Calendar with a token fetched per call, never stored by the agent.",
+        "prod": 3,
+        "start": 3,
+        "url": "https://auth0.com/ai"
+      },
+      {
+        "n": "Keycloak",
+        "type": "Open source",
+        "best": "Your own authorization server: clients, scopes, consent screens, token exchange and revocation.",
+        "pros": [
+          "Self-hosted, suits data-residency needs",
+          "Fine-grained scopes and token lifetimes"
+        ],
+        "cons": [
+          "A critical service to run and patch",
+          "Configuration takes care"
+        ],
+        "ex": "Dhan Disha issuing 15-minute tokens with portfolio:read and redeem:write scopes.",
+        "prod": 3,
+        "start": 1,
+        "url": "https://www.keycloak.org"
+      },
+      {
+        "n": "HashiCorp Vault",
+        "type": "Open source · commercial",
+        "best": "Encrypted secret storage with per-path policies, leases and an audit log.",
+        "pros": [
+          "Keeps tokens out of code, prompts and traces",
+          "Every read is audited"
+        ],
+        "cons": [
+          "Another system to operate",
+          "Does not run OAuth flows for you"
+        ],
+        "ex": "Refresh tokens stored under dhan-disha/<user>/mcp, readable only by the tool gateway.",
+        "prod": 3,
+        "start": 2,
+        "url": "https://developer.hashicorp.com/vault"
+      },
+      {
+        "n": "Arcade",
+        "type": "Commercial",
+        "best": "An agent tool platform that runs per-user OAuth for each tool and asks the user when a new scope is needed.",
+        "pros": [
+          "Per-user auth built into tool calls",
+          "Ready-made tools for common SaaS"
+        ],
+        "cons": [
+          "Tools run through a third party",
+          "Less control over custom APIs"
+        ],
+        "ex": "An email assistant that asks the user to approve the send scope the first time it drafts a reply.",
+        "prod": 2,
+        "start": 3,
+        "url": "https://www.arcade.dev"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "MCP client acting for many users",
+        "tool": "MCP Python SDK"
+      },
+      {
+        "need": "Third-party SaaS tokens without running a vault",
+        "tool": "Auth0 Token Vault"
+      },
+      {
+        "need": "Self-hosted scopes and consent",
+        "tool": "Keycloak"
+      }
+    ],
+    "goals": [
+      "Explain why per-user delegated tokens shrink the blast radius of a leak or an injection",
+      "Design one scope per tool, with writes granted by step-up consent",
+      "Explain why short-lived tokens with silent refresh, kept in a vault, add no user friction"
+    ]
+  },
+  "practice": {
+    "scenario": "Dhan Disha, a fictional wealth app, lets 50,000 investors connect their accounts to its assistant, which reaches the app’s MCP server through five tools: portfolio, statements, SIPs, redemptions and bank mandates. It used to call everything with one shared API key pasted into the system prompt. Now each investor signs in once with OAuth 2.1 and PKCE, consents to read scopes, and approves write scopes only when the assistant first needs them. Tokens last 15 minutes, refresh silently, live in a vault keyed by user, and every call is logged under the investor’s id.",
+    "industries": [
+      {
+        "industry": "Wealth and broking",
+        "use": "An assistant that reads holdings and places SIPs or redemptions only with the investor’s own consented token"
+      },
+      {
+        "industry": "Banking and account aggregation",
+        "use": "Consent-based access to bank statements, where each consent names the data, the purpose and the expiry"
+      },
+      {
+        "industry": "Productivity SaaS",
+        "use": "An assistant reading one employee’s email and calendar with read scopes, asking again before it sends mail"
+      }
+    ],
+    "analogy": "A hotel key card. Reception checks who you are and programs a card for your room only, valid until checkout. Lose it and one room is at risk for a day, and the front desk can cancel it. A master key taped to the lift would open every room, and nobody could tell whose door was opened by whom.",
+    "library": {
+      "name": "MCP Python SDK (mcp)",
+      "what": "OAuthClientProvider plugs into the HTTP client: it discovers the authorization server from the MCP server’s protected resource metadata, runs the authorization code flow with PKCE, and refreshes tokens. You supply a TokenStorage, here backed by a per-user vault.",
+      "install": "pip install mcp"
+    },
+    "note": "vault, send_consent_link and wait_for_code stand for your secret store and web app. Class and function names follow the MCP Python SDK at the time of writing (streamablehttp_client may be named streamable_http_client in newer releases, and stateless protocol revisions may not need initialize()); check the SDK version you install.",
+    "samples": [
+      {
+        "file": "vault_oauth_client.py",
+        "language": "python",
+        "code": "from pydantic import AnyUrl\nfrom mcp import ClientSession\nfrom mcp.client.auth import OAuthClientProvider, TokenStorage\nfrom mcp.client.streamable_http import streamablehttp_client\nfrom mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken\n\nMCP_URL = \"https://mcp.dhandisha.example/mcp\"\n\n\nclass VaultTokenStorage(TokenStorage):\n    \"\"\"One entry per user in the secret store. The model never sees these values.\"\"\"\n\n    def __init__(self, user_id: str):\n        self.path = f\"dhan-disha/{user_id}/mcp\"\n\n    async def get_tokens(self) -> OAuthToken | None:\n        raw = await vault.read(self.path + \"/tokens\")\n        return OAuthToken.model_validate_json(raw) if raw else None\n\n    async def set_tokens(self, tokens: OAuthToken) -> None:\n        await vault.write(self.path + \"/tokens\", tokens.model_dump_json())\n\n    async def get_client_info(self) -> OAuthClientInformationFull | None:\n        raw = await vault.read(self.path + \"/client\")\n        return OAuthClientInformationFull.model_validate_json(raw) if raw else None\n\n    async def set_client_info(self, info: OAuthClientInformationFull) -> None:\n        await vault.write(self.path + \"/client\", info.model_dump_json())\n\n\ndef auth_for(user_id: str) -> OAuthClientProvider:\n    async def on_redirect(url: str) -> None:        # show this user the consent screen\n        await send_consent_link(user_id, url)\n\n    async def on_callback() -> tuple[str, str | None]:\n        return await wait_for_code(user_id)        # (code, state) from your redirect URI\n\n    return OAuthClientProvider(\n        server_url=MCP_URL,\n        client_metadata=OAuthClientMetadata(\n            client_name=\"Dhan Disha assistant\",\n            redirect_uris=[AnyUrl(\"https://app.dhandisha.example/oauth/callback\")],\n            grant_types=[\"authorization_code\", \"refresh_token\"],\n            response_types=[\"code\"],\n            scope=\"portfolio:read statements:read\",  # write scopes are requested later\n        ),\n        storage=VaultTokenStorage(user_id),\n        redirect_handler=on_redirect,\n        callback_handler=on_callback,\n    )\n\n\nasync def get_portfolio(user_id: str):\n    async with streamablehttp_client(MCP_URL, auth=auth_for(user_id)) as (read, write, _):\n        async with ClientSession(read, write) as session:\n            await session.initialize()\n            result = await session.call_tool(\"get_portfolio\", {})\n    audit_log(user=user_id, tool=\"get_portfolio\", scope=\"portfolio:read\")\n    return result.content                        # only data goes back to the model"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Dhan Disha’s assistant uses one shared API key for its 50,000 users, rotated every 90 days (2,160 hours). If the key leaks right after rotation, how many account-hours are exposed? (A per-user 15-minute token would expose 0.25.)",
+    "answer": "50,000 accounts × 2,160 hours = 108,000,000 account-hours. A per-user token with a 15-minute lifetime exposes 1 × 0.25 = 0.25 account-hours, 432 million times less.",
+    "expected": {
+      "value": 108000000,
+      "tolerance": 1000,
+      "label": "account-hours ="
+    },
+    "interview": [
+      {
+        "question": "How should an agent’s tools authenticate to APIs on behalf of users?",
+        "answer": "With delegated per-user tokens, not a shared service key. The user signs in through OAuth 2.1 with PKCE and consents to named scopes; the token is bound to the target server with a resource indicator. Each tool gets the narrowest scope, writes are added by step-up consent, access tokens are short-lived with rotating refresh, and tokens live in a vault the tool layer reads. Revoke on disconnect and log every call under the user."
+      },
+      {
+        "question": "Why must credentials never appear in the prompt?",
+        "answer": "Anything in the context can be repeated by the model: a prompt injection can ask it to print the token, and prompts are often stored in traces and logs. A copied token works outside the agent, so none of the agent’s controls apply. Keep secrets in a vault, attach them in code at call time, and return only results to the model."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Using one shared API key for every user",
+        "fix": "Issue per-user delegated tokens so a leak or an injection reaches one account, and calls are attributable"
+      },
+      {
+        "mistake": "Requesting every scope at sign-up with long-lived tokens",
+        "fix": "Ask for read scopes first, add writes by step-up consent, and use short access tokens with silent refresh"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ta01",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A wealth app’s assistant calls its portfolio API with one shared service key for all 50,000 users. What is the main risk?",
+      "options": [
+        "Higher token costs",
+        "A leak or a prompt injection can reach every user’s account, and calls cannot be tied to a user",
+        "Slower responses",
+        "The model cannot call tools in parallel"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A shared key acts for everyone. Per-user delegated tokens limit any misuse to the user who consented and make calls attributable."
+    },
+    {
+      "id": "ta02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why does the MCP authorization spec require PKCE in the authorization code flow?",
+      "options": [
+        "It encrypts the access token",
+        "A stolen authorization code cannot be swapped for a token without the verifier only the client holds",
+        "It removes the need for scopes",
+        "It makes tokens last longer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "PKCE binds the code to a secret verifier; an attacker who intercepts the redirect cannot redeem the code."
+    },
+    {
+      "id": "ta03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims assistant’s access token is placed in the system prompt so the model can \"add the header\". What is wrong?",
+      "options": [
+        "Nothing, if the prompt is long enough",
+        "The model can be made to echo the token, and prompts end up in traces; the tool layer should attach it in code",
+        "Tokens in prompts expire faster",
+        "The API will reject tokens that pass through a model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Anything in the context can be repeated. Keep tokens in a vault and attach them at call time."
+    },
+    {
+      "id": "ta04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A wallet assistant only needs to read transaction history today. Which scope request is best at sign-up?",
+      "options": [
+        "transactions:read only, with payout:write requested later if needed",
+        "Every scope the API offers, to avoid asking again",
+        "admin",
+        "No scope: the API will decide"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Ask for read scopes first; add writes by step-up consent when the agent first needs them."
+    },
+    {
+      "id": "ta05",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An attacker copies a 15-minute access token 5 minutes after it was issued. The refresh token stayed in the vault. For how many minutes can the attacker use the copied token?",
+      "options": [
+        "5",
+        "10",
+        "15",
+        "Until the refresh token expires"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "15 − 5 = 10 minutes. Without the refresh token the attacker cannot renew it."
+    },
+    {
+      "id": "ta06",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "A shared API key covering 50,000 accounts is rotated every 90 days. If it leaks just after rotation, how many account-hours are exposed?",
+      "options": [
+        "50,000",
+        "2,160",
+        "108,000,000",
+        "4,500,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "90 days = 2,160 hours; 50,000 × 2,160 = 108,000,000 account-hours."
+    },
+    {
+      "id": "ta07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom assistant uses 1-hour access tokens with rotating refresh tokens. How often does a customer have to sign in again because of the short lifetime?",
+      "options": [
+        "Every hour",
+        "Every day",
+        "Not because of the lifetime: refresh renews access silently",
+        "Only when they change phones"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Short access tokens are renewed in the background; users only sign in again when the refresh token expires or is revoked."
+    },
+    {
+      "id": "ta08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "20,000 sellers use an assistant with 15-minute tokens; each seller’s tokens refresh 6 times a day. How many refresh calls hit the authorization server daily?",
+      "options": [
+        "20,000",
+        "60,000",
+        "120,000",
+        "1,20,00,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "20,000 × 6 = 120,000 refresh calls a day, a load the authorization server must be sized for."
+    },
+    {
+      "id": "ta09",
+      "kind": "multi",
+      "industry": "Wealth management",
+      "question": "Which choices shrink what a prompt injection in a fund factsheet can do through the agent’s tools? Select all that apply.",
+      "options": [
+        "Per-user delegated tokens instead of a shared key",
+        "One scope per tool, so a read call carries no redeem rights",
+        "Keeping tokens in a vault the model never sees",
+        "A longer system prompt asking the model to ignore injections"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Credentials limit reach and rights, and a vault keeps the secret out of reach; prompt wording alone is not a control."
+    },
+    {
+      "id": "ta10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinic’s assistant books appointments through a hospital API. An auditor asks which patient approved each booking. What makes this answerable?",
+      "options": [
+        "One service key and a note in the prompt",
+        "Per-user delegated tokens and a log of user, tool and scope for every call",
+        "Longer token lifetimes",
+        "Storing the model’s reasoning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When each call carries the patient’s own consented token and is logged, every booking is attributable."
+    },
+    {
+      "id": "ta11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An MCP client gets a token for the bank’s statements server and forwards the same token to a third-party analytics API. What does the MCP spec say?",
+      "options": [
+        "That is fine if the scopes match",
+        "Token passthrough is forbidden; tokens must be issued for the server that receives them",
+        "Only allowed over HTTPS",
+        "Allowed for read scopes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Tokens are bound to one audience with the resource parameter; passing them on breaks that boundary."
+    },
+    {
+      "id": "ta12",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A user disconnects a lending assistant from their account. What should happen?",
+      "options": [
+        "Keep the tokens in case they reconnect",
+        "Revoke the refresh token at the authorization server and delete the tokens from the vault",
+        "Shorten the next token’s lifetime",
+        "Log the user out of the website only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Revocation ends access; after the current short-lived access token expires, the agent can do nothing for that user."
+    },
+    {
+      "id": "ta13",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which are part of the MCP authorization approach for remote HTTP servers? Select all that apply.",
+      "options": [
+        "OAuth 2.1 with PKCE",
+        "A resource indicator naming the MCP server the token is for",
+        "Protected resource metadata that points to the authorization server",
+        "Embedding the client secret in the tool description"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "MCP authorization builds on OAuth 2.1, PKCE, resource indicators and protected resource metadata; secrets never go in tool descriptions."
+    },
+    {
+      "id": "ta14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A policy assistant requests read and write scopes at sign-up, but 95% of sessions only read. What is the better design?",
+      "options": [
+        "Keep broad scopes to avoid friction",
+        "Grant read scopes at sign-up and ask for write by step-up consent the first time it is needed",
+        "Remove write tools entirely",
+        "Use a shared key for writes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Incremental consent keeps most sessions read-only while writes remain possible with the user’s clear approval."
+    },
+    {
+      "id": "ta15",
+      "kind": "single",
+      "industry": "Wealth management",
+      "question": "Users see a consent prompt about once every 30 days (refresh-token expiry) plus a step-up prompt on 0.2 writes a day. About how many prompts does a user see in 30 days?",
+      "options": [
+        "1",
+        "3",
+        "7",
+        "30"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "30 × (1/30 + 0.2) = 1 + 6 = 7 prompts in 30 days."
+    },
+    {
+      "id": "ta16",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which of these belong in a tool-call audit record when agents act for users? Select all that apply.",
+      "options": [
+        "The user the call acted for",
+        "The tool and the scope used",
+        "The time and the result status",
+        "The raw access token"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Log who, what and when; never log the token itself, since logs are read by many people and systems."
+    },
+    {
+      "id": "ta17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A marketplace wants its assistant to use a refund API that only offers one all-powerful merchant key. What is the safest interim step?",
+      "options": [
+        "Put the key in the prompt so the model can use it carefully",
+        "Keep the key in a vault behind a gateway that exposes narrow per-tool operations, checks the user and logs every call",
+        "Share the key with every seller",
+        "Give the model a copy for each session"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When the API cannot scope tokens, the gateway must enforce the narrow operations and attribute each call itself."
+    },
+    {
+      "id": "ta18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which grant type suits an agent acting for one signed-in customer against a bank API?",
+      "options": [
+        "Client credentials: the app’s own identity",
+        "Authorization code with PKCE: the customer signs in and consents",
+        "Resource owner password: the agent stores the customer’s password",
+        "No grant: send the customer ID in a header"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Client credentials act as the app, not the user; the password grant is removed in OAuth 2.1. Authorization code with PKCE yields a delegated token."
+    },
+    {
+      "id": "ta19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Refresh tokens are rotated: each use returns a new one and invalidates the old. A stolen old refresh token is presented. What should the authorization server do?",
+      "options": [
+        "Issue a new access token",
+        "Reject it and, since reuse suggests theft, revoke the token family so the user signs in again",
+        "Extend its lifetime",
+        "Ignore it and log nothing"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reuse of a rotated refresh token signals theft; revoking the family cuts off both the attacker and the stale session."
+    },
+    {
+      "id": "ta20",
+      "kind": "multi",
+      "industry": "Wealth management",
+      "question": "Dhan Disha, a fictional wealth app, moves from a shared key in the prompt to per-user, per-tool, 15-minute tokens in a vault. Which results should it expect? Select all that apply.",
+      "options": [
+        "A leaked credential exposes one account, read-only, for at most 15 minutes",
+        "Every tool call is attributable to a user",
+        "Users sign in every 15 minutes",
+        "An injection can no longer copy the credential out of the prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Refresh is silent, so short tokens do not add sign-ins; the other three follow from the new design."
+    }
+  ]
+}

@@ -1,0 +1,256 @@
+{
+  "slug": "cost-optimisation",
+  "number": 3,
+  "techniqueOrder": [
+    "routing",
+    "caching",
+    "controls",
+    "pruning",
+    "scheduling",
+    "batch",
+    "semcache",
+    "costattr"
+  ],
+  "glossary": [
+    {
+      "term": "token",
+      "definition": "The unit models read and bill by; roughly three quarters of an English word on average."
+    },
+    {
+      "term": "SLM",
+      "definition": "Small language model: cheaper and faster, good for simple, well-defined tasks."
+    },
+    {
+      "term": "cascade",
+      "definition": "Trying a cheap model first and escalating to a stronger one only when a check fails."
+    },
+    {
+      "term": "cache hit rate",
+      "definition": "Share of input tokens served from the prompt cache instead of processed fresh."
+    },
+    {
+      "term": "cache breakpoint",
+      "definition": "The point up to which a prompt is cached; everything before it must be identical."
+    },
+    {
+      "term": "TTL",
+      "definition": "Time to live: how long a cached item stays available before it expires."
+    },
+    {
+      "term": "max_tokens",
+      "definition": "The cap on how many tokens a model may generate in one response."
+    },
+    {
+      "term": "step budget",
+      "definition": "The maximum number of iterations or tool calls an agent may take for one task."
+    },
+    {
+      "term": "context window",
+      "definition": "The maximum number of tokens a model can consider in one request."
+    },
+    {
+      "term": "exponential backoff",
+      "definition": "Retrying after increasing delays (1 s, 2 s, 4 s…) to avoid overloading a service."
+    },
+    {
+      "term": "batch API",
+      "definition": "An asynchronous API that processes many requests at a discount within a delivery window, often 24 hours."
+    },
+    {
+      "term": "provisioned throughput",
+      "definition": "Reserved model capacity paid for by time rather than per token."
+    },
+    {
+      "term": "semantic cache",
+      "definition": "A store of full answers keyed by the embedding of the question, so a new question similar enough to a cached one gets the stored answer without a model call."
+    },
+    {
+      "term": "false hit",
+      "definition": "A semantic-cache match that returns a stored answer to a question it does not fit, such as a UAE roaming answer for a USA roaming question."
+    },
+    {
+      "term": "cosine distance",
+      "definition": "One minus cosine similarity; a distance threshold of 0.10 is the same as requiring similarity of at least 0.90."
+    },
+    {
+      "term": "cache invalidation",
+      "definition": "Removing or retiring cached entries when the content they were built from changes, instead of waiting for them to expire."
+    },
+    {
+      "term": "cost attribution",
+      "definition": "Splitting spend by tags such as team, feature, customer and run."
+    },
+    {
+      "term": "unit cost",
+      "definition": "Spend per business outcome, such as ₹ per invoice or per resolved ticket."
+    },
+    {
+      "term": "run budget",
+      "definition": "A limit on tokens, rupees or steps for a single agent run."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "FrugalGPT: using LLMs cheaply with cascades (Chen, Zaharia and Zou, 2023)",
+      "url": "https://arxiv.org/abs/2305.05176"
+    },
+    {
+      "id": "S2",
+      "title": "RouteLLM: learning to route LLMs with preference data (Ong et al., 2024)",
+      "url": "https://arxiv.org/abs/2406.18665"
+    },
+    {
+      "id": "S3",
+      "title": "Anthropic docs: Prompt caching",
+      "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+    },
+    {
+      "id": "S4",
+      "title": "OpenAI docs: Prompt caching",
+      "url": "https://platform.openai.com/docs/guides/prompt-caching"
+    },
+    {
+      "id": "S5",
+      "title": "Anthropic docs: Batch processing",
+      "url": "https://docs.anthropic.com/en/docs/build-with-claude/batch-processing"
+    },
+    {
+      "id": "S6",
+      "title": "OpenAI docs: Batch API",
+      "url": "https://platform.openai.com/docs/guides/batch"
+    },
+    {
+      "id": "S7",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "id": "S8",
+      "title": "Anthropic: Effective context engineering for AI agents",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    },
+    {
+      "id": "S9",
+      "title": "Anthropic: Writing effective tools for agents",
+      "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+    },
+    {
+      "id": "S10",
+      "title": "LLMLingua: compressing prompts (Jiang et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.05736"
+    },
+    {
+      "id": "S11",
+      "title": "Lost in the middle: how language models use long contexts (Liu et al., 2023)",
+      "url": "https://arxiv.org/abs/2307.03172"
+    },
+    {
+      "id": "S12",
+      "title": "MemGPT: towards LLMs as operating systems (Packer et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.08560"
+    },
+    {
+      "id": "S13",
+      "title": "AWS Architecture Blog: Exponential backoff and jitter",
+      "url": "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/"
+    },
+    {
+      "id": "S14",
+      "title": "Celery docs: Routing tasks",
+      "url": "https://docs.celeryq.dev/en/stable/userguide/routing.html"
+    },
+    {
+      "id": "S15",
+      "title": "LiteLLM documentation",
+      "url": "https://docs.litellm.ai"
+    },
+    {
+      "id": "S16",
+      "title": "Gemini API docs: Context caching",
+      "url": "https://ai.google.dev/gemini-api/docs/caching"
+    },
+    {
+      "id": "S17",
+      "title": "OpenAI docs: Flex processing",
+      "url": "https://platform.openai.com/docs/guides/flex-processing"
+    },
+    {
+      "id": "S18",
+      "title": "Anthropic docs: Context editing",
+      "url": "https://docs.anthropic.com/en/docs/build-with-claude/context-editing"
+    },
+    {
+      "id": "S19",
+      "title": "RedisVL: Redis Vector Library, including SemanticCache",
+      "url": "https://github.com/redis/redis-vl-python"
+    },
+    {
+      "id": "S20",
+      "title": "GPTCache: a semantic cache for LLM responses (Zilliz)",
+      "url": "https://github.com/zilliztech/GPTCache"
+    },
+    {
+      "id": "S21",
+      "title": "LiteLLM docs: Caching, including Redis semantic cache",
+      "url": "https://docs.litellm.ai/docs/proxy/caching"
+    },
+    {
+      "id": "S22",
+      "title": "LiteLLM: budgets and rate limits for keys, users and teams",
+      "url": "https://docs.litellm.ai/docs/proxy/users"
+    },
+    {
+      "id": "S23",
+      "title": "OpenTelemetry: semantic conventions for generative AI",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+    },
+    {
+      "id": "S24",
+      "title": "Langfuse documentation (token and cost tracking)",
+      "url": "https://langfuse.com/docs"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Most requests are simple, but everything runs on the top model",
+      "techniqueId": "routing",
+      "advice": "Route easy traffic to a small model and escalate only when checks fail."
+    },
+    {
+      "symptom": "Every call resends the same long system prompt and tool list",
+      "techniqueId": "caching",
+      "advice": "Put the stable prefix first so the provider bills it at the cached rate."
+    },
+    {
+      "symptom": "Agent loops run long and outputs are wordy",
+      "techniqueId": "controls",
+      "advice": "Cap output, set a step budget, and trim tools and tool results."
+    },
+    {
+      "symptom": "Long conversations get slower and pricier every turn",
+      "techniqueId": "pruning",
+      "advice": "Summarize old turns and clear used tool output once context crosses a threshold."
+    },
+    {
+      "symptom": "Traffic spikes force us to pay for peak capacity",
+      "techniqueId": "scheduling",
+      "advice": "Queue background work, shift it off-peak, and set quotas per tenant."
+    },
+    {
+      "symptom": "We process large datasets that nobody waits on",
+      "techniqueId": "batch",
+      "advice": "Submit them through a batch API at about half the price."
+    },
+    {
+      "symptom": "Thousands of users ask the same FAQ in different words and each one pays for a fresh LLM answer",
+      "techniqueId": "semcache",
+      "advice": "Put a semantic cache in front of the model for FAQ intents only, tune the threshold on near-miss pairs, and purge entries when the source changes."
+    },
+    {
+      "symptom": "Nobody knows which feature or customer drives the LLM bill, or an agent loop ran up a large charge",
+      "techniqueId": "costattr",
+      "advice": "Tag every call at a gateway, report unit costs, and add per-run budgets, per-customer caps and anomaly alerts."
+    }
+  ]
+}

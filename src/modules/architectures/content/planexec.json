@@ -1,0 +1,941 @@
+{
+  "id": "planexec",
+  "moduleSlug": "architectures",
+  "name": "Plan-and-Execute",
+  "shortName": "Plan-and-execute",
+  "question": "Can I plan the whole task before acting?",
+  "summary": "A planner writes the whole multi-step plan up front; executors, which can be smaller models or plain tool calls, run each step; a replanner steps in only when a step fails. ReWOO goes further: the plan names future results as variables (#E1, #E2), so tools run without a model call in between, and a solver writes the answer from the collected evidence.",
+  "useCases": [
+    "Steps are knowable in advance, but deciding them one at a time is costly",
+    "Many tool calls that a small model or plain code can run",
+    "Latency matters and independent steps could run in parallel"
+  ],
+  "keyFacts": {
+    "label": "Variants",
+    "items": [
+      {
+        "term": "Plan-and-execute",
+        "detail": "planner writes steps, executor runs them, replan on failure"
+      },
+      {
+        "term": "ReWOO",
+        "detail": "#E placeholders; no model call between tools; one solver call"
+      },
+      {
+        "term": "LLMCompiler",
+        "detail": "the plan is a graph; independent calls run in parallel"
+      },
+      {
+        "term": "Plan-and-Solve prompting",
+        "detail": "“devise a plan, then carry it out” in a single prompt"
+      },
+      {
+        "term": "Replanning trigger",
+        "detail": "a failed step, a surprising result or a budget breach"
+      }
+    ]
+  },
+  "steps": [
+    "Have the planner return a structured list of steps, not prose",
+    "Run each step with the cheapest executor that can do it",
+    "Store each result as evidence keyed by its step",
+    "Replan only when a step fails or the evidence contradicts the plan"
+  ],
+  "pitfalls": [
+    "A plan built on a wrong assumption fails late unless results are checked",
+    "Without replanning, one failed step sinks the whole task",
+    "Placeholders break when a tool returns an unexpected shape"
+  ],
+  "tools": [
+    "LangGraph",
+    "LLMCompiler",
+    "ReWOO",
+    "OpenAI Agents SDK",
+    "Claude Agent SDK"
+  ],
+  "remember": "Plan once with the big model. Execute cheaply. Replan on failure.",
+  "caption": "Illustrative: a 5-step airline rebooking as ReAct (a large-model call per step) against ReWOO (plan once, solve once).",
+  "comparison": {
+    "scope": "The model, once, up front",
+    "cost": 2,
+    "needs": "Medium: planner and executors",
+    "best": "A stale plan when the world changes"
+  },
+  "diagram": {
+    "file": "diagrams/planexec.svg"
+  },
+  "lesson": {
+    "file": "rewoo_graph.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import re",
+        "steps": []
+      },
+      {
+        "text": "from typing import TypedDict",
+        "steps": []
+      },
+      {
+        "text": "from langgraph.graph import StateGraph, START, END",
+        "steps": []
+      },
+      {
+        "text": "# planner and solver: a large chat model; planner uses structured output",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class S(TypedDict):",
+        "steps": []
+      },
+      {
+        "text": "    task: str",
+        "steps": []
+      },
+      {
+        "text": "    steps: list      # [(var, tool, arg)], e.g. (\"#E2\", \"find_flights\", \"#E1\")",
+        "steps": []
+      },
+      {
+        "text": "    evidence: dict   # {\"#E1\": \"PNR 6XK2QT, DEL-BOM, AI-865 cancelled\"}",
+        "steps": []
+      },
+      {
+        "text": "    failed: bool",
+        "steps": []
+      },
+      {
+        "text": "    answer: str",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def plan(s):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    out = planner.invoke(PLAN_PROMPT.format(task=s[\"task\"], done=s[\"evidence\"]))",
+        "steps": [
+          1,
+          4
+        ]
+      },
+      {
+        "text": "    return {\"steps\": out.steps, \"failed\": False}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def execute(s):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    var, tool, arg = next(x for x in s[\"steps\"] if x[0] not in s[\"evidence\"])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    arg = re.sub(r\"#E\\d+\", lambda m: s[\"evidence\"][m.group()], arg)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    ok, out = TOOLS[tool](arg)                  # no model call here",
+        "steps": [
+          2,
+          5
+        ]
+      },
+      {
+        "text": "    if not ok:",
+        "steps": []
+      },
+      {
+        "text": "        return {\"failed\": True}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return {\"evidence\": {**s[\"evidence\"], var: out}}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def solve(s):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    msg = solver.invoke(SOLVE_PROMPT.format(task=s[\"task\"], ev=s[\"evidence\"]))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {\"answer\": msg.content}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def after_execute(s):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if s[\"failed\"]:",
+        "steps": []
+      },
+      {
+        "text": "        return \"plan\"                              # replan on failure",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    todo = [v for v, _, _ in s[\"steps\"] if v not in s[\"evidence\"]]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return \"execute\" if todo else \"solve\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "g = StateGraph(S)",
+        "steps": []
+      },
+      {
+        "text": "g.add_node(\"plan\", plan); g.add_node(\"execute\", execute); g.add_node(\"solve\", solve)",
+        "steps": []
+      },
+      {
+        "text": "g.add_edge(START, \"plan\"); g.add_edge(\"plan\", \"execute\")",
+        "steps": [
+          1,
+          2
+        ]
+      },
+      {
+        "text": "g.add_conditional_edges(\"execute\", after_execute, [\"plan\", \"execute\", \"solve\"])",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "g.add_edge(\"solve\", END)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "app = g.compile()",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Plan the whole task once",
+        "text": "One large-model call writes a structured plan: four tool steps, each with a variable name. #E2 needs #E1, #E3 needs #E2, and so on."
+      },
+      {
+        "title": "Execute with the cheapest executor",
+        "text": "The executor node takes the next unfinished step and runs it. Here it is a plain tool call; in plan-and-execute it can be a small model."
+      },
+      {
+        "title": "Record evidence by step",
+        "text": "Each result is stored under its variable: #E1 is the PNR, #E2 the replacement flight. The router edge keeps executing until every step has evidence."
+      },
+      {
+        "title": "Replan only on failure",
+        "text": "The seat hold for #E3 fails because the seat has gone. The conditional edge sends the state back to the planner with the evidence so far, and only then is the large model called again."
+      },
+      {
+        "title": "ReWOO: fill placeholders, not prompts",
+        "text": "Before a tool runs, #E1 in its input is replaced with the stored value. No model reads the observation in between, which is where ReWOO saves most of its tokens."
+      },
+      {
+        "title": "Solve once at the end",
+        "text": "A single solver call reads the task and all the evidence and writes the passenger's answer. Two large calls in total when nothing fails, three with one replan."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"100\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"58\" y=\"27\">Planner</text><text class=\"sb\" x=\"58\" y=\"42\">large · 1 call</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M108 30 C116 30,116 19,124 19\" style=\"--d:0.1s\"/><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"126\" y=\"8\" width=\"176\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"214\" y=\"23\" text-anchor=\"middle\">#E1 get_pnr(6XK2QT)</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M108 30 C116 30,116 45,124 45\" style=\"--d:0.16s\"/><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx soft\" x=\"126\" y=\"34\" width=\"176\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"214\" y=\"49\" text-anchor=\"middle\">#E2 find_flights(#E1)</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M108 30 C116 30,116 71,124 71\" style=\"--d:0.22s\"/><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"126\" y=\"60\" width=\"176\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"214\" y=\"75\" text-anchor=\"middle\">#E3 hold_seat(#E2)</text></g><path class=\"ln draw \" pathLength=\"1\" d=\"M108 30 C116 30,116 97,124 97\" style=\"--d:0.28s\"/><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"126\" y=\"86\" width=\"176\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"214\" y=\"101\" text-anchor=\"middle\">#E4 reissue(#E3)</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"120\" width=\"100\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"58\" y=\"137\">Executor</text><text class=\"sb\" x=\"58\" y=\"152\">tools · small</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"318\" cy=\"19\" r=\"9\" class=\"bd-pass\"/><path d=\"M314 19l3 3 5-6\" class=\"bd-mark\"/></g><path class=\"ln a\" d=\"M108 140 C118 140,118 20,124 20\" style=\"stroke-dasharray:4 3;--d:0.1s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"126\" y=\"128\" style=\"text-anchor:start;--d:0s\">evidence</text><text class=\"mono a\" x=\"126\" y=\"144\" style=\"--d:0.1s\">#E1 = PNR 6XK2QT · DEL→BOM</text><text class=\"mono a\" x=\"126\" y=\"158\" style=\"--d:0.2s\">#E2 = AI-677 · 07:10</text><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"318\" cy=\"45\" r=\"9\" class=\"bd-pass\"/><path d=\"M314 45l3 3 5-6\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><circle cx=\"318\" cy=\"71\" r=\"9\" class=\"bd-fail\"/><path d=\"M314.5 67.5l7 7M321.5 67.5l-7 7\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"126\" y=\"170\" width=\"226\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"239\" y=\"185\" text-anchor=\"middle\">#E3 seat lost → back to the planner</text></g><path class=\"ln a\" d=\"M126 181 H116 V46 H110\" style=\"stroke-dasharray:4 3;stroke:var(--fail);--d:0.3s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"214\" style=\"text-anchor:start;--d:0s\">ReWOO:</text><text class=\"mono a\" style=\"text-anchor:start;--d:0.1s\" x=\"62\" y=\"214\" style=\"--d:0.1s\">hold_seat(#E2) → hold_seat(\"AI-677\")</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"226\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"242\" text-anchor=\"middle\">Solver (large, 1 call): rebooked on AI-677 at 07:10</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Far fewer large-model calls: plan once, execute cheaply",
+      "Lower latency, and independent steps can run in parallel",
+      "The plan is explicit, so it can be logged, checked or approved",
+      "ReWOO avoids a model call between tools entirely"
+    ],
+    "cons": [
+      "A plan built on a wrong assumption fails late",
+      "Needs replanning logic for failed or surprising steps",
+      "Placeholders break when tools return unexpected shapes",
+      "Weak planners write weak plans; the planner must be strong"
+    ],
+    "avoidWhen": [
+      "Each step truly depends on reading the last result (use ReAct)",
+      "The procedure is fixed and known (a workflow is simpler)"
+    ],
+    "tools": [
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Planner, executor and replanner nodes with conditional edges",
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "name": "LLMCompiler",
+        "type": "Open source (research code)",
+        "what": "Planned tool calls as a DAG, run in parallel",
+        "url": "https://github.com/SqueezeAILab/LLMCompiler"
+      },
+      {
+        "name": "ReWOO",
+        "type": "Research paper",
+        "what": "Plans with #E placeholders; one solver call",
+        "url": "https://arxiv.org/abs/2305.18323"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "A planner agent handing steps to cheaper agents or tools",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "LangChain planning agents",
+        "type": "Engineering post",
+        "what": "Plan-and-execute, ReWOO and LLMCompiler compared",
+        "url": "https://www.langchain.com/blog/planning-agents"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An airline disruption desk rebooks a passenger after a cancellation: fetch the PNR, find flights, hold a seat, reissue the ticket and notify. You compare three architectures on the same task: ReAct deciding every step, plan-and-execute with an executor model, and ReWOO running tools straight from the plan. Then make step 3 fail and see which designs recover.",
+    "controls": [
+      "Click ReAct, Plan-and-execute or ReWOO to choose the architecture.",
+      "Choose large or small models for the planner and the executor.",
+      "Tick step 3 fails to lose the held seat, and switch replanning on or off. Or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Outcome",
+        "meaning": "Whether the passenger was rebooked."
+      },
+      {
+        "name": "Large-model calls",
+        "meaning": "Calls to the expensive model; small calls are listed below."
+      },
+      {
+        "name": "Tokens vs ReAct",
+        "meaning": "Tokens used as a share of ReAct on the same task and failure setting."
+      },
+      {
+        "name": "Latency",
+        "meaning": "About 2.5 s per large call, 0.8 s per small call and 0.5 s per tool."
+      },
+      {
+        "name": "Call strip",
+        "meaning": "Every model call in order, large ones highlighted."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "ReAct",
+        "expect": "6 large-model calls and 17,400 tokens, 17.5 s. It works, but every step pays for the large model."
+      },
+      {
+        "k": "pe",
+        "name": "Plan-and-execute",
+        "expect": "2 large calls plus 5 small: 10,500 tokens (60.3% of ReAct), 12.0 s."
+      },
+      {
+        "k": "rewoo",
+        "name": "ReWOO",
+        "expect": "2 large calls and no executor model: 5,000 tokens (28.7% of ReAct), 8.0 s."
+      },
+      {
+        "k": "fail",
+        "name": "ReWOO, step 3 fails, no replanning",
+        "expect": "The seat hold fails and nothing replans: the rebooking fails."
+      }
+    ],
+    "missions": [
+      {
+        "k": "two",
+        "text": "Rebook the passenger with no more than 2 large-model calls.",
+        "hint": "Plan once with the large model and execute with a small model or plain tools."
+      },
+      {
+        "k": "survive",
+        "text": "Survive the step 3 failure with a planning architecture.",
+        "hint": "Choose plan-and-execute or ReWOO and switch replanning on."
+      },
+      {
+        "k": "lean",
+        "text": "Succeed using under 40% of ReAct’s tokens.",
+        "hint": "ReWOO runs tools with no model call in between; it stays under 30% even with one replan."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangGraph",
+        "type": "Open source · LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Planner, executor and replanner as nodes, with a conditional edge back to the planner on failure.",
+        "ex": "A rebooking graph whose execute node loops over the plan and routes to plan when a tool fails.",
+        "pros": [
+          "State and conditional edges fit plan-and-execute well",
+          "Official plan-and-execute and ReWOO tutorials"
+        ],
+        "cons": [
+          "Structured-output planners need careful schemas",
+          "More moving parts than a loop"
+        ],
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "n": "LLMCompiler",
+        "type": "Open source · research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Planning tool calls as a DAG and running independent calls in parallel.",
+        "ex": "Fetch fares on three routes at once, then join them, instead of three sequential steps.",
+        "pros": [
+          "Parallel execution cuts latency",
+          "Published speed and cost results"
+        ],
+        "cons": [
+          "Research code, not a product",
+          "Needs adapting to your tools"
+        ],
+        "url": "https://github.com/SqueezeAILab/LLMCompiler"
+      },
+      {
+        "n": "ReWOO",
+        "type": "Research method",
+        "start": 2,
+        "prod": 2,
+        "best": "Plans that reference future results as #E variables, with one planner and one solver call.",
+        "ex": "Plan: #E1 = get_pnr(6XK2QT); #E2 = find_flights(#E1). Tools fill the variables; the solver answers.",
+        "pros": [
+          "Large token savings",
+          "Easy to implement in any framework"
+        ],
+        "cons": [
+          "No reaction to surprises without replanning",
+          "Brittle when tool outputs change shape"
+        ],
+        "url": "https://arxiv.org/abs/2305.18323"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "A planning agent that hands structured steps to cheaper agents or tools.",
+        "ex": "A planner agent with output_type set to a Plan model, then a loop that runs each step with a small-model agent.",
+        "pros": [
+          "Structured outputs and handoffs built in",
+          "Quick to prototype"
+        ],
+        "cons": [
+          "Replanning logic is yours",
+          "Less explicit control flow than a graph"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "Claude Agent SDK",
+        "type": "SDK · Anthropic",
+        "start": 2,
+        "prod": 2,
+        "best": "An agent that writes a plan to a file and works through it with tools, re-reading the plan as it goes.",
+        "ex": "A rebooking agent that keeps a checklist in a to-do file and updates it after each tool call.",
+        "pros": [
+          "Planning and to-do tools built in",
+          "Good context management on long tasks"
+        ],
+        "cons": [
+          "Plan execution is still a model loop",
+          "Tied to Claude models"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Plan-and-execute in production",
+        "tool": "LangGraph"
+      },
+      {
+        "need": "Parallel tool calls from a plan",
+        "tool": "LLMCompiler ideas"
+      },
+      {
+        "need": "Cheapest known procedure",
+        "tool": "ReWOO-style plan and solve"
+      }
+    ],
+    "goals": [
+      "Explain how plan-and-execute and ReWOO cut large-model calls",
+      "Calculate token savings against ReAct",
+      "Decide when a failure should trigger replanning"
+    ]
+  },
+  "practice": {
+    "scenario": "An airline disruption desk rebooks passengers after a cancellation. The steps are known: fetch the PNR, find alternative flights, hold a seat, reissue the ticket, notify the passenger. A large model writes the plan once, a small model or plain tool calls run each step, and the planner is called again only if a step fails, for example when the held seat is lost.",
+    "industries": [
+      {
+        "industry": "Airlines and travel",
+        "use": "Rebooking, refunds and itinerary changes with known steps"
+      },
+      {
+        "industry": "Financial research",
+        "use": "Plan the filings and data pulls for a company report, then fetch them in parallel"
+      },
+      {
+        "industry": "Logistics",
+        "use": "Plan a shipment exception: locate, re-slot, notify, then execute each call"
+      }
+    ],
+    "analogy": "A wedding planner. The plan is written once, vendors carry out their parts, and the planner steps back in only when the caterer cancels.",
+    "library": {
+      "name": "LangGraph",
+      "what": "A graph runtime for agents: nodes are functions, edges (including conditional ones) decide what runs next, and state carries the plan and evidence.",
+      "install": "pip install langgraph langchain-anthropic"
+    },
+    "note": "TOOLS stands for your own tool functions. Structured output keeps the plan machine-readable.",
+    "samples": [
+      {
+        "file": "rebooking_graph.py",
+        "language": "python",
+        "code": "from typing import TypedDict\nfrom pydantic import BaseModel\nfrom langchain_anthropic import ChatAnthropic\nfrom langgraph.graph import StateGraph, START, END\n\nclass Plan(BaseModel):\n    steps: list[str]              # e.g. \"find_flights: DEL-BOM tomorrow\"\n\nclass State(TypedDict):\n    task: str\n    plan: list[str]\n    done: list[tuple[str, str]]   # (step, result)\n    failed: bool\n\nplanner = ChatAnthropic(model=\"claude-sonnet-4-5\").with_structured_output(Plan)\n\ndef plan(s: State):\n    p = planner.invoke(f\"Task: {s['task']}\\nCompleted: {s['done']}\\n\"\n                       \"Write the remaining steps as 'tool: input'.\")\n    return {\"plan\": p.steps, \"failed\": False}\n\ndef execute(s: State):\n    step = s[\"plan\"][0]\n    tool, arg = step.split(\":\", 1)\n    ok, result = TOOLS[tool.strip()](arg.strip())      # plain tool call, no LLM\n    if not ok:\n        return {\"failed\": True}\n    return {\"plan\": s[\"plan\"][1:], \"done\": s[\"done\"] + [(step, result)]}\n\ndef next_node(s: State):\n    if s[\"failed\"]:\n        return \"plan\"                                   # replan only on failure\n    return \"execute\" if s[\"plan\"] else END\n\ng = StateGraph(State)\ng.add_node(\"plan\", plan)\ng.add_node(\"execute\", execute)\ng.add_edge(START, \"plan\")\ng.add_edge(\"plan\", \"execute\")\ng.add_conditional_edges(\"execute\", next_node, [\"plan\", \"execute\", END])\napp = g.compile()\nout = app.invoke({\"task\": \"Rebook PNR 6XK2QT after AI-865 cancellation\",\n                  \"plan\": [], \"done\": [], \"failed\": False})"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A 5-step task. ReAct makes 6 large-model calls (one per step plus a final answer), averaging 3,000 tokens each. ReWOO makes one planner call of 1,500 tokens and one solver call of 2,500 tokens; the tools run with no model calls in between. What percentage of ReAct's tokens does ReWOO use?",
+    "answer": "ReAct: 6 × 3,000 = 18,000 tokens. ReWOO: 1,500 + 2,500 = 4,000 tokens. 4,000 ÷ 18,000 = 22.2%, so ReWOO uses about a fifth of the tokens.",
+    "expected": {
+      "value": 22.2,
+      "tolerance": 0.3,
+      "label": "% of ReAct ="
+    },
+    "interview": [
+      {
+        "question": "What does ReWOO change compared with plan-and-execute?",
+        "answer": "The plan refers to future results as variables such as #E1 and #E2, so each tool's input can be filled from earlier evidence without calling the model. Only the planner and the final solver use the large model, which saves tokens and latency, but the plan cannot react to surprising results unless you add a replanning step."
+      },
+      {
+        "question": "When should an executor trigger replanning?",
+        "answer": "When a step fails, returns something the plan did not expect, or breaks a budget. Replanning after every step turns the design back into ReAct and loses the savings."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Letting the planner return free-form prose",
+        "fix": "Ask for structured steps with tool names and inputs"
+      },
+      {
+        "mistake": "Never replanning, so one failed step sinks the task",
+        "fix": "Route failures back to the planner with the evidence gathered so far"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pe01",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking task always needs the same five kinds of step, but choosing each step with a large model is slow and costly. Which architecture fits?",
+      "options": [
+        "ReAct with a larger model",
+        "Plan-and-execute: plan once, execute cheaply, replan on failure",
+        "Tree search over flights",
+        "Voting across three agents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The steps are knowable in advance, so plan them once and run them with cheap executors."
+    },
+    {
+      "id": "pe02",
+      "kind": "single",
+      "industry": "Financial research",
+      "question": "ReAct makes 6 large-model calls of 3,000 tokens each. ReWOO makes a 1,500-token plan call and a 2,500-token solver call. What share of ReAct’s tokens does ReWOO use?",
+      "options": [
+        "22.2%",
+        "33.3%",
+        "40.0%",
+        "18.0%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ReAct 18,000 tokens, ReWOO 4,000: 4,000 ÷ 18,000 = 22.2%."
+    },
+    {
+      "id": "pe03",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "In ReWOO, what does a step input such as find_route(#E1) mean?",
+      "options": [
+        "Call the model to rewrite the input",
+        "Fill #E1 with the stored result of step 1 and run the tool directly",
+        "Skip the step if #E1 failed",
+        "Run step 1 again"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Placeholders refer to earlier evidence, so tools chain without a model call in between."
+    },
+    {
+      "id": "pe04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A plan-and-execute loop reads: if result.ok: plan = replan(...). What goes wrong?",
+      "options": [
+        "It replans after successes and never after failures",
+        "It never replans",
+        "It replans twice",
+        "Nothing; this is correct"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The condition is inverted. Replanning should happen when a step fails: if not result.ok."
+    },
+    {
+      "id": "pe05",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "Which are reported benefits of plan-and-execute over ReAct? Select all that apply.",
+      "options": [
+        "Faster execution, since the large model is not consulted at every step",
+        "Lower cost, because smaller executors can run steps",
+        "Better results from planning the whole task up front",
+        "Better adaptation to surprising observations at every step"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Speed, cost and whole-task planning are the claimed benefits. Step-by-step adaptation is ReAct’s strength, not plan-and-execute’s."
+    },
+    {
+      "id": "pe06",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A 5-step plan-and-execute run makes one large planner call, five small executor calls and one large final call. How many large-model calls is that?",
+      "options": [
+        "1",
+        "2",
+        "6",
+        "7"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The planner and the final response are the only large calls: 2."
+    },
+    {
+      "id": "pe07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A plan assumed an item was in stock; step 2 shows it is not, but the executor carries on with steps 3 to 5. What is missing?",
+      "options": [
+        "A larger executor",
+        "A replanning trigger when a result contradicts the plan",
+        "More steps in the plan",
+        "A voting step"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Replan when a step fails or the evidence contradicts the plan; otherwise a stale plan fails late."
+    },
+    {
+      "id": "pe08",
+      "kind": "single",
+      "industry": "Software",
+      "question": "LLMCompiler plans tool calls as a graph. What does that enable?",
+      "options": [
+        "Independent calls run in parallel",
+        "The model skips planning",
+        "Every call uses the large model",
+        "Results are voted on"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A dependency graph lets independent calls run at the same time, cutting latency."
+    },
+    {
+      "id": "pe09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A hospital’s referral agent uses ReWOO. Which statements are true? Select all that apply.",
+      "options": [
+        "Tools run without a model call between them",
+        "A single solver call writes the final answer",
+        "The plan adapts automatically after every tool result",
+        "Every step needs a large-model executor"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "ReWOO plans once, fills placeholders from evidence and solves once. It does not adapt after each result unless you add replanning."
+    },
+    {
+      "id": "pe10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Plan-and-execute uses 2,500 tokens to plan, 5 executor calls of 1,200 tokens and a 2,000-token final call. What is the total?",
+      "options": [
+        "10,500",
+        "9,500",
+        "8,500",
+        "11,700"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,500 + 5 × 1,200 + 2,000 = 2,500 + 6,000 + 2,000 = 10,500 tokens."
+    },
+    {
+      "id": "pe11",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A small, cheap model is used as the planner and writes plans that miss steps. What is the usual fix?",
+      "options": [
+        "Use a small model for execution and a strong model for planning",
+        "Remove planning",
+        "Add more executors",
+        "Use voting on execution"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Plan quality drives everything downstream, so plan with a strong model and save money on execution."
+    },
+    {
+      "id": "pe12",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "What did the ReWOO paper report on HotpotQA compared with a ReAct-style baseline?",
+      "options": [
+        "About 5x token efficiency and about 4% higher accuracy",
+        "Twice the tokens for the same accuracy",
+        "No change in tokens",
+        "Lower accuracy but faster"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ReWOO reported 5x token efficiency and a 4% accuracy gain on HotpotQA."
+    },
+    {
+      "id": "pe13",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "A plan-and-execute agent for shipment exceptions should replan when which of these happen? Select all that apply.",
+      "options": [
+        "A step fails",
+        "A step returns something the plan did not expect",
+        "Every step completes successfully",
+        "A step finishes faster than expected"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Replan on failures and surprises. Replanning after every success turns the design back into ReAct and loses the savings."
+    },
+    {
+      "id": "pe14",
+      "kind": "single",
+      "industry": "Financial research",
+      "question": "A research agent must pull four filings that do not depend on each other, then compare them. Which design minimises latency?",
+      "options": [
+        "ReAct, one filing at a time",
+        "A planned graph that fetches all four in parallel, then one comparison call",
+        "Four separate agents talking to each other",
+        "A tree search over filings"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Independent steps in a plan can run in parallel, as LLMCompiler does, followed by one join step."
+    },
+    {
+      "id": "pe15",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "With step 3 failing, ReAct takes 8 calls and 27,200 tokens. ReWOO with one replan uses 8,000 tokens. What share of ReAct’s tokens is that?",
+      "options": [
+        "29.4%",
+        "25.0%",
+        "33.3%",
+        "40.0%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "8,000 ÷ 27,200 = 0.294, so 29.4%."
+    },
+    {
+      "id": "pe16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Plan-and-Solve prompting is best described as:",
+      "options": [
+        "Asking the model to devise a plan and then carry it out, in one prompt",
+        "A graph runtime for agents",
+        "Voting across plans",
+        "Searching over plans with MCTS"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Plan-and-Solve is a prompting method: devise a plan, then solve step by step, all within one call."
+    },
+    {
+      "id": "pe17",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which checks make a planner’s output safer to execute? Select all that apply.",
+      "options": [
+        "Require a structured list of steps with tool names",
+        "Validate each step’s tool name and arguments in code before running",
+        "Let executors reinterpret free-form prose",
+        "Skip validation to save latency"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Structured plans and code validation catch bad steps before they run. Free-form prose and skipped checks invite errors."
+    },
+    {
+      "id": "pe18",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A course-scheduling agent’s plan uses #E2 = find_slots(#E1), but the tool for #E1 returned a list instead of a single id. What is the likely failure?",
+      "options": [
+        "The placeholder is filled with a value of the wrong shape and the next tool breaks",
+        "The model replans automatically",
+        "Nothing; tools accept any input",
+        "The solver ignores #E2"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Placeholders assume a result shape. Validate tool outputs before substitution, or replan when they differ."
+    },
+    {
+      "id": "pe19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which scenario suits ReAct better than plan-and-execute?",
+      "options": [
+        "A fixed five-step claim settlement",
+        "An investigation where each lookup decides what to check next",
+        "Nightly batch report generation",
+        "Filling a known form"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When the next step cannot be known until the last result arrives, planning up front does not help."
+    },
+    {
+      "id": "pe20",
+      "kind": "multi",
+      "industry": "Travel",
+      "question": "A travel company moves from ReAct to plan-and-execute. Which should it measure to confirm the change helped? Select all that apply.",
+      "options": [
+        "Large-model calls per task",
+        "Task success rate, including failure cases",
+        "Number of tools registered with the planner",
+        "Latency per task"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Calls, success and latency show whether the design is cheaper and still works. The tool count is not an outcome."
+    }
+  ]
+}

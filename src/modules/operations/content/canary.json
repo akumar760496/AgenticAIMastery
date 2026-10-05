@@ -1,0 +1,886 @@
+{
+  "id": "canary",
+  "moduleSlug": "operations",
+  "name": "Canary Releases and Prompt Flags",
+  "shortName": "Canary",
+  "question": "How do I ship a change without betting all traffic on it?",
+  "summary": "Release a new prompt, model or tool version to a small slice of live traffic behind a feature flag, compare it with the control group on the same metrics, and widen in steps, such as 1%, 5%, 25% and 100%, only while guardrail metrics hold. A canary needs enough requests to tell a real drop from noise, so its size and duration come from statistics, not habit.",
+  "useCases": [
+    "A prompt or model change that passed offline evals but still carries risk",
+    "Upgrading to a new model snapshot",
+    "High-volume traffic where a bad change would hurt many users quickly"
+  ],
+  "keyFacts": {
+    "label": "Mechanics",
+    "items": [
+      {
+        "term": "Flag",
+        "detail": "decides per request which variant runs, sticky per user"
+      },
+      {
+        "term": "Bucketing",
+        "detail": "hash of a stable id, so a user stays in one group"
+      },
+      {
+        "term": "Ladder",
+        "detail": "1% → 5% → 25% → 100%, with a bake time at each step"
+      },
+      {
+        "term": "Guardrails",
+        "detail": "success rate, judge score, latency, cost, escalations"
+      },
+      {
+        "term": "Two-proportion test",
+        "detail": "is the canary’s success rate really lower than control’s?"
+      },
+      {
+        "term": "Auto-rollback",
+        "detail": "flip the flag off when a guardrail is breached"
+      }
+    ]
+  },
+  "steps": [
+    "Pass offline evals first; a canary is the last gate, not the only one",
+    "Bucket users by a hash of a stable id and log the variant on every trace",
+    "Size the stage so a meaningful drop is detectable, then bake",
+    "Widen only while guardrails hold; roll back automatically when one breaks"
+  ],
+  "pitfalls": [
+    "A canary too small to detect a 4-point drop gives false comfort",
+    "Comparing canary and control from different hours or user groups",
+    "Per-request randomisation that flips a user between variants mid-conversation"
+  ],
+  "tools": [
+    "LaunchDarkly",
+    "OpenFeature",
+    "Unleash",
+    "Statsig",
+    "Argo Rollouts",
+    "Flagger"
+  ],
+  "remember": "Small slice, enough samples, widen only while guardrails hold.",
+  "caption": "Illustrative: at the 5% stage the canary succeeds on 90.2% of requests against 94.1% for control, so it rolls back.",
+  "comparison": {
+    "scope": "A bad change reaching everyone",
+    "cost": 2,
+    "needs": "Flags and live metrics",
+    "best": "Canaries too small to see a drop"
+  },
+  "diagram": {
+    "file": "diagrams/canary.svg"
+  },
+  "lesson": {
+    "file": "canary_rollout.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import hashlib",
+        "steps": []
+      },
+      {
+        "text": "from statsmodels.stats.proportion import proportions_ztest",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "STAGES = [0.01, 0.05, 0.25, 1.0]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def variant(user_id: str, share: float) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    h = int(hashlib.sha256(user_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return \"v13\" if h < share else \"v12\"          # sticky per user",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def handle(user_id: str, stage: int, span):",
+        "steps": []
+      },
+      {
+        "text": "    v = variant(user_id, STAGES[stage])",
+        "steps": []
+      },
+      {
+        "text": "    span.set_attribute(\"app.variant\", v)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return run_agent(prompt_version=v)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def decide(canary, control, min_n=350):",
+        "steps": []
+      },
+      {
+        "text": "    if canary.n < min_n:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"bake\"                         # not enough evidence yet",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    z, p = proportions_ztest([canary.ok, control.ok], [canary.n, control.n],",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                             alternative=\"smaller\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if p < 0.05 and control.rate - canary.rate > 0.02:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return \"rollback\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return \"promote\"",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def tick(stage, canary, control):",
+        "steps": []
+      },
+      {
+        "text": "    d = decide(canary, control)",
+        "steps": []
+      },
+      {
+        "text": "    if d == \"rollback\":",
+        "steps": []
+      },
+      {
+        "text": "        set_share(0.0); page(\"v13 rolled back\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    elif d == \"promote\":",
+        "steps": []
+      },
+      {
+        "text": "        stage = min(stage + 1, len(STAGES) - 1)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return stage",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define the ladder",
+        "text": "The new prompt goes to 1%, then 5%, 25% and finally everyone. Each stage is a checkpoint where it can still be stopped."
+      },
+      {
+        "title": "Bucket users, not requests",
+        "text": "A hash of the user id gives a number between 0 and 1. Below the share, the user gets v13, and keeps getting it on every request."
+      },
+      {
+        "title": "Tag every trace with the variant",
+        "text": "Online evals, dashboards and alerts can then split every metric by canary and control."
+      },
+      {
+        "title": "Bake until the evidence is enough",
+        "text": "With fewer than about 350 canary requests, a 4-point drop is hard to tell from noise, so the stage waits."
+      },
+      {
+        "title": "Test, and roll back automatically",
+        "text": "A one-sided two-proportion test asks whether the canary is worse. At 5%: 600 requests at 90.2% against 94.1% for control, p < 0.001, so the flag goes to 0%."
+      },
+      {
+        "title": "Promote stage by stage",
+        "text": "If the canary holds, the share moves to the next rung. Each rung repeats the bake and the test."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"78\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"47\" y=\"21\" text-anchor=\"middle\">1%</text></g><g class=\"a\" style=\"--d:0.05s\"><path class=\"ln \" d=\"M88 17L94 17\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"96\" y=\"6\" width=\"78\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"135\" y=\"21\" text-anchor=\"middle\">5%</text></g><g class=\"a\" style=\"--d:0.13s\"><path class=\"ln \" d=\"M176 17L182 17\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx soft\" x=\"184\" y=\"6\" width=\"78\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"223\" y=\"21\" text-anchor=\"middle\">25%</text></g><g class=\"a\" style=\"--d:0.21000000000000002s\"><path class=\"ln \" d=\"M264 17L270 17\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx soft\" x=\"272\" y=\"6\" width=\"78\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"311\" y=\"21\" text-anchor=\"middle\">100%</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<circle class=\"a\" cx=\"18\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0s\"/><circle class=\"a\" cx=\"35.6\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.02s\"/><circle class=\"a\" cx=\"53.2\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.04s\"/><circle class=\"a\" cx=\"70.80000000000001\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.06s\"/><circle class=\"a\" cx=\"88.4\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.08s\"/><circle class=\"a\" cx=\"106\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.1s\"/><circle class=\"a\" cx=\"123.60000000000001\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.12s\"/><circle class=\"a\" cx=\"141.20000000000002\" cy=\"50\" r=\"6\" style=\"fill:var(--accent);--d:0.14s\"/><circle class=\"a\" cx=\"158.8\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.16s\"/><circle class=\"a\" cx=\"176.4\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.18s\"/><circle class=\"a\" cx=\"194\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.2s\"/><circle class=\"a\" cx=\"211.60000000000002\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.22s\"/><circle class=\"a\" cx=\"229.20000000000002\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.24s\"/><circle class=\"a\" cx=\"246.8\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.26s\"/><circle class=\"a\" cx=\"264.40000000000003\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.28s\"/><circle class=\"a\" cx=\"282\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.3s\"/><circle class=\"a\" cx=\"299.6\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.32s\"/><circle class=\"a\" cx=\"317.20000000000005\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.34s\"/><circle class=\"a\" cx=\"334.8\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.36s\"/><circle class=\"a\" cx=\"352.40000000000003\" cy=\"50\" r=\"6\" style=\"fill:var(--rule-strong);--d:0.38s\"/><text class=\"sb a\" x=\"8\" y=\"76\" style=\"text-anchor:start;--d:0.4s\">1 in 20 users (5%) sees v13, every time</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"86\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"101\" text-anchor=\"middle\">span: app.variant = v13</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"127\" style=\"text-anchor:end;--d:0s\">canary n</text><rect x=\"118\" y=\"117\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"117\" width=\"168.28571428571428\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"127\" style=\"text-anchor:start;--d:0.2s\">310</text><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"180\" y=\"146\" style=\"text-anchor:middle;fill:var(--warn)\">bake: 310 of the 350 needed</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"165\" style=\"text-anchor:end;--d:0s\">control</text><rect x=\"118\" y=\"155\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"155\" width=\"178.79\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"165\" style=\"text-anchor:start;--d:0.2s\">94.1%</text><text class=\"tl a\" x=\"112\" y=\"185\" style=\"text-anchor:end;--d:0.1s\">canary</text><rect x=\"118\" y=\"175\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"175\" width=\"171.38\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"185\" style=\"text-anchor:start;--d:0.30000000000000004s\">90.2%</text><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx fail\" x=\"8\" y=\"196\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"211\" text-anchor=\"middle\">p < 0.001 · drop 3.9 pts → share 0%</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"226\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"241\" text-anchor=\"middle\">if it holds: 5% → 25% → 100%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Limits the blast radius of a bad change",
+      "Measures real users, not just test sets",
+      "Automatic rollback without waking anyone",
+      "The same flags allow instant kill switches"
+    ],
+    "cons": [
+      "Needs enough traffic for a statistically clear answer",
+      "Slower releases: each stage bakes",
+      "Flag and variant plumbing through every layer",
+      "Conversation-level metrics are noisier than per-request ones"
+    ],
+    "avoidWhen": [
+      "Very low traffic, where a canary cannot reach a meaningful sample in reasonable time",
+      "Changes that must reach everyone at once, such as a regulatory fix"
+    ],
+    "tools": [
+      {
+        "name": "LaunchDarkly",
+        "type": "Commercial",
+        "what": "Feature flags, AI configs and staged rollouts",
+        "url": "https://launchdarkly.com/docs"
+      },
+      {
+        "name": "OpenFeature",
+        "type": "Open standard (CNCF)",
+        "what": "Vendor-neutral flag API with pluggable providers",
+        "url": "https://openfeature.dev/docs"
+      },
+      {
+        "name": "Unleash",
+        "type": "Open source",
+        "what": "Self-hosted flags with gradual rollout strategies",
+        "url": "https://docs.getunleash.io"
+      },
+      {
+        "name": "Statsig",
+        "type": "Commercial",
+        "what": "Flags with built-in experiment statistics",
+        "url": "https://docs.statsig.com"
+      },
+      {
+        "name": "Argo Rollouts",
+        "type": "Open source",
+        "what": "Canary deployments on Kubernetes with metric analysis",
+        "url": "https://argoproj.github.io/rollouts/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A food-delivery platform is releasing refund-policy prompt v13 to a support agent that handles 2,000 conversations an hour at a 94% resolution rate. Set the canary’s share and bake time, and choose how good v13 really is, to see whether your canary could tell.",
+    "controls": [
+      "Choose the truth about v13: worse (90%), the same (94%) or better (95%).",
+      "Pick the canary share: 1%, 5%, 10% or 25% of traffic.",
+      "Drag the bake time from 1 to 48 hours, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Canary conversations",
+        "meaning": "How many conversations the canary sees: traffic × share × hours."
+      },
+      {
+        "name": "Standard error of the difference",
+        "meaning": "How uncertain the comparison between canary and control is."
+      },
+      {
+        "name": "Power to detect it",
+        "meaning": "The chance a one-sided test at 5% significance catches the true difference."
+      },
+      {
+        "name": "Extra failed conversations",
+        "meaning": "Failures caused by a worse canary before it is stopped."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "1% for 2 hours",
+        "expect": "40 conversations; power 21%: the 4-point drop is mostly invisible."
+      },
+      {
+        "k": "sized",
+        "name": "5% for 5 hours",
+        "expect": "500 conversations; power 90%, at the cost of 20 extra failures."
+      },
+      {
+        "k": "big",
+        "name": "25% for 12 hours",
+        "expect": "6,000 conversations; power 100%, but 240 extra failures."
+      },
+      {
+        "k": "better",
+        "name": "Better version, 10% for 24 hours",
+        "expect": "4,800 conversations; power 91% to prove the 1-point gain."
+      }
+    ],
+    "missions": [
+      {
+        "k": "detect",
+        "text": "Detect the worse version with at least 80% power.",
+        "hint": "The drop is 4 points; you need a few hundred canary conversations."
+      },
+      {
+        "k": "small",
+        "text": "Detect it with 80% power using no more than 1,000 canary conversations.",
+        "hint": "About 350 are enough; a 5% share for a few hours gets there."
+      },
+      {
+        "k": "better",
+        "text": "Prove the better version is better, with 80% power, at 10% of traffic or less.",
+        "hint": "A 1-point gain needs thousands of conversations: bake for about a day."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LaunchDarkly",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Feature flags and AI configs with percentage rollouts and kill switches.",
+        "ex": "Roll prompt v13 out to 5% of users, then 25%, with an automatic rollback on a metric.",
+        "pros": [
+          "Mature targeting and audit log",
+          "AI config objects for prompts and models"
+        ],
+        "cons": [
+          "Commercial pricing",
+          "Another dependency in the request path"
+        ],
+        "url": "https://launchdarkly.com/docs"
+      },
+      {
+        "n": "OpenFeature",
+        "type": "Open standard · CNCF",
+        "start": 2,
+        "prod": 3,
+        "best": "A vendor-neutral flag API; swap flag providers without code changes.",
+        "ex": "Evaluate refund-prompt-version per user through OpenFeature with an Unleash provider.",
+        "pros": [
+          "No lock-in to one flag vendor",
+          "SDKs for many languages"
+        ],
+        "cons": [
+          "Still needs a provider behind it",
+          "No statistics built in"
+        ],
+        "url": "https://openfeature.dev/docs"
+      },
+      {
+        "n": "Unleash",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Self-hosted flags with gradual rollout by user id.",
+        "ex": "Gradually roll out a new model snapshot to one region, then all.",
+        "pros": [
+          "Self-hostable",
+          "Sticky gradual rollout strategies"
+        ],
+        "cons": [
+          "You run it",
+          "Experiment statistics are basic"
+        ],
+        "url": "https://docs.getunleash.io"
+      },
+      {
+        "n": "Statsig",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Flags with experiment statistics, guardrail metrics and auto-rollback.",
+        "ex": "Run v12 against v13 with resolution rate as the primary metric and cost as a guardrail.",
+        "pros": [
+          "Power and significance computed for you",
+          "Guardrail alerts"
+        ],
+        "cons": [
+          "Commercial service",
+          "Metrics must be sent to it"
+        ],
+        "url": "https://docs.statsig.com"
+      },
+      {
+        "n": "Argo Rollouts",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Canary deployments of services on Kubernetes, with metric analysis steps.",
+        "ex": "Shift 5% of pods to the new agent image and promote if Prometheus metrics hold.",
+        "pros": [
+          "Automates infrastructure canaries",
+          "Analysis templates for metrics"
+        ],
+        "cons": [
+          "Service-level only, not per user",
+          "Kubernetes required"
+        ],
+        "url": "https://argoproj.github.io/rollouts/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want flags without vendor lock-in",
+        "tool": "OpenFeature with any provider"
+      },
+      {
+        "need": "I want the statistics done for me",
+        "tool": "Statsig or LaunchDarkly experiments"
+      },
+      {
+        "need": "I canary whole service versions on Kubernetes",
+        "tool": "Argo Rollouts or Flagger"
+      }
+    ],
+    "goals": [
+      "Size a canary from the drop you care about",
+      "See the trade-off between exposure and certainty",
+      "Know why small gains need far more traffic than big drops"
+    ]
+  },
+  "practice": {
+    "scenario": "A food-delivery platform wants a new refund-policy prompt for its support agent. It passed the offline suite, but refunds are money. The new version goes to 5% of users behind a flag, bucketed by a hash of the user id. After 12 hours the canary’s resolution rate is 90.2% against 94.1% for control on 1,200 canary conversations, so the flag is turned off automatically.",
+    "industries": [
+      {
+        "industry": "Food delivery",
+        "use": "Canary a refund-policy prompt on 5% of users before it can issue refunds to everyone"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Canary a new model snapshot for plan recommendations, one circle at a time"
+      },
+      {
+        "industry": "Fintech",
+        "use": "Canary a KYC-extraction prompt with a guardrail on manual-review rate"
+      }
+    ],
+    "analogy": "A new dish on a small table first. If those diners send it back, the kitchen never serves it to the whole restaurant.",
+    "library": {
+      "name": "OpenFeature",
+      "what": "A vendor-neutral feature-flag API; plug in a provider such as LaunchDarkly, Unleash or flagd and evaluate flags per user.",
+      "install": "pip install openfeature-sdk"
+    },
+    "note": "Log the variant on every trace, so dashboards and online evals can be split by canary and control.",
+    "samples": [
+      {
+        "file": "canary_prompt.py",
+        "language": "python",
+        "code": "from openfeature import api\nfrom openfeature.evaluation_context import EvaluationContext\nfrom statsmodels.stats.proportion import proportions_ztest\n\nflags = api.get_client()          # configure a provider (LaunchDarkly, Unleash, flagd...) at startup\n\ndef pick_prompt(user_id: str) -> str:\n    ctx = EvaluationContext(targeting_key=user_id)          # sticky per user\n    return flags.get_string_value(\"refund-prompt-version\", \"v12\", ctx)\n\ndef canary_is_worse(ok_canary, n_canary, ok_control, n_control, max_drop=0.02):\n    \"\"\"One-sided test: is the canary's success rate lower than control's?\"\"\"\n    z, p = proportions_ztest([ok_canary, ok_control], [n_canary, n_control],\n                             alternative=\"smaller\")\n    drop = ok_control / n_control - ok_canary / n_canary\n    return p < 0.05 and drop > max_drop\n\n# 1,200 canary conversations at 90.2% vs 22,800 control at 94.1%\nprint(canary_is_worse(1082, 1200, 21455, 22800))   # True: roll back"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Your service handles 2,000 requests an hour. The canary gets 5% of traffic for 6 hours. If the new prompt is truly 4 points worse, how many extra failed requests will the canary have caused by the end?",
+    "answer": "Canary requests: 2,000 × 0.05 × 6 = 600. Extra failures: 600 × 0.04 = 24. The same change at 100% for 6 hours would have caused 2,000 × 6 × 0.04 = 480.",
+    "expected": {
+      "value": 24,
+      "tolerance": 0.5,
+      "label": "extra failures ="
+    },
+    "interview": [
+      {
+        "question": "How do you decide how long a canary must run?",
+        "answer": "From the smallest drop you care about and your traffic. For a drop from 94% to 90%, a one-sided test with 80% power needs roughly 450 canary requests; at 5% of 2,000 requests an hour that is about 4.5 hours. Also bake long enough to cover the daily traffic mix."
+      },
+      {
+        "question": "Why bucket by user rather than by request?",
+        "answer": "So each user sees one variant consistently. Flipping variants mid-conversation confuses users and contaminates metrics, because a failure could come from either version. A hash of a stable id gives sticky, random assignment."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Declaring the canary safe after 50 requests",
+        "fix": "Size each stage so the drop you care about is detectable"
+      },
+      {
+        "mistake": "Comparing the canary with last week’s numbers",
+        "fix": "Compare with a concurrent control group on the same metrics"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "cn01",
+      "kind": "single",
+      "industry": "Food delivery",
+      "question": "A new refund prompt passed offline evals. How should it reach users?",
+      "options": [
+        "To everyone at once, since evals passed",
+        "To a small share behind a flag, compared with control, then widened in steps",
+        "Only to staff, forever",
+        "Randomly to half of all requests with no comparison"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A canary is the last gate: a small slice, a concurrent control and gradual widening."
+    },
+    {
+      "id": "cn02",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom’s plan-recommendation agent gets 2,000 conversations an hour. A canary runs at 5% for 6 hours. How many canary conversations is that?",
+      "options": [
+        "100",
+        "300",
+        "600",
+        "1,200"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2,000 × 0.05 × 6 = 600."
+    },
+    {
+      "id": "cn03",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "In that 600-conversation canary, the new prompt is truly 3 points worse. How many extra failed conversations did the canary cause?",
+      "options": [
+        "3",
+        "18",
+        "60",
+        "180"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "600 × 0.03 = 18, against 360 if the whole service had run it for the same 6 hours."
+    },
+    {
+      "id": "cn04",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Why should canary assignment hash a stable user id rather than draw a random number per request?",
+      "options": [
+        "It is faster to compute",
+        "It hides the variant from logs",
+        "So each user sees one version consistently and metrics can be attributed",
+        "Random numbers are not allowed in Python"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Per-request draws mix versions within a conversation and blur the comparison."
+    },
+    {
+      "id": "cn05",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A canary’s success rate is compared with the control group. Which practices make the comparison valid? Select all that apply.",
+      "options": [
+        "Control and canary run over the same period",
+        "The variant is recorded on every trace",
+        "Compare the canary with last month’s average",
+        "Put all premium users in the canary"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A concurrent control and variant tags make groups comparable; old baselines and biased assignment do not."
+    },
+    {
+      "id": "cn06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A canary of 40 conversations shows 90% success against 94% for control. What should you conclude?",
+      "options": [
+        "The new version is worse; roll back",
+        "The new version is fine",
+        "The sample is too small to tell a 4-point difference from noise",
+        "Increase the share to 100%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "With 40 conversations the standard error is about 4.7 points, as large as the difference itself."
+    },
+    {
+      "id": "cn07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Roughly how many canary conversations are needed to detect a drop from 94% to 90% with about 80% power in a one-sided test?",
+      "options": [
+        "About 35",
+        "About 350",
+        "About 3,500",
+        "About 35,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "n ≈ ((1.645 + 0.84) × 0.3 / 0.04)² ≈ 350 when the control group is large."
+    },
+    {
+      "id": "cn08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why does proving a 1-point improvement take far more traffic than catching a 4-point drop?",
+      "options": [
+        "Improvements are measured differently",
+        "Flags are slower for improvements",
+        "The required sample grows with the inverse square of the difference, so a quarter of the effect needs about sixteen times the data",
+        "It does not; both need the same sample"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Halving the effect quadruples the sample; a 1-point gain needs about sixteen times more than a 4-point drop."
+    },
+    {
+      "id": "cn09",
+      "kind": "multi",
+      "industry": "Airlines",
+      "question": "Which metrics make sensible guardrails for a rebooking-prompt canary? Select all that apply.",
+      "options": [
+        "Task success rate",
+        "p95 latency",
+        "Number of lines in the prompt",
+        "The engineer’s confidence"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Guardrails are live outcome metrics such as success, latency, cost and escalations."
+    },
+    {
+      "id": "cn10",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A broker’s canary guardrail is breached at 2 a.m. What should happen?",
+      "options": [
+        "Wait for the morning stand-up",
+        "Widen the canary to get more data",
+        "Page someone to edit the prompt live",
+        "The flag turns the canary off automatically and alerts the owner"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Automatic rollback limits harm; the investigation can happen after."
+    },
+    {
+      "id": "cn11",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Which is the typical order of canary stages?",
+      "options": [
+        "100% → 25% → 5% → 1%",
+        "1% → 5% → 25% → 100%",
+        "50% → 100%",
+        "1% → 100%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Start small and widen in steps, baking and checking at each one."
+    },
+    {
+      "id": "cn12",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A health app has only 300 conversations a day. Which statements about canarying there are correct? Select all that apply.",
+      "options": [
+        "A canary may never reach a meaningful sample in reasonable time",
+        "Stronger offline evals and careful review matter more",
+        "A 1% canary for one hour is enough",
+        "Canary statistics work the same at any traffic level"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Low traffic makes live comparisons slow and noisy, so offline evidence must carry more weight."
+    },
+    {
+      "id": "cn13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which tool provides a vendor-neutral feature-flag API with pluggable providers?",
+      "options": [
+        "OpenFeature",
+        "Temporal",
+        "Evidently",
+        "pybreaker"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "OpenFeature standardises flag evaluation; LaunchDarkly, Unleash and others plug in as providers."
+    },
+    {
+      "id": "cn14",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Argo Rollouts canaries a new agent image by shifting pods. What can it not do on its own that a prompt flag can?",
+      "options": [
+        "Roll back automatically",
+        "Keep each user on one variant across requests",
+        "Shift traffic gradually",
+        "Read Prometheus metrics"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Pod-level canaries route requests, not users; per-user stickiness needs a flag or routing on a user key."
+    },
+    {
+      "id": "cn15",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A KYC-extraction prompt canary shows a higher manual-review rate but the same accuracy. Which actions are sensible? Select all that apply.",
+      "options": [
+        "Treat manual-review rate as a guardrail and roll back if it breaches",
+        "Investigate which documents trigger extra reviews",
+        "Ignore it because accuracy is unchanged",
+        "Widen immediately to collect more data"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Guardrails exist for costs like manual review; investigate before widening."
+    },
+    {
+      "id": "cn16",
+      "kind": "single",
+      "industry": "Food delivery",
+      "question": "At 5% for 12 hours, a canary shows 90.2% against 94.1% for control, p < 0.001. What is the right decision?",
+      "options": [
+        "Roll back",
+        "Promote to 25%",
+        "Extend the bake to a week",
+        "Ignore the result"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The drop is large and statistically clear, so the guardrail says roll back."
+    },
+    {
+      "id": "cn17",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "The canary’s success equals control’s after a well-sized stage. What is the right next step?",
+      "options": [
+        "Roll back to be safe",
+        "Promote to the next stage and bake again",
+        "Stop the experiment and keep 5% forever",
+        "Switch the control group to the canary"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "No detectable harm at the right sample size is the signal to widen."
+    },
+    {
+      "id": "cn18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank’s prompt canary covers weekday mornings only. Why can that give a false picture? Select all that apply.",
+      "options": [
+        "Traffic mix differs on evenings and weekends",
+        "Some problems appear only for request types that are rare in the morning",
+        "Morning users are always more accurate",
+        "Canaries must never run in the morning"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Bake long enough to cover the daily and weekly traffic mix."
+    },
+    {
+      "id": "cn19",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A canary is run for a new model snapshot rather than a prompt. What should the flag control?",
+      "options": [
+        "The trace backend",
+        "The snapshot name in the release used for that user",
+        "The user’s mobile plan",
+        "The span names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The flag selects which release, including the snapshot, serves each user."
+    },
+    {
+      "id": "cn20",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which of these can a canary catch that offline evals may miss? Select all that apply.",
+      "options": [
+        "Behaviour on real inputs that the test set never covered",
+        "Latency and cost under real load",
+        "Syntax errors in the prompt template file",
+        "A model alias moved by the provider last month"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Live traffic reveals real inputs and load; template syntax fails earlier, and provider moves are not your release."
+    }
+  ]
+}

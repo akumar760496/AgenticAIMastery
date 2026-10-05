@@ -1,0 +1,798 @@
+{
+  "id": "dpo",
+  "moduleSlug": "fine-tuning",
+  "name": "Preference Tuning with DPO",
+  "shortName": "DPO",
+  "question": "How do I teach a model which answer is better?",
+  "summary": "Direct Preference Optimization trains on pairs: for each prompt, a chosen and a rejected answer. It raises the likelihood of chosen answers relative to rejected ones while a parameter, beta, keeps the model close to a reference, without training a separate reward model as RLHF does. It usually follows SFT, and it learns whatever the pairs share, including biases such as longer answers always being chosen.",
+  "useCases": [
+    "Behaviour that is easier to compare than to write, such as helpfulness or tone",
+    "Fixing a known failure with pairs of good and bad responses",
+    "Aligning with reviewers’ or customers’ preferences"
+  ],
+  "keyFacts": {
+    "label": "Key ideas",
+    "items": [
+      {
+        "term": "Data",
+        "detail": "prompt, chosen, rejected; from human raters or a calibrated AI judge"
+      },
+      {
+        "term": "β (beta)",
+        "detail": "lower moves further from the reference; TRL’s default is 0.1"
+      },
+      {
+        "term": "Versus RLHF",
+        "detail": "no reward model or PPO loop; simpler and more stable"
+      },
+      {
+        "term": "Order",
+        "detail": "usually after SFT, which teaches the basic format"
+      },
+      {
+        "term": "Label noise",
+        "detail": "disagreeing annotators weaken or reverse the signal"
+      },
+      {
+        "term": "Length bias",
+        "detail": "if chosen answers are longer, the model learns to ramble"
+      }
+    ]
+  },
+  "steps": [
+    "Start from an SFT model that already follows the format",
+    "Collect pairs with clear, consistent preference criteria",
+    "Check pairs for bias, such as length, and for annotator agreement",
+    "Train with a moderate beta and compare win rate and regressions"
+  ],
+  "pitfalls": [
+    "Noisy or inconsistent preferences, so the signal cancels out",
+    "Chosen answers systematically longer, teaching verbosity",
+    "Beta so low that the model drifts and loses general skills"
+  ],
+  "tools": [
+    "Hugging Face TRL DPOTrainer",
+    "OpenAI preference fine-tuning",
+    "Argilla",
+    "Label Studio",
+    "OpenRLHF"
+  ],
+  "remember": "Clean pairs, moderate beta, watch length and regressions.",
+  "caption": "Illustrative: a chosen and a rejected answer to the same prompt, and the resulting win rate.",
+  "comparison": {
+    "scope": "Which answer is preferred",
+    "cost": 3,
+    "needs": "Consistent preference pairs",
+    "best": "Learning the raters’ biases"
+  },
+  "diagram": {
+    "file": "diagrams/dpo.svg"
+  },
+  "lesson": {
+    "file": "train_dpo.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "pairs = load_dataset(\"json\", data_files=\"adviser_pairs.jsonl\")[\"train\"]",
+        "steps": []
+      },
+      {
+        "text": "# each row: {\"prompt\": ..., \"chosen\": ..., \"rejected\": ...}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "pairs = pairs.filter(lambda r: r[\"agreement\"] >= 0.75)   # drop noisy pairs",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "pairs = balance_lengths(pairs)          # chosen is not always the longer one",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = AutoModelForCausalLM.from_pretrained(\"sft-research-8b\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "trainer = DPOTrainer(",
+        "steps": []
+      },
+      {
+        "text": "    model=model,",
+        "steps": []
+      },
+      {
+        "text": "    args=DPOConfig(output_dir=\"dpo-research\",",
+        "steps": []
+      },
+      {
+        "text": "                   beta=0.1,                    # how far from the reference",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                   learning_rate=1e-6, num_train_epochs=1),",
+        "steps": []
+      },
+      {
+        "text": "    train_dataset=pairs,",
+        "steps": []
+      },
+      {
+        "text": "    peft_config=LoraConfig(r=16, lora_alpha=32, target_modules=\"all-linear\",",
+        "steps": []
+      },
+      {
+        "text": "                           task_type=\"CAUSAL_LM\"))",
+        "steps": []
+      },
+      {
+        "text": "trainer.train()",
+        "steps": []
+      },
+      {
+        "text": "report(win_rate(), mean_length(), general_suite())",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Collect preference pairs",
+        "text": "For each question, advisers saw two answers and chose the better one. Judging is quicker and more consistent than writing ideal answers."
+      },
+      {
+        "title": "Drop pairs people disagree on",
+        "text": "Pairs where reviewers disagreed are close to coin flips. Every mislabelled pair cancels a correct one, so cleaning beats collecting more."
+      },
+      {
+        "title": "Start from an SFT model",
+        "text": "DPO refines a model that already follows instructions. On a raw base model it has too much to learn from preferences alone."
+      },
+      {
+        "title": "Set beta",
+        "text": "beta keeps the model near the frozen reference. Too small, and it drifts and loses general skills; too large, and it barely changes. 0.1 is a common start."
+      },
+      {
+        "title": "Balance answer lengths",
+        "text": "If the chosen answer is usually the longer one, the model learns that length wins. The first run here did exactly that."
+      },
+      {
+        "title": "Report more than the win rate",
+        "text": "Win rate against the old model rose from 50% to 64%. Answer length and a general regression suite show whether that came at a cost."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"21\" text-anchor=\"middle\">chosen ✓</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"184\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"21\" text-anchor=\"middle\">rejected ✗</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"49\" style=\"text-anchor:end;--d:0s\">net signal</text><rect x=\"118\" y=\"39\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"39\" width=\"76\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"49\" style=\"text-anchor:start;--d:0.2s\">2,000 of 5,000</text><text class=\"sb a\" x=\"118\" y=\"70\" style=\"text-anchor:start;--d:0.2s\">at 30% label noise: 5,000 × (1 − 2 × 0.3)</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"80\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"95\" text-anchor=\"middle\">base → SFT → DPO</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"110\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"125\" text-anchor=\"middle\">β 0.01 drifts</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"125\" y=\"110\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">β 0.1</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"242\" y=\"110\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"297\" y=\"125\" text-anchor=\"middle\">β 0.5 stiff</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"153\" style=\"text-anchor:end;--d:0s\">length bias</text><rect x=\"118\" y=\"143\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"143\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"153\" style=\"text-anchor:start;--d:0.2s\">+45% words</text><text class=\"tl a\" x=\"112\" y=\"175\" style=\"text-anchor:end;--d:0.1s\">balanced</text><rect x=\"118\" y=\"165\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"165\" width=\"85.5\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"175\" style=\"text-anchor:start;--d:0.30000000000000004s\">−8% words</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"201\" style=\"text-anchor:end;--d:0s\">win rate</text><rect x=\"118\" y=\"191\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"191\" width=\"121.60000000000001\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"201\" style=\"text-anchor:start;--d:0.2s\">64%</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"230\" style=\"text-anchor:middle;fill:var(--ink-2)\">against the old model (50% = no change)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Learns what reviewers prefer, not one fixed answer",
+      "No separate reward model",
+      "Stable and cheap compared with PPO",
+      "Works with LoRA adapters"
+    ],
+    "cons": [
+      "Sensitive to noisy labels",
+      "Can learn length or style shortcuts",
+      "Small beta can hurt general skills",
+      "Needs an SFT model to start from"
+    ],
+    "avoidWhen": [
+      "Collecting pairs without checking agreement",
+      "Running it on a model that cannot yet follow instructions"
+    ],
+    "tools": [
+      {
+        "name": "Hugging Face TRL",
+        "type": "Open source",
+        "what": "DPOTrainer on prompt, chosen and rejected columns",
+        "url": "https://huggingface.co/docs/trl/dpo_trainer"
+      },
+      {
+        "name": "Argilla",
+        "type": "Open source",
+        "what": "Collect and review preference labels",
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "name": "Label Studio",
+        "type": "Open source",
+        "what": "Pairwise comparison labelling",
+        "url": "https://labelstud.io"
+      },
+      {
+        "name": "OpenAI preference fine-tuning",
+        "type": "Managed service",
+        "what": "DPO on hosted models",
+        "url": "https://platform.openai.com/docs/guides/direct-preference-optimization"
+      },
+      {
+        "name": "Axolotl",
+        "type": "Open source",
+        "what": "DPO and related methods from a config",
+        "url": "https://docs.axolotl.ai"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A wealth-tech firm’s research assistant gives correct but rambling answers. Advisers compare pairs of answers. Choose how many pairs to collect, how noisy the labels are, the beta value, whether to start from the SFT model and whether chosen answers are usually the longer ones. Watch the win rate, the general regression and answer length.",
+    "controls": [
+      "Choose 1,000, 5,000 or 20,000 preference pairs and how many are labelled the wrong way.",
+      "Set beta: 0.01 lets the model drift, 0.5 keeps it close.",
+      "Toggle starting from the SFT model and a length bias in the pairs, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Win rate vs current model",
+        "meaning": "Share of held-out comparisons the tuned model wins; 50% means no change."
+      },
+      {
+        "name": "General suite change",
+        "meaning": "Points lost on a general regression suite."
+      },
+      {
+        "name": "Average answer length",
+        "meaning": "Change in answer length after tuning."
+      },
+      {
+        "name": "Net useful pairs",
+        "meaning": "Correct pairs minus those cancelled by wrong labels."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "1,000 rushed pairs",
+        "expect": "Only 400 pairs of net signal: the win rate is 54%."
+      },
+      {
+        "k": "clean",
+        "name": "5,000 filtered pairs",
+        "expect": "A 64% win rate with a 1-point general drop."
+      },
+      {
+        "k": "loose",
+        "name": "20,000 pairs, beta 0.01",
+        "expect": "A 64% win rate, but the general suite drops 6 points."
+      },
+      {
+        "k": "raw",
+        "name": "No SFT start",
+        "expect": "The same clean pairs reach only 58%, with a 3-point drop."
+      }
+    ],
+    "missions": [
+      {
+        "k": "win",
+        "text": "Reach a 62% win rate.",
+        "hint": "More clean pairs on the SFT model."
+      },
+      {
+        "k": "safe",
+        "text": "Reach 62% with a general drop of 1 point or less and no length bias.",
+        "hint": "A moderate beta keeps general skills."
+      },
+      {
+        "k": "verbose",
+        "text": "Show a model that wins 60%+ of comparisons while answers grow 40%+ longer.",
+        "hint": "What if the chosen answer is usually the longer one?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "Hugging Face TRL",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "DPOTrainer on prompt, chosen and rejected columns.",
+        "ex": "Run DPO with beta 0.1 on 5,000 adviser pairs with a LoRA adapter.",
+        "pros": [
+          "No reward model needed",
+          "Many preference methods in one library"
+        ],
+        "cons": [
+          "Sensitive to data quality",
+          "Hyperparameters matter"
+        ],
+        "url": "https://huggingface.co/docs/trl/dpo_trainer"
+      },
+      {
+        "n": "Argilla",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Collect and review preference labels with agreement tracking.",
+        "ex": "Have two advisers label each pair and keep only those they agree on.",
+        "pros": [
+          "Built for feedback data",
+          "Integrates with Hugging Face"
+        ],
+        "cons": [
+          "Another service to host",
+          "Labelling still takes people"
+        ],
+        "url": "https://docs.argilla.io"
+      },
+      {
+        "n": "Label Studio",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "General labelling tool with pairwise comparison templates.",
+        "ex": "Set up an A-or-B comparison task for research answers.",
+        "pros": [
+          "Flexible templates",
+          "Large community"
+        ],
+        "cons": [
+          "Needs setup for preference workflows",
+          "Export needs reshaping"
+        ],
+        "url": "https://labelstud.io"
+      },
+      {
+        "n": "OpenAI preference fine-tuning",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 2,
+        "best": "DPO on hosted models from preference data.",
+        "ex": "Upload chosen and rejected pairs and tune a hosted model.",
+        "pros": [
+          "No GPUs to manage",
+          "Simple data format"
+        ],
+        "cons": [
+          "Limited models and control",
+          "Usage fees"
+        ],
+        "url": "https://platform.openai.com/docs/guides/direct-preference-optimization"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I have reviewers who can compare answers",
+        "tool": "Collect pairs in Argilla, train with TRL DPO"
+      },
+      {
+        "need": "My labels are noisy",
+        "tool": "Keep only pairs reviewers agree on"
+      },
+      {
+        "need": "I use a hosted model",
+        "tool": "The provider’s preference fine-tuning"
+      }
+    ],
+    "goals": [
+      "See why clean pairs beat more pairs",
+      "See what beta trades off",
+      "Spot length bias before it ships"
+    ]
+  },
+  "practice": {
+    "scenario": "A wealth-tech firm’s research assistant gave correct but rambling answers that advisers rated below a competitor’s. Advisers compared pairs of answers for 5,000 questions. DPO on top of the existing SFT model raised the win rate against the old model from 50% to 64%. The first run had preferred longer answers every time; after balancing lengths in the pairs, gains held and answers were 8% shorter.",
+    "industries": [
+      {
+        "industry": "Wealth management",
+        "use": "Answers advisers prefer: concise, hedged, with the key number first"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Replies that resolve rather than deflect, judged by agents"
+      },
+      {
+        "industry": "Coding tools",
+        "use": "Suggestions developers accept more often"
+      }
+    ],
+    "analogy": "Teaching by comparison: instead of writing a perfect answer, a senior colleague looks at two drafts and says which is better. Many such judgements shape taste faster than one model answer.",
+    "library": {
+      "name": "Hugging Face TRL",
+      "what": "DPOTrainer takes a dataset with prompt, chosen and rejected columns and optimises the model directly on the preferences, with no separate reward model.",
+      "install": "pip install trl peft"
+    },
+    "note": "beta controls how far the model may move from the reference. Check the length of answers and a general regression suite after training, not just the win rate.",
+    "samples": [
+      {
+        "file": "train_dpo.py",
+        "language": "python",
+        "code": "from datasets import load_dataset\nfrom peft import LoraConfig\nfrom transformers import AutoModelForCausalLM\nfrom trl import DPOConfig, DPOTrainer\n\npairs = load_dataset(\"json\", data_files=\"adviser_pairs.jsonl\")[\"train\"]\n# each row: {\"prompt\": ..., \"chosen\": ..., \"rejected\": ...}\npairs = pairs.filter(lambda r: r[\"agreement\"] >= 0.75)   # drop noisy pairs\n\nmodel = AutoModelForCausalLM.from_pretrained(\"sft-research-8b\")  # start from SFT\n\ntrainer = DPOTrainer(\n    model=model,\n    args=DPOConfig(output_dir=\"dpo-research\", beta=0.1, learning_rate=1e-6,\n                   num_train_epochs=1),\n    train_dataset=pairs,\n    peft_config=LoraConfig(r=16, lora_alpha=32, target_modules=\"all-linear\",\n                           task_type=\"CAUSAL_LM\"))\ntrainer.train()"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "You have 5,000 preference pairs, and 30% of them are labelled the wrong way round. If each wrong pair cancels one correct pair, how many pairs of net useful signal remain?",
+    "answer": "Correct pairs: 3,500; wrong: 1,500. Net 3,500 − 1,500 = 2,000, which is 5,000 × (1 − 2 × 0.3). Cleaning labels to 5% noise would give 4,500: more than double the signal from the same collection effort.",
+    "expected": {
+      "value": 2000,
+      "tolerance": 1,
+      "label": "net pairs ="
+    },
+    "interview": [
+      {
+        "question": "How does DPO differ from RLHF with PPO?",
+        "answer": "RLHF trains a separate reward model on preferences and then optimises the policy against it with reinforcement learning. DPO skips both: it uses a closed-form loss on chosen and rejected pairs that raises the likelihood of the chosen answer relative to a frozen reference model. It is simpler, more stable and cheaper, though online methods can still do better on some tasks."
+      },
+      {
+        "question": "What does beta control in DPO?",
+        "answer": "How far the tuned model may drift from the reference. A small beta lets it move a lot, which can win preferences but hurt other skills; a large beta keeps it close, so it learns less. Values around 0.1 are a common starting point."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Preferring the longer answer in most pairs",
+        "fix": "Balance lengths, or the model learns to be verbose"
+      },
+      {
+        "mistake": "Running DPO on a raw base model",
+        "fix": "Start from an SFT model that already follows instructions"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dp01",
+      "kind": "single",
+      "industry": "General",
+      "question": "What data does DPO train on?",
+      "options": [
+        "Prompts with chosen and rejected answers",
+        "Only prompts",
+        "Unlabelled text",
+        "Reward scores from a verifier"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pairs of preferred and dispreferred answers."
+    },
+    {
+      "id": "dp02",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does DPO remove compared with RLHF using PPO?",
+      "options": [
+        "The need for preference data",
+        "The separate reward model and RL loop",
+        "The base model",
+        "Tokenisation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "DPO optimises directly on preferences."
+    },
+    {
+      "id": "dp03",
+      "kind": "single",
+      "industry": "General",
+      "question": "In DPO, a small beta means…",
+      "options": [
+        "The model is kept very close to the reference",
+        "The model may drift further from the reference",
+        "Training is skipped",
+        "No reference model is used"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Small beta weakens the tie to the reference."
+    },
+    {
+      "id": "dp04",
+      "kind": "single",
+      "industry": "Wealth tech",
+      "question": "30% of 5,000 pairs are flipped. How many pairs of net signal remain?",
+      "options": [
+        "1,500",
+        "2,000",
+        "3,500",
+        "5,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "5,000 × (1 − 2 × 0.3) = 2,000."
+    },
+    {
+      "id": "dp05",
+      "kind": "multi",
+      "industry": "General",
+      "question": "Which are common failure modes of preference tuning? Select all that apply.",
+      "options": [
+        "Learning to prefer longer answers",
+        "Losing general skills when beta is too small",
+        "Guaranteed factual accuracy",
+        "Removing the need to evaluate"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Length bias and drift are the classic risks."
+    },
+    {
+      "id": "dp06",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why start DPO from an SFT model?",
+      "options": [
+        "It already follows instructions and formats",
+        "DPO cannot run on smaller models",
+        "It is required by the licence",
+        "SFT models need no evaluation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Preferences refine a capable model."
+    },
+    {
+      "id": "dp07",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Reviewers disagree on 40% of pairs. What should you do?",
+      "options": [
+        "Train on all of them",
+        "Keep only pairs with agreement, and improve the guidelines",
+        "Flip them all",
+        "Double beta"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Noisy pairs cancel useful ones."
+    },
+    {
+      "id": "dp08",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is a common starting beta in DPO?",
+      "options": [
+        "0.1",
+        "10",
+        "100",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "TRL’s default is 0.1."
+    },
+    {
+      "id": "dp09",
+      "kind": "single",
+      "industry": "Coding tools",
+      "question": "Which is a natural source of preference pairs for a coding assistant?",
+      "options": [
+        "Suggestions accepted versus rejected by developers",
+        "Random code from the web",
+        "Compiler versions",
+        "Token counts"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Accept and reject signals are preferences."
+    },
+    {
+      "id": "dp10",
+      "kind": "single",
+      "industry": "General",
+      "question": "After DPO, the win rate is up but answers are 45% longer. What should you check?",
+      "options": [
+        "Whether chosen answers were usually longer in the pairs",
+        "The tokenizer version",
+        "The GPU temperature",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Length bias in the data is the usual cause."
+    },
+    {
+      "id": "dp11",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which paper introduced DPO?",
+      "options": [
+        "Rafailov et al., 2023",
+        "Hu et al., 2021",
+        "Shao et al., 2024",
+        "Hsieh et al., 2023"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Direct Preference Optimization, 2023."
+    },
+    {
+      "id": "dp12",
+      "kind": "multi",
+      "industry": "Wealth tech",
+      "question": "What should you report alongside the win rate? Select all that apply.",
+      "options": [
+        "A general regression suite",
+        "Average answer length",
+        "The model’s file name",
+        "The number of GPUs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Costs of the win show up elsewhere."
+    },
+    {
+      "id": "dp13",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does the reference model do in DPO?",
+      "options": [
+        "Anchors the tuned model so it does not drift too far",
+        "Labels the pairs",
+        "Replaces the tokenizer",
+        "Serves traffic"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The loss is relative to the reference."
+    },
+    {
+      "id": "dp14",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which is a good reason to choose DPO over SFT?",
+      "options": [
+        "Several answers are acceptable and you can say which is better, but not write the ideal one",
+        "You have no data at all",
+        "You need new facts",
+        "You need a smaller model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Comparisons are easier than ideal answers."
+    },
+    {
+      "id": "dp15",
+      "kind": "single",
+      "industry": "Media",
+      "question": "An LLM judge labels pairs and prefers confident-sounding answers. What will DPO learn?",
+      "options": [
+        "Confidence, whether or not it is warranted",
+        "Nothing",
+        "Accuracy only",
+        "Shorter answers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Judge biases pass into the model."
+    },
+    {
+      "id": "dp16",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which describes InstructGPT’s approach?",
+      "options": [
+        "SFT, then a reward model, then PPO",
+        "DPO only",
+        "RLVR only",
+        "Distillation only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The classic three-stage RLHF pipeline."
+    },
+    {
+      "id": "dp17",
+      "kind": "single",
+      "industry": "General",
+      "question": "How many epochs are typical for DPO on a few thousand pairs?",
+      "options": [
+        "About one to three",
+        "About fifty",
+        "Zero",
+        "Hundreds"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Preference tuning usually needs few passes."
+    },
+    {
+      "id": "dp18",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Pairs come only from easy prompts. What is the risk?",
+      "options": [
+        "Little improvement on the hard cases that matter",
+        "Faster training only",
+        "Better safety",
+        "No risk"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Pairs should reflect real, including hard, traffic."
+    },
+    {
+      "id": "dp19",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does a 50% win rate against the old model mean?",
+      "options": [
+        "No measurable change",
+        "Twice as good",
+        "Half as good",
+        "Perfect"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "50% is a tie."
+    },
+    {
+      "id": "dp20",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which TRL class runs DPO?",
+      "options": [
+        "DPOTrainer",
+        "SFTTrainer",
+        "GRPOTrainer",
+        "PPOConfig only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "DPOTrainer with DPOConfig."
+    }
+  ]
+}

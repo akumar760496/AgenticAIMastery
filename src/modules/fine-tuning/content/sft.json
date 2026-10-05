@@ -1,0 +1,816 @@
+{
+  "id": "sft",
+  "moduleSlug": "fine-tuning",
+  "name": "Supervised Fine-Tuning with LoRA and QLoRA",
+  "shortName": "SFT, LoRA",
+  "question": "How do I teach a model a skill or format cheaply?",
+  "summary": "Supervised fine-tuning trains a model on input–output examples of the behaviour you want. LoRA freezes the original weights and trains small low-rank matrices beside them, cutting trainable parameters by orders of magnitude; QLoRA also stores the frozen weights in 4 bits, so large models fit on a single GPU. The adapter is a small file you can swap per task.",
+  "useCases": [
+    "A consistent format, tone or house style",
+    "A narrow task with a few thousand good examples",
+    "Shrinking long prompts into the weights at high volume"
+  ],
+  "keyFacts": {
+    "label": "Numbers to know",
+    "items": [
+      {
+        "term": "LoRA",
+        "detail": "trainable A (r × d) and B (d × r) per adapted matrix; W stays frozen"
+      },
+      {
+        "term": "LoRA paper",
+        "detail": "10,000× fewer trainable parameters and 3× less GPU memory than full fine-tuning of GPT-3 175B"
+      },
+      {
+        "term": "QLoRA",
+        "detail": "4-bit NF4 base weights plus LoRA; a 65B model on one 48 GB GPU"
+      },
+      {
+        "term": "Full fine-tuning memory",
+        "detail": "about 16 bytes per parameter with Adam in mixed precision"
+      },
+      {
+        "term": "Learning rate",
+        "detail": "around 1e-4 for adapters versus about 2e-5 for full fine-tuning"
+      },
+      {
+        "term": "Loss on outputs only",
+        "detail": "completion-only or assistant-only loss, not on the prompt"
+      }
+    ]
+  },
+  "steps": [
+    "Collect a few thousand clean, representative examples in chat format",
+    "Start with LoRA on all linear layers, rank 8–16, loss on completions only",
+    "Use QLoRA if the model does not fit in memory",
+    "Hold out an eval set; stop before validation loss rises"
+  ],
+  "pitfalls": [
+    "Too many epochs on small data: the model memorises and overfits",
+    "Training data that disagrees with the prompt you will use in production",
+    "No held-out set, so overfitting goes unnoticed"
+  ],
+  "tools": [
+    "Hugging Face TRL",
+    "PEFT",
+    "Unsloth",
+    "Axolotl",
+    "bitsandbytes"
+  ],
+  "remember": "Freeze the model, train a small adapter, hold out a test set.",
+  "caption": "Trainable parameters for one 4096 × 4096 matrix: full versus LoRA rank 16.",
+  "comparison": {
+    "scope": "Skills, formats, style",
+    "cost": 3,
+    "needs": "Thousands of good examples, GPUs",
+    "best": "Overfitting small data"
+  },
+  "diagram": {
+    "file": "diagrams/sft.svg"
+  },
+  "lesson": {
+    "file": "train_sft.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "data = load_dataset(\"json\", data_files=\"support_chats.jsonl\")[\"train\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "split = data.train_test_split(test_size=0.1, seed=7)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = AutoModelForCausalLM.from_pretrained(",
+        "steps": []
+      },
+      {
+        "text": "    \"your-org/base-8b\",",
+        "steps": []
+      },
+      {
+        "text": "    quantization_config=BitsAndBytesConfig(",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        load_in_4bit=True, bnb_4bit_quant_type=\"nf4\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        bnb_4bit_compute_dtype=torch.bfloat16))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "trainer = SFTTrainer(",
+        "steps": []
+      },
+      {
+        "text": "    model=model,",
+        "steps": []
+      },
+      {
+        "text": "    args=SFTConfig(output_dir=\"sft-support\", learning_rate=1e-4,",
+        "steps": []
+      },
+      {
+        "text": "                   num_train_epochs=2,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                   assistant_only_loss=True),",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    train_dataset=split[\"train\"], eval_dataset=split[\"test\"],",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    peft_config=LoraConfig(r=16, lora_alpha=32,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                           target_modules=\"all-linear\",",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                           task_type=\"CAUSAL_LM\"))",
+        "steps": []
+      },
+      {
+        "text": "trainer.train()",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Collect reviewed conversations",
+        "text": "5,000 real support chats, each checked so the reply follows the four-part format. The model learns exactly what it is shown, errors included."
+      },
+      {
+        "title": "Hold out a test set",
+        "text": "10% is set aside and never trained on. Only held-out scores say whether the model learned the format or memorised the examples."
+      },
+      {
+        "title": "Train on the replies only",
+        "text": "assistant_only_loss computes the loss on the assistant’s turns, so the model learns to answer, not to imitate customers."
+      },
+      {
+        "title": "Add a LoRA adapter",
+        "text": "The 8B weights stay frozen. Small rank-16 matrices beside every linear layer are trained: about 0.5% of the parameters."
+      },
+      {
+        "title": "Quantise the base (QLoRA)",
+        "text": "Storing the frozen base in 4-bit NF4 cuts its memory about four times, so training fits on a single 24 GB GPU."
+      },
+      {
+        "title": "Two epochs, then evaluate",
+        "text": "More passes over 5,000 examples start to overfit. Format compliance on the held-out set rose from 81% to 97%."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">5,000 reviewed chats</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"34\" width=\"280\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"148\" y=\"49\" text-anchor=\"middle\">train 90%</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"294\" y=\"34\" width=\"58\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"323\" y=\"49\" text-anchor=\"middle\">test</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"62\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"77\" text-anchor=\"middle\">customer: no loss</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"184\" y=\"62\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"77\" text-anchor=\"middle\">assistant: loss</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"94\" width=\"150\" height=\"64\" rx=\"7\"/><text class=\"lb\" x=\"83\" y=\"123\">W frozen</text><text class=\"sb\" x=\"83\" y=\"138\">8B, 16-bit</text></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"176\" y=\"94\" width=\"40\" height=\"64\" rx=\"7\"/><text class=\"lb\" x=\"196\" y=\"130.5\">A</text></g><g class=\"a \" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"222\" y=\"94\" width=\"40\" height=\"64\" rx=\"7\"/><text class=\"lb\" x=\"242\" y=\"130.5\">B</text></g><text class=\"mono a\" x=\"270\" y=\"122\" style=\"text-anchor:start;--d:0.3s\">r = 16</text><text class=\"sb a\" x=\"270\" y=\"138\" style=\"text-anchor:start;--d:0.35s\">≈ 0.5% trained</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"179\" style=\"text-anchor:end;--d:0s\">16-bit base</text><rect x=\"118\" y=\"169\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"169\" width=\"190\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"179\" style=\"text-anchor:start;--d:0.2s\">16 GB</text><text class=\"tl a\" x=\"112\" y=\"201\" style=\"text-anchor:end;--d:0.1s\">4-bit base</text><rect x=\"118\" y=\"191\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"191\" width=\"53.2\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"201\" style=\"text-anchor:start;--d:0.30000000000000004s\">4.4 GB</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><text class=\"tag-t\" x=\"180\" y=\"232\" style=\"text-anchor:middle;fill:var(--pass)\">format compliance 81% → 97% on held-out chats</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Consistent format, tone and narrow skills",
+      "Shorter prompts at high volume",
+      "LoRA adapters are small and swappable",
+      "QLoRA fits large models on one GPU"
+    ],
+    "cons": [
+      "Needs thousands of clean examples",
+      "Overfits small datasets",
+      "Can forget general skills",
+      "Must be redone when the base model changes"
+    ],
+    "avoidWhen": [
+      "Adding facts that change",
+      "Tasks a good prompt already solves on your evals"
+    ],
+    "tools": [
+      {
+        "name": "Hugging Face TRL",
+        "type": "Open source",
+        "what": "SFTTrainer with PEFT adapters",
+        "url": "https://huggingface.co/docs/trl/sft_trainer"
+      },
+      {
+        "name": "Hugging Face PEFT",
+        "type": "Open source",
+        "what": "LoRA, QLoRA and other adapters",
+        "url": "https://huggingface.co/docs/peft"
+      },
+      {
+        "name": "Unsloth",
+        "type": "Open source",
+        "what": "Faster, lower-memory LoRA and QLoRA training",
+        "url": "https://docs.unsloth.ai"
+      },
+      {
+        "name": "Axolotl",
+        "type": "Open source",
+        "what": "Config-driven fine-tuning pipelines",
+        "url": "https://docs.axolotl.ai"
+      },
+      {
+        "name": "OpenAI fine-tuning",
+        "type": "Managed service",
+        "what": "Supervised fine-tuning of hosted models",
+        "url": "https://platform.openai.com/docs/guides/supervised-fine-tuning"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A payments company wants support replies in a fixed four-part format. Choose the base model size, full fine-tuning, LoRA or QLoRA, the adapter rank, which layers get adapters, the number of examples and the epochs. Watch held-out accuracy, training accuracy, the share of parameters trained and the GPU memory needed.",
+    "controls": [
+      "Choose the base model (1B, 8B or 70B) and the method: full, LoRA or QLoRA.",
+      "Set the LoRA rank and whether adapters go on attention layers only or all linear layers.",
+      "Set the number of examples and epochs, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Held-out accuracy",
+        "meaning": "Format and content correctness on the 10% of examples never trained on."
+      },
+      {
+        "name": "Training accuracy",
+        "meaning": "The same score on the training data; far above held-out means overfitting."
+      },
+      {
+        "name": "Trainable parameters",
+        "meaning": "Share and number of parameters actually trained."
+      },
+      {
+        "name": "GPU memory · fits on",
+        "meaning": "Estimated training memory and the smallest single GPU (24, 48 or 80 GB) that holds it."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Full fine-tuning, 8B",
+        "expect": "About 87% held-out after one epoch, but 130 GB of memory: several GPUs."
+      },
+      {
+        "k": "lora",
+        "name": "LoRA, 8B",
+        "expect": "0.52% of parameters trained in about 19 GB; 87% after two epochs."
+      },
+      {
+        "k": "big",
+        "name": "LoRA on 70B",
+        "expect": "97% held-out, but a 16-bit 70B base needs about 161 GB."
+      },
+      {
+        "k": "over",
+        "name": "500 examples, five epochs",
+        "expect": "Training accuracy near 100%, held-out 73%: memorising."
+      }
+    ],
+    "missions": [
+      {
+        "k": "big",
+        "text": "Tune the 70B model within one 80 GB GPU.",
+        "hint": "Store the frozen base in 4-bit."
+      },
+      {
+        "k": "acc",
+        "text": "Reach 90% held-out accuracy with no overfitting.",
+        "hint": "More data, or a bigger base, with a sensible number of epochs."
+      },
+      {
+        "k": "lean",
+        "text": "Train under 1% of parameters, reach 87.5% or more and fit in 24 GB.",
+        "hint": "An adapter on the 8B model, with enough data and epochs."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Hugging Face TRL",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "SFTTrainer for supervised fine-tuning, with PEFT adapters built in.",
+        "ex": "Train a LoRA adapter on 5,000 support chats with assistant-only loss.",
+        "pros": [
+          "Standard, well maintained",
+          "Same library for DPO and GRPO"
+        ],
+        "cons": [
+          "Fast-moving API",
+          "You manage the GPUs"
+        ],
+        "url": "https://huggingface.co/docs/trl/sft_trainer"
+      },
+      {
+        "n": "Hugging Face PEFT",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "LoRA, QLoRA and other adapter methods for any Transformers model.",
+        "ex": "Configure rank, alpha and target modules for an 8B model.",
+        "pros": [
+          "Small adapters, easy to swap",
+          "Works with quantised models"
+        ],
+        "cons": [
+          "Many options to understand",
+          "Merging adapters needs care"
+        ],
+        "url": "https://huggingface.co/docs/peft"
+      },
+      {
+        "n": "Unsloth",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Faster, lower-memory LoRA and QLoRA training on one GPU.",
+        "ex": "QLoRA-tune an 8B model on a 24 GB card in a few hours.",
+        "pros": [
+          "Big memory and speed savings",
+          "Beginner-friendly notebooks"
+        ],
+        "cons": [
+          "Mainly single-GPU",
+          "Supports selected architectures"
+        ],
+        "url": "https://docs.unsloth.ai"
+      },
+      {
+        "n": "OpenAI supervised fine-tuning",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 3,
+        "best": "Fine-tune a hosted model without managing GPUs.",
+        "ex": "Upload JSONL conversations and tune a small hosted model for format.",
+        "pros": [
+          "No infrastructure",
+          "Hosted inference included"
+        ],
+        "cons": [
+          "Limited control and model choice",
+          "Per-token training and usage fees"
+        ],
+        "url": "https://platform.openai.com/docs/guides/supervised-fine-tuning"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I have one GPU and an 8B model",
+        "tool": "QLoRA with Unsloth or TRL + PEFT"
+      },
+      {
+        "need": "I do not want to run GPUs",
+        "tool": "A managed fine-tuning service"
+      },
+      {
+        "need": "I need a 70B model tuned",
+        "tool": "QLoRA on one 80 GB GPU, or LoRA across several"
+      }
+    ],
+    "goals": [
+      "See why adapters train a tiny share of parameters",
+      "See how 4-bit bases cut memory",
+      "Recognise overfitting on small datasets"
+    ]
+  },
+  "practice": {
+    "scenario": "A payments company wanted support replies in a fixed four-part format and a consistent tone for 1.5 million conversations a month. Prompting reached 81% format compliance on a large model. Supervised fine-tuning of an 8B open model with LoRA on 5,000 reviewed conversations reached 97% compliance on a held-out set. The adapter was 0.5% of the model’s parameters, trained in under three hours on one GPU with QLoRA, and served at a fraction of the cost.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Consistent support replies in a fixed format and tone"
+      },
+      {
+        "industry": "Legal tech",
+        "use": "Clause summaries in a house style reviewers expect"
+      },
+      {
+        "industry": "Retail",
+        "use": "Product descriptions in brand voice for thousands of SKUs"
+      }
+    ],
+    "analogy": "Adding a specialist attachment to a machine rather than rebuilding the machine: the base stays frozen and a small adapter learns the new job. QLoRA stores the machine compressed so it fits on a smaller bench.",
+    "library": {
+      "name": "Hugging Face TRL + PEFT",
+      "what": "SFTTrainer runs supervised fine-tuning; passing a LoraConfig trains a LoRA adapter instead of all the weights.",
+      "install": "pip install trl peft bitsandbytes"
+    },
+    "note": "assistant_only_loss trains only on the assistant’s turns. Keep 10% of the data aside and evaluate on it; never tune on the test set.",
+    "samples": [
+      {
+        "file": "train_sft.py",
+        "language": "python",
+        "code": "import torch\nfrom datasets import load_dataset\nfrom peft import LoraConfig\nfrom transformers import AutoModelForCausalLM, BitsAndBytesConfig\nfrom trl import SFTConfig, SFTTrainer\n\ndata = load_dataset(\"json\", data_files=\"support_chats.jsonl\")[\"train\"]\nsplit = data.train_test_split(test_size=0.1, seed=7)    # hold out a test set\n\nmodel = AutoModelForCausalLM.from_pretrained(            # QLoRA: 4-bit base\n    \"your-org/base-8b\",\n    quantization_config=BitsAndBytesConfig(\n        load_in_4bit=True, bnb_4bit_quant_type=\"nf4\",\n        bnb_4bit_compute_dtype=torch.bfloat16))\n\ntrainer = SFTTrainer(\n    model=model,\n    args=SFTConfig(output_dir=\"sft-support\", learning_rate=1e-4,\n                   num_train_epochs=2, assistant_only_loss=True),\n    train_dataset=split[\"train\"], eval_dataset=split[\"test\"],\n    peft_config=LoraConfig(r=16, lora_alpha=32, target_modules=\"all-linear\",\n                           task_type=\"CAUSAL_LM\"))\ntrainer.train()\ntrainer.save_model(\"sft-support/adapter\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "LoRA adds two matrices A (r × d) and B (d × r) beside a frozen d × d weight. For d = 4,096 and rank r = 16, how many trainable parameters does one such weight get?",
+    "answer": "2 × 4,096 × 16 = 131,072, against 16,777,216 in the frozen matrix: about 0.78%. Across the model, adapters usually total well under 1% of the parameters, which is why they train and store cheaply.",
+    "expected": {
+      "value": 131072,
+      "tolerance": 1,
+      "label": "trainable parameters ="
+    },
+    "interview": [
+      {
+        "question": "How do LoRA and QLoRA differ?",
+        "answer": "Both freeze the base model and train small low-rank adapters. QLoRA also stores the frozen base in 4-bit NF4, which cuts memory by roughly four times compared with 16-bit weights, so a 70B model can be tuned on a single 48–80 GB GPU. Quality is usually close to LoRA; training is somewhat slower."
+      },
+      {
+        "question": "How do you know an SFT run has overfitted?",
+        "answer": "Training loss keeps falling while loss or accuracy on a held-out set stops improving or gets worse, often after too many epochs on a small dataset. Outputs start copying training examples verbatim. Hold out a test set from the start, evaluate every epoch and keep the best checkpoint."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Training three or more epochs on 500 examples",
+        "fix": "Use more data or fewer epochs, and watch held-out loss"
+      },
+      {
+        "mistake": "Computing loss on the user’s turns too",
+        "fix": "Train only on the assistant’s replies"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sf01",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does LoRA train?",
+      "options": [
+        "All the weights",
+        "Small low-rank matrices beside frozen weights",
+        "Only the embeddings",
+        "The tokenizer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The base is frozen; adapters are trained."
+    },
+    {
+      "id": "sf02",
+      "kind": "single",
+      "industry": "General",
+      "question": "A LoRA adapter at rank 16 on a 4,096 × 4,096 weight has how many trainable parameters?",
+      "options": [
+        "16,384",
+        "65,536",
+        "131,072",
+        "16.8 million"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "2 × 4,096 × 16 = 131,072."
+    },
+    {
+      "id": "sf03",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does QLoRA add to LoRA?",
+      "options": [
+        "A reward model",
+        "Storing the frozen base in 4-bit precision",
+        "More epochs",
+        "Retrieval"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "4-bit NF4 storage cuts memory about four times."
+    },
+    {
+      "id": "sf04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Training accuracy is 99% and held-out accuracy 73%. What is happening?",
+      "options": [
+        "Underfitting",
+        "Overfitting",
+        "Data leakage into the test set",
+        "A tokenizer bug"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A big train–test gap means memorisation."
+    },
+    {
+      "id": "sf05",
+      "kind": "multi",
+      "industry": "Customer support",
+      "question": "Which practices reduce overfitting in SFT? Select all that apply.",
+      "options": [
+        "More good examples",
+        "Fewer epochs on small datasets",
+        "Evaluating on the training data",
+        "Training for ten epochs on 500 examples"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "More data and fewer passes help; the others hide or cause overfitting."
+    },
+    {
+      "id": "sf06",
+      "kind": "single",
+      "industry": "General",
+      "question": "Roughly how much memory does full fine-tuning need per parameter with Adam in mixed precision?",
+      "options": [
+        "2 bytes",
+        "4 bytes",
+        "About 16 bytes",
+        "0.5 bytes"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Weights, gradients and optimiser states add up to about 16 bytes."
+    },
+    {
+      "id": "sf07",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why is assistant_only_loss (or completion-only loss) useful?",
+      "options": [
+        "It trains only on the replies the model should produce",
+        "It speeds up tokenisation",
+        "It removes the need for a test set",
+        "It quantises the model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The model learns to answer, not to imitate users."
+    },
+    {
+      "id": "sf08",
+      "kind": "single",
+      "industry": "General",
+      "question": "The QLoRA paper showed which result?",
+      "options": [
+        "A 65B model tuned on a single 48 GB GPU",
+        "Tuning without data",
+        "A 1T model on a laptop",
+        "No loss of memory"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "4-bit base plus LoRA fitted 65B on one 48 GB GPU."
+    },
+    {
+      "id": "sf09",
+      "kind": "single",
+      "industry": "Legal tech",
+      "question": "Adapters on all linear layers versus attention only usually give…",
+      "options": [
+        "Slightly better quality for a few more parameters",
+        "Worse quality always",
+        "No difference ever",
+        "Full fine-tuning memory use"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "More modules adapt more of the network at small cost."
+    },
+    {
+      "id": "sf10",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why are LoRA adapters convenient in production?",
+      "options": [
+        "They are small files that can be swapped or merged",
+        "They need no base model",
+        "They make inference slower by design",
+        "They cannot be versioned"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One base can serve several task adapters."
+    },
+    {
+      "id": "sf11",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "You have 300 noisy examples. What is the best move before tuning?",
+      "options": [
+        "Tune for many epochs",
+        "Clean them and collect more, or improve the prompt",
+        "Raise the learning rate",
+        "Use full fine-tuning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Quality and quantity of data matter most."
+    },
+    {
+      "id": "sf12",
+      "kind": "multi",
+      "industry": "General",
+      "question": "Which belong in an SFT dataset for a support bot? Select all that apply.",
+      "options": [
+        "Real customer messages with reviewed replies",
+        "Held-out test conversations",
+        "Replies that follow the target format",
+        "Random web text"
+      ],
+      "correct": [
+        0,
+        2
+      ],
+      "explanation": "Test cases stay out of training; real, correct, formatted examples go in."
+    },
+    {
+      "id": "sf13",
+      "kind": "single",
+      "industry": "General",
+      "question": "What does the LoRA rank r control?",
+      "options": [
+        "The size of the adapter’s inner dimension",
+        "The number of GPUs",
+        "The context length",
+        "The learning rate"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Higher rank, more capacity and more parameters."
+    },
+    {
+      "id": "sf14",
+      "kind": "single",
+      "industry": "General",
+      "question": "The original LoRA paper reported, for GPT-3 175B, trainable parameters reduced by about…",
+      "options": [
+        "2×",
+        "100×",
+        "10,000×",
+        "1,000,000×"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "About 10,000 times fewer, with 3× less GPU memory."
+    },
+    {
+      "id": "sf15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An 8B model with QLoRA needs roughly how much memory for the 4-bit base weights?",
+      "options": [
+        "About 4–5 GB",
+        "About 16 GB",
+        "About 64 GB",
+        "About 128 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "About half a byte per parameter plus overheads."
+    },
+    {
+      "id": "sf16",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which is a typical LoRA learning rate compared with full fine-tuning?",
+      "options": [
+        "Higher, e.g. 1e-4 vs 1e-5",
+        "Exactly the same always",
+        "Zero",
+        "Negative"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Adapters usually use higher learning rates."
+    },
+    {
+      "id": "sf17",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "After SFT, the model follows the new format but general answers got worse. What is this called?",
+      "options": [
+        "Catastrophic forgetting",
+        "Tokenisation drift",
+        "Prompt injection",
+        "Quantisation"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Narrow tuning can erode other skills."
+    },
+    {
+      "id": "sf18",
+      "kind": "single",
+      "industry": "General",
+      "question": "When should you merge a LoRA adapter into the base weights?",
+      "options": [
+        "To serve one task with no adapter overhead",
+        "Before training",
+        "Never, it is impossible",
+        "To make it trainable again"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Merging removes the extra matrix multiply at inference."
+    },
+    {
+      "id": "sf19",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "How should the held-out set be chosen?",
+      "options": [
+        "Randomly or by customer, before training, and never trained on",
+        "From the training data after training",
+        "Only the easiest cases",
+        "Only from synthetic data"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Split first; keep it untouched."
+    },
+    {
+      "id": "sf20",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which library provides SFTTrainer?",
+      "options": [
+        "Hugging Face TRL",
+        "NumPy",
+        "Flask",
+        "Pandas"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "TRL provides SFT, DPO and GRPO trainers."
+    }
+  ]
+}

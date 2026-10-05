@@ -1,0 +1,281 @@
+{
+  "slug": "multi-agent",
+  "number": 10,
+  "techniqueOrder": [
+    "whenmulti",
+    "supervisor",
+    "handoffs",
+    "sharedstate",
+    "debate",
+    "mafail",
+    "subagents"
+  ],
+  "glossary": [
+    {
+      "term": "orchestrator",
+      "definition": "The agent that plans a task, sends pieces to worker agents and merges their results."
+    },
+    {
+      "term": "sub-agent",
+      "definition": "An agent started by another agent to do one piece of work in its own, fresh context."
+    },
+    {
+      "term": "context isolation",
+      "definition": "Keeping each agent’s intermediate reading and tool calls out of other agents’ context windows."
+    },
+    {
+      "term": "handoff",
+      "definition": "Transferring ownership of a live conversation from one agent to another, exposed to the model as a tool."
+    },
+    {
+      "term": "triage agent",
+      "definition": "The first agent in a support flow; it classifies the request and hands it to a specialist."
+    },
+    {
+      "term": "blackboard",
+      "definition": "A shared store that several agents read from and write to, such as a typed graph state."
+    },
+    {
+      "term": "reducer",
+      "definition": "A function that says how a new update merges with a state key, for example appending to a list."
+    },
+    {
+      "term": "provenance",
+      "definition": "A record of which agent wrote an entry and from which source."
+    },
+    {
+      "term": "A2A",
+      "definition": "Agent2Agent, an open protocol for messages and tasks between separate agent systems."
+    },
+    {
+      "term": "majority vote",
+      "definition": "Choosing the answer given by more than half of the agents."
+    },
+    {
+      "term": "degeneration of thought",
+      "definition": "An agent’s tendency to stick with its first answer even when it is wrong."
+    },
+    {
+      "term": "termination condition",
+      "definition": "A rule that ends a multi-agent run, such as a message, token or time cap."
+    },
+    {
+      "term": "MAST",
+      "definition": "A taxonomy of 14 multi-agent failure modes in 3 categories, built from over 1,600 traces."
+    },
+    {
+      "term": "wall time",
+      "definition": "Elapsed real time from start to finish, as opposed to the total compute or tokens used."
+    },
+    {
+      "term": "fan-out and fan-in",
+      "definition": "Starting many independent pieces of work at once, then collecting and combining their results in one step."
+    },
+    {
+      "term": "condensed return",
+      "definition": "The short, fixed-format result a sub-agent sends back, such as a card of at most 500 tokens, instead of its full transcript."
+    },
+    {
+      "term": "merge check",
+      "definition": "A fan-in step that compares results for shared figures, units, conflicts and gaps before they are combined."
+    },
+    {
+      "term": "concurrency cap",
+      "definition": "The maximum number of sub-agents or calls allowed to run at the same time, often enforced with a semaphore."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: How we built our multi-agent research system",
+      "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    },
+    {
+      "id": "S2",
+      "title": "Cognition: Don’t build multi-agents (Walden Yan, 2025)",
+      "url": "https://cognition.com/blog/dont-build-multi-agents"
+    },
+    {
+      "id": "S3",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "id": "S4",
+      "title": "Claude Agent SDK: subagents",
+      "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+    },
+    {
+      "id": "S5",
+      "title": "LangGraph supervisor library reference",
+      "url": "https://reference.langchain.com/python/langgraph-supervisor"
+    },
+    {
+      "id": "S6",
+      "title": "OpenAI Agents SDK: handoffs",
+      "url": "https://openai.github.io/openai-agents-python/handoffs/"
+    },
+    {
+      "id": "S7",
+      "title": "OpenAI Agents SDK: running agents",
+      "url": "https://openai.github.io/openai-agents-python/running_agents/"
+    },
+    {
+      "id": "S8",
+      "title": "OpenAI Agents SDK: orchestrating multiple agents",
+      "url": "https://openai.github.io/openai-agents-python/multi_agent/"
+    },
+    {
+      "id": "S9",
+      "title": "LangChain docs: multi-agent handoffs",
+      "url": "https://docs.langchain.com/oss/python/langchain/multi-agent/handoffs"
+    },
+    {
+      "id": "S10",
+      "title": "langgraph-swarm (GitHub)",
+      "url": "https://github.com/langchain-ai/langgraph-swarm-py"
+    },
+    {
+      "id": "S11",
+      "title": "LangGraph Graph API: state, reducers and recursion limit",
+      "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+    },
+    {
+      "id": "S12",
+      "title": "MetaGPT: meta programming for a multi-agent collaborative framework (Hong et al., 2023)",
+      "url": "https://arxiv.org/abs/2308.00352"
+    },
+    {
+      "id": "S13",
+      "title": "Exploring advanced LLM multi-agent systems based on blackboard architecture (Han et al., 2025)",
+      "url": "https://arxiv.org/abs/2507.01701"
+    },
+    {
+      "id": "S14",
+      "title": "A2A protocol specification",
+      "url": "https://a2a-protocol.org/latest/specification/"
+    },
+    {
+      "id": "S15",
+      "title": "Improving factuality and reasoning through multiagent debate (Du et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.14325"
+    },
+    {
+      "id": "S16",
+      "title": "Encouraging divergent thinking through multi-agent debate (Liang et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.19118"
+    },
+    {
+      "id": "S17",
+      "title": "Should we be going MAD? A look at multi-agent debate strategies (Smit et al., 2023)",
+      "url": "https://arxiv.org/abs/2311.17371"
+    },
+    {
+      "id": "S18",
+      "title": "Debate or vote: which yields better decisions in multi-agent LLMs? (Choi, Zhu and Li, 2025)",
+      "url": "https://arxiv.org/abs/2508.17536"
+    },
+    {
+      "id": "S19",
+      "title": "Why do multi-agent LLM systems fail? MAST (Cemri et al., 2025)",
+      "url": "https://arxiv.org/abs/2503.13657"
+    },
+    {
+      "id": "S20",
+      "title": "MAST paper, HTML version with per-mode shares",
+      "url": "https://arxiv.org/html/2503.13657"
+    },
+    {
+      "id": "S21",
+      "title": "AutoGen AgentChat: termination conditions",
+      "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html"
+    },
+    {
+      "id": "S22",
+      "title": "Magentic-One: a generalist multi-agent system (Fourney et al., 2024)",
+      "url": "https://arxiv.org/abs/2411.04468"
+    },
+    {
+      "id": "S23",
+      "title": "AutoGen (GitHub; maintenance mode)",
+      "url": "https://github.com/microsoft/autogen"
+    },
+    {
+      "id": "S24",
+      "title": "CrewAI: processes",
+      "url": "https://docs.crewai.com/en/concepts/processes"
+    },
+    {
+      "id": "S25",
+      "title": "Microsoft Agent Framework overview",
+      "url": "https://learn.microsoft.com/en-us/agent-framework/overview/"
+    },
+    {
+      "id": "S26",
+      "title": "MAST taxonomy and dataset (GitHub)",
+      "url": "https://github.com/multi-agent-systems-failure-taxonomy/MAST"
+    },
+    {
+      "id": "S27",
+      "title": "Claude Agent SDK: Python reference",
+      "url": "https://code.claude.com/docs/en/agent-sdk/python"
+    },
+    {
+      "id": "S28",
+      "title": "LangGraph: workflows and agents (orchestrator–worker with Send)",
+      "url": "https://docs.langchain.com/oss/python/langgraph/workflows-agents"
+    },
+    {
+      "id": "S29",
+      "title": "Google ADK: parallel agents",
+      "url": "https://google.github.io/adk-docs/agents/workflow-agents/parallel-agents/"
+    },
+    {
+      "id": "S30",
+      "title": "Python documentation: coroutines and tasks (gather, TaskGroup, Semaphore)",
+      "url": "https://docs.python.org/3/library/asyncio-task.html"
+    },
+    {
+      "id": "S31",
+      "title": "Claude Code: subagents",
+      "url": "https://code.claude.com/docs/en/sub-agents"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Is the work really parallel, or would one agent do?",
+      "techniqueId": "whenmulti",
+      "advice": "Sketch the task graph, count independent branches, and split only if the time saved is worth about 15× the tokens."
+    },
+    {
+      "symptom": "You want one agent to split a job into isolated pieces",
+      "techniqueId": "supervisor",
+      "advice": "Use an orchestrator with briefed, tool-scoped workers that return short summaries."
+    },
+    {
+      "symptom": "A specialist should take over the conversation",
+      "techniqueId": "handoffs",
+      "advice": "Hand off with distinct descriptions, a typed payload and a cap on hops."
+    },
+    {
+      "symptom": "Agents lose or overwrite each other’s findings",
+      "techniqueId": "sharedstate",
+      "advice": "Type the shared state, add reducers, scope reads and record provenance."
+    },
+    {
+      "symptom": "Would a second opinion catch errors, and is it worth the cost?",
+      "techniqueId": "debate",
+      "advice": "Start with majority voting over independent agents; add debate rounds only if they beat it."
+    },
+    {
+      "symptom": "Runs loop, stall or overspend",
+      "techniqueId": "mafail",
+      "advice": "Combine message, token and time caps with OR, detect repetition and verify before stopping."
+    },
+    {
+      "symptom": "Many independent pieces take too long one after another, and one context cannot hold them all",
+      "techniqueId": "subagents",
+      "advice": "Fan out one isolated sub-agent per piece, pass shared inputs in the brief, return cards of at most 500 tokens and run a merge check."
+    }
+  ]
+}

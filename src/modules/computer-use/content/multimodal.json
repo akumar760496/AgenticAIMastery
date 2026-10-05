@@ -1,0 +1,799 @@
+{
+  "id": "multimodal",
+  "moduleSlug": "computer-use",
+  "name": "Multimodal Inputs",
+  "shortName": "Multimodal",
+  "question": "How should the agent read documents, images and screenshots?",
+  "summary": "Multimodal models read images directly: scanned documents, phone photos, screenshots and charts. Quality depends on the input: deskewing, cropping and resizing to the model’s limits matter, and small text may need tiling or zoom. For fields that matter, such as KYC details or claim amounts, a second reader such as OCR or a second model cross-checks the first, and disagreements go to a person.",
+  "useCases": [
+    "KYC documents and address proofs",
+    "Claim photos and receipts",
+    "Screenshots sent by customers"
+  ],
+  "keyFacts": {
+    "label": "Choices",
+    "items": [
+      {
+        "term": "Vision model",
+        "detail": "reads layout and context"
+      },
+      {
+        "term": "OCR then LLM",
+        "detail": "cheaper, weaker on handwriting"
+      },
+      {
+        "term": "Cross-check",
+        "detail": "two readers; disagreements to humans"
+      },
+      {
+        "term": "Preprocessing",
+        "detail": "deskew, crop, resize, denoise"
+      },
+      {
+        "term": "Resolution",
+        "detail": "too low loses text; tiles cost more"
+      },
+      {
+        "term": "Validation",
+        "detail": "checksums and formats on extracted fields"
+      }
+    ]
+  },
+  "steps": [
+    "Preprocess images before the model sees them",
+    "Extract into a schema with per-field confidence",
+    "Cross-check important fields with a second reader",
+    "Validate formats and route disagreements to people"
+  ],
+  "pitfalls": [
+    "Sending huge images that the API downscales anyway",
+    "Trusting a single read for money or identity fields",
+    "Ignoring handwriting and regional scripts in evals"
+  ],
+  "tools": [
+    "Claude, GPT and Gemini vision models",
+    "Tesseract, Google Document AI, Azure Document Intelligence",
+    "OpenCV for preprocessing",
+    "Structured outputs (Panel 13)"
+  ],
+  "remember": "Clean the image, read it twice, check the fields.",
+  "caption": "Illustrative accuracy for printed and handwritten regional documents.",
+  "comparison": {
+    "scope": "Images and documents",
+    "cost": 2,
+    "needs": "Preprocessing and a schema",
+    "best": "Silent misreads"
+  },
+  "diagram": {
+    "file": "diagrams/multimodal.svg"
+  },
+  "lesson": {
+    "file": "read_claim_doc.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def preprocess(path):",
+        "steps": []
+      },
+      {
+        "text": "    img = cv2.imread(path)",
+        "steps": []
+      },
+      {
+        "text": "    img = deskew(crop_to_document(img))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    scale = 1568 / max(img.shape[:2])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    img = cv2.resize(img, None, fx=scale, fy=scale)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return cv2.imencode(\".jpg\", img)[1].tobytes()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def read(path):",
+        "steps": []
+      },
+      {
+        "text": "    jpg = preprocess(path)",
+        "steps": []
+      },
+      {
+        "text": "    fields = vision_extract(jpg, schema=ClaimDocument)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    ocr_text = pytesseract.image_to_string(to_array(jpg), lang=\"hin+eng+mar\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    disagreements = [f for f in (\"total_amount\", \"bill_date\", \"patient_name\")",
+        "steps": []
+      },
+      {
+        "text": "                     if not appears_in(fields[f], ocr_text)]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    if disagreements:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return {\"status\": \"review\", \"fields\": fields, \"check\": disagreements}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return {\"status\": \"accepted\", \"fields\": fields}",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Straighten and crop",
+        "text": "Phone photos are tilted and include the table they sit on. Deskewing and cropping to the document gives the model a clean page."
+      },
+      {
+        "title": "Resize to the model’s limit",
+        "text": "Very large images are downscaled by the API anyway; resizing yourself keeps text as legible as possible within the limit."
+      },
+      {
+        "title": "Read into a schema",
+        "text": "The vision model extracts named, typed fields, so its output can be validated rather than parsed from prose."
+      },
+      {
+        "title": "Read it again, differently",
+        "text": "OCR independently reads the same image. Amounts, dates and names must appear in both readings."
+      },
+      {
+        "title": "Disagreements go to a person",
+        "text": "When the two readers disagree, an assessor checks the document. Most errors are caught here."
+      },
+      {
+        "title": "Accept the rest",
+        "text": "Documents where both agree go straight through. Wrong amounts reaching the claims system fell below 3%."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"21\" text-anchor=\"middle\">tilted phone photo</text></g><text class=\"tl a\" x=\"184\" y=\"21\" style=\"text-anchor:start;--d:0.1s\">→</text><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"198\" y=\"6\" width=\"154\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"275\" y=\"21\" text-anchor=\"middle\">straight, cropped</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"34\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"49\" text-anchor=\"middle\">long edge 1,568 px</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"62\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"77\" text-anchor=\"middle\">{total_amount: 18450, bill_date: …}</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"90\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"105\" text-anchor=\"middle\">vision: 18,450</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"90\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"105\" text-anchor=\"middle\">OCR: 18,450</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"118\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"133\" text-anchor=\"middle\">disagree on 1 in 10 → assessor</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"163\" style=\"text-anchor:end;--d:0s\">OCR only</text><rect x=\"118\" y=\"153\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"153\" width=\"45\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"163\" style=\"text-anchor:start;--d:0.2s\">30% wrong</text><text class=\"tl a\" x=\"112\" y=\"185\" style=\"text-anchor:end;--d:0.1s\">read twice</text><rect x=\"118\" y=\"175\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"175\" width=\"4.5\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"185\" style=\"text-anchor:start;--d:0.30000000000000004s\">< 3% wrong</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--ink-2)\">handwritten Hindi and Marathi bills</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Reads documents and photos customers already have",
+      "Handles layout, tables and stamps",
+      "Structured extraction is straightforward",
+      "Cross-checks catch most errors"
+    ],
+    "cons": [
+      "Handwriting and regional scripts are harder",
+      "High resolution costs more",
+      "Silent misreads without checks",
+      "Images carry personal data"
+    ],
+    "avoidWhen": [
+      "Documents available as structured data",
+      "Critical fields with no second check"
+    ],
+    "tools": [
+      {
+        "name": "Claude, GPT and Gemini vision",
+        "type": "Model APIs",
+        "what": "Document and image understanding",
+        "url": "https://platform.claude.com/docs/en/build-with-claude/vision"
+      },
+      {
+        "name": "Google Document AI",
+        "type": "Cloud service",
+        "what": "OCR and form parsing",
+        "url": "https://cloud.google.com/document-ai"
+      },
+      {
+        "name": "Azure Document Intelligence",
+        "type": "Cloud service",
+        "what": "Prebuilt and custom extractors",
+        "url": "https://learn.microsoft.com/azure/ai-services/document-intelligence/"
+      },
+      {
+        "name": "Tesseract",
+        "type": "Open source",
+        "what": "OCR with Indian-language packs",
+        "url": "https://github.com/tesseract-ocr/tesseract"
+      },
+      {
+        "name": "OpenCV",
+        "type": "Open source",
+        "what": "Deskew, crop and denoise",
+        "url": "https://opencv.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional general insurer receives claim documents as WhatsApp photos: hospital bills and pharmacy receipts, some handwritten in Hindi or Marathi. Choose the reader, preprocessing, image size and document type, and watch field accuracy, errors reaching the claims system, the review load and cost.",
+    "controls": [
+      "Choose OCR with a text model, a vision model, or a vision model cross-checked by OCR.",
+      "Choose the image size and toggle deskewing and cropping.",
+      "Choose printed or handwritten documents, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Key fields read correctly",
+        "meaning": "Total, date and patient name read right."
+      },
+      {
+        "name": "Wrong fields reaching the system",
+        "meaning": "Errors left after any cross-check."
+      },
+      {
+        "name": "Sent to an assessor",
+        "meaning": "Documents where two readers disagree."
+      },
+      {
+        "name": "Cost per document",
+        "meaning": "Illustrative model and OCR cost."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "OCR on small images",
+        "expect": "85% correct: 15% of fields reach the system wrong."
+      },
+      {
+        "k": "vision",
+        "name": "Vision model",
+        "expect": "95% correct on printed bills, 5% wrong."
+      },
+      {
+        "k": "hand",
+        "name": "Handwritten, vision only",
+        "expect": "84% correct: 16% wrong."
+      },
+      {
+        "k": "both",
+        "name": "Two readers, small images",
+        "expect": "78% on handwriting, 6.6% wrong, 18% to an assessor."
+      }
+    ],
+    "missions": [
+      {
+        "k": "printed",
+        "text": "Let no more than 1% of printed-bill fields through wrong.",
+        "hint": "Read twice."
+      },
+      {
+        "k": "hand",
+        "text": "Keep handwritten-document errors at 5% or below.",
+        "hint": "Preprocess, fit the image, cross-check."
+      },
+      {
+        "k": "cheap",
+        "text": "Read printed bills at least 96% correctly for ₹0.40 or less.",
+        "hint": "A clean image helps a single reader."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Vision models",
+        "type": "Model APIs",
+        "start": 3,
+        "prod": 3,
+        "best": "Read documents, photos and screenshots into structured fields.",
+        "ex": "Extract bill totals and dates into a schema.",
+        "pros": [
+          "Handles layout and context",
+          "No template needed"
+        ],
+        "cons": [
+          "Silent misreads",
+          "Cost per image"
+        ],
+        "url": "https://platform.claude.com/docs/en/build-with-claude/vision"
+      },
+      {
+        "n": "Google Document AI",
+        "type": "Cloud service",
+        "start": 3,
+        "prod": 3,
+        "best": "OCR and form parsing with Indian-language support.",
+        "ex": "Second reader for amounts and dates.",
+        "pros": [
+          "Mature OCR",
+          "Form parsers"
+        ],
+        "cons": [
+          "Cloud dependency",
+          "Setup per form type"
+        ],
+        "url": "https://cloud.google.com/document-ai"
+      },
+      {
+        "n": "Tesseract",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "OCR with Hindi, Marathi and other language packs.",
+        "ex": "On-premises cross-check of key fields.",
+        "pros": [
+          "Free",
+          "Runs locally"
+        ],
+        "cons": [
+          "Weak on handwriting",
+          "Needs preprocessing"
+        ],
+        "url": "https://github.com/tesseract-ocr/tesseract"
+      },
+      {
+        "n": "OpenCV",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Deskew, crop, denoise and resize images.",
+        "ex": "Straighten phone photos before reading.",
+        "pros": [
+          "Fast",
+          "Well known"
+        ],
+        "cons": [
+          "You write the pipeline",
+          "Edge cases in photos"
+        ],
+        "url": "https://opencv.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Phone photos of documents",
+        "tool": "Deskew, crop and resize first"
+      },
+      {
+        "need": "Money or identity fields",
+        "tool": "Read twice and compare"
+      },
+      {
+        "need": "Handwriting in regional scripts",
+        "tool": "Expect review; measure per script"
+      }
+    ],
+    "goals": [
+      "See what preprocessing buys",
+      "Cross-check critical fields",
+      "Balance review load and errors"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional general insurer receives claim documents as phone photos on WhatsApp: hospital bills, discharge summaries and pharmacy receipts, some handwritten in Hindi or Marathi. OCR followed by a text model misread 30% of handwritten fields. The new pipeline deskews and crops each photo, reads it with a vision model into a schema, cross-checks amounts and dates with OCR, and sends disagreements to an assessor. Wrong amounts reaching the claims system fell below 3%.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Bills, receipts and discharge summaries from phone photos"
+      },
+      {
+        "industry": "Banking",
+        "use": "KYC documents and address proofs"
+      },
+      {
+        "industry": "Lending",
+        "use": "Salary slips and bank statements"
+      }
+    ],
+    "analogy": "Two clerks read each important form independently, and a supervisor looks only where they disagree.",
+    "library": {
+      "name": "A vision model + OpenCV + Tesseract",
+      "what": "Preprocess with OpenCV, extract with a vision model into a schema, and cross-check key fields with OCR.",
+      "install": "pip install anthropic opencv-python pytesseract"
+    },
+    "note": "Match numbers after normalising digits and separators, including Devanagari digits. Keep the original image for the audit trail (Panel 15).",
+    "samples": [
+      {
+        "file": "read_claim_doc.py",
+        "language": "python",
+        "code": "import base64, cv2, pytesseract\n\ndef preprocess(path: str) -> bytes:\n    img = cv2.imread(path)\n    img = deskew(crop_to_document(img))\n    h, w = img.shape[:2]\n    scale = 1568 / max(h, w)                       # stay within the model's limit\n    img = cv2.resize(img, (int(w * scale), int(h * scale)))\n    return cv2.imencode(\".jpg\", img)[1].tobytes()\n\ndef read(path: str) -> dict:\n    jpg = preprocess(path)\n    fields = vision_extract(                         # structured output (Panel 13)\n        image_b64=base64.b64encode(jpg).decode(), schema=ClaimDocument)\n    ocr_text = pytesseract.image_to_string(jpg_to_array(jpg), lang=\"hin+eng+mar\")\n    disagreements = [f for f in (\"total_amount\", \"bill_date\", \"patient_name\")\n                     if not appears_in(fields[f], ocr_text)]\n    if disagreements:\n        return {\"status\": \"review\", \"fields\": fields, \"check\": disagreements}\n    return {\"status\": \"accepted\", \"fields\": fields}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A pipeline reads 10,000 claim documents a month. The vision model is wrong on 4% of key fields, and cross-checking with OCR catches 70% of those errors and sends them for review. How many documents a month still reach the system with a wrong key field?",
+    "answer": "10,000 × 4% = 400 wrong; 70% caught leaves 400 × 0.3 = 120 documents. The cross-check also sends correct documents to review when the two readers disagree, so tune it to keep that load manageable.",
+    "expected": {
+      "value": 120,
+      "tolerance": 1,
+      "label": "documents ="
+    },
+    "interview": [
+      {
+        "question": "How would you read KYC documents with a multimodal model safely?",
+        "answer": "Preprocess images by deskewing, cropping and resizing; extract into a strict schema; validate formats and checksums; cross-check critical fields with a second reader such as OCR; route disagreements to a person; mask identifiers in logs; and keep the original image for audit."
+      },
+      {
+        "question": "Why does image resolution matter for a vision model?",
+        "answer": "APIs downscale large images to a maximum size, so small text can become unreadable, and very low resolution loses detail. Resize deliberately to the model’s limit, crop to the document, and tile or zoom into regions with small text when needed, accepting the extra cost."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Trusting a single read for amounts or IDs",
+        "fix": "Cross-check with a second reader"
+      },
+      {
+        "mistake": "Sending raw phone photos",
+        "fix": "Deskew, crop and resize first"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mm01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "First step for phone photos of documents?",
+      "options": [
+        "Deskew and crop",
+        "Send as is",
+        "Convert to audio",
+        "Compress heavily"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Clean input."
+    },
+    {
+      "id": "mm02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why resize images to the model’s limit yourself?",
+      "options": [
+        "The API downscales larger images anyway",
+        "To add colour",
+        "It is required by law",
+        "To encrypt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Control legibility."
+    },
+    {
+      "id": "mm03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why extract into a schema?",
+      "options": [
+        "Typed fields can be validated",
+        "It is shorter",
+        "It removes the image",
+        "For style"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Structured and checkable."
+    },
+    {
+      "id": "mm04",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which help catch misreads of critical fields? Select all that apply.",
+      "options": [
+        "Cross-checking with OCR",
+        "Format and checksum validation",
+        "Trusting a single read",
+        "Lower resolution"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Independent checks and validation."
+    },
+    {
+      "id": "mm05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "10,000 docs, 4% wrong, cross-check catches 70%. Wrong ones reaching the system?",
+      "options": [
+        "400",
+        "280",
+        "120",
+        "40"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "400 × 0.3."
+    },
+    {
+      "id": "mm06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Readers disagree on a total. What happens?",
+      "options": [
+        "Take the vision value",
+        "An assessor reviews",
+        "Average them",
+        "Drop the document"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "People resolve disagreements."
+    },
+    {
+      "id": "mm07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which is harder for OCR?",
+      "options": [
+        "Printed English",
+        "Handwritten regional scripts",
+        "Typed numbers",
+        "Barcodes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Handwriting and scripts."
+    },
+    {
+      "id": "mm08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Comparing “18450” with OCR text “₹18,450.00” by substring fails. Fix?",
+      "options": [
+        "Normalise digits and separators, compare numbers",
+        "Use a bigger model",
+        "Ignore amounts",
+        "Round everything"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Normalise before comparing."
+    },
+    {
+      "id": "mm09",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "What belongs in a KYC document pipeline? Select all that apply.",
+      "options": [
+        "Masking identifiers in logs",
+        "Keeping the original image for audit",
+        "Posting images publicly",
+        "Skipping validation"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Privacy and auditability."
+    },
+    {
+      "id": "mm10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Tiling a large image mainly…",
+      "options": [
+        "Improves small-text accuracy at higher cost",
+        "Reduces cost",
+        "Removes colour",
+        "Speeds training"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "More detail, more tokens."
+    },
+    {
+      "id": "mm11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A vision model reading a document mainly adds…",
+      "options": [
+        "Layout and context understanding",
+        "Encryption",
+        "Storage",
+        "Networking"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Beyond character recognition."
+    },
+    {
+      "id": "mm12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Devanagari digits like ‘१८,४५०’ need…",
+      "options": [
+        "Normalising to 0–9 before comparison",
+        "Deleting",
+        "Translating to English words",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Normalise digits."
+    },
+    {
+      "id": "mm13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which tool deskews and crops images?",
+      "options": [
+        "OpenCV",
+        "PostgreSQL",
+        "Redis",
+        "Nginx"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Image preprocessing."
+    },
+    {
+      "id": "mm14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which OCR engine has Hindi and Marathi language packs and runs locally?",
+      "options": [
+        "Tesseract",
+        "Excel",
+        "Figma",
+        "Jenkins"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Open-source OCR."
+    },
+    {
+      "id": "mm15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A review queue that is too large means…",
+      "options": [
+        "Thresholds or readers need tuning",
+        "Everything is fine",
+        "Turn off reviews",
+        "Use smaller images"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Balance errors and review load."
+    },
+    {
+      "id": "mm16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Screenshots customers send of UPI receipts should be treated as…",
+      "options": [
+        "Evidence to verify, not proof on their own",
+        "Always genuine",
+        "Irrelevant",
+        "Legal documents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Verify against records."
+    },
+    {
+      "id": "mm17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Accuracy should be measured…",
+      "options": [
+        "Per document type and script",
+        "Only overall",
+        "Never",
+        "Once at launch"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Segments reveal gaps."
+    },
+    {
+      "id": "mm18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A 512-pixel image of a dense bill will likely…",
+      "options": [
+        "Lose small text",
+        "Improve accuracy",
+        "Cost more",
+        "Be rejected by law"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Too small."
+    },
+    {
+      "id": "mm19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why keep per-field confidence?",
+      "options": [
+        "To route uncertain fields to review",
+        "To slow processing",
+        "For decoration",
+        "To raise cost"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Target review."
+    },
+    {
+      "id": "mm20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Images of ID documents are…",
+      "options": [
+        "Personal data",
+        "Public data",
+        "Anonymous",
+        "Metadata"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Protect them (Panel 15)."
+    }
+  ]
+}

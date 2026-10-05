@@ -1,0 +1,897 @@
+{
+  "id": "zt",
+  "moduleSlug": "guardrails",
+  "name": "Action Policies and Approval Thresholds",
+  "shortName": "Action policies",
+  "question": "Is the agent allowed to take this action, right now?",
+  "summary": "Controls on what the agent does, not only what it says. Each tool is rated by impact, and every call is checked against a written policy when it runs: deny by default, scoped and short-lived credentials, limits on amounts and recipients, and an approval threshold above which a person must say yes. This is sometimes called zero-trust runtime governance.",
+  "useCases": [
+    "Agents with tools that write: payments, emails, database changes, deployments",
+    "Multi-agent systems where one agent’s output drives another’s actions",
+    "Anywhere a successful prompt injection must not turn into a real action"
+  ],
+  "keyFacts": {
+    "label": "Core controls",
+    "items": [
+      {
+        "term": "Least privilege",
+        "detail": "scoped, short-lived credentials per task"
+      },
+      {
+        "term": "Policy check per call",
+        "detail": "allow or deny at runtime, written as code"
+      },
+      {
+        "term": "Human approval",
+        "detail": "a gate on high-impact or irreversible actions"
+      },
+      {
+        "term": "Sandboxing",
+        "detail": "isolated execution for code, files and network"
+      },
+      {
+        "term": "Audit trail",
+        "detail": "every call, argument and decision logged"
+      },
+      {
+        "term": "Budgets & kill switch",
+        "detail": "caps on spend, calls and time; instant stop"
+      }
+    ]
+  },
+  "steps": [
+    "List every tool and rate its impact: read, write or irreversible",
+    "Give each task the narrowest credentials it needs and make them expire",
+    "Put a policy engine between the agent and its tools, denying by default",
+    "Set approval thresholds for high-impact actions (the pause itself is covered in Human-in-the-Loop Checkpoints) and alert on anomalies in the audit log"
+  ],
+  "pitfalls": [
+    "Too many approval prompts train people to click Approve without reading",
+    "One broad API key shared across agents defeats least privilege",
+    "Policies drift from reality unless they are versioned and tested like code"
+  ],
+  "tools": [
+    "Open Policy Agent",
+    "Cedar",
+    "MCP with OAuth scopes",
+    "E2B / Firecracker sandboxes",
+    "OpenTelemetry"
+  ],
+  "remember": "Deny by default, scope every call, set the approval line in code.",
+  "caption": "Every tool call meets the policy gate. Reads run, risky writes wait for a person, and destructive calls are denied.",
+  "comparison": {
+    "scope": "Around every action",
+    "cost": 2,
+    "needs": "Unauthorized or harmful actions",
+    "best": "Setup effort; approval fatigue"
+  },
+  "diagram": {
+    "file": "diagrams/zt.svg"
+  },
+  "lesson": {
+    "file": "tool_gate.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import requests, time, uuid",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "IMPACT = {\"read_orders\": \"read\", \"send_email\": \"write\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "          \"refund\": \"write\", \"delete_customer\": \"irreversible\"}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_tool(task, tool: str, args: dict):",
+        "steps": []
+      },
+      {
+        "text": "    token = sts.issue(scope=f\"{tool}:{task.customer_id}\", ttl_s=900)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    decision = requests.post(",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        \"http://opa:8181/v1/data/agent/tools/decision\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        json={\"input\": {\"tool\": tool, \"args\": args,",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                        \"impact\": IMPACT.get(tool, \"unknown\"),",
+        "steps": [
+          1,
+          3
+        ]
+      },
+      {
+        "text": "                        \"customer\": task.customer_id}},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        timeout=2,",
+        "steps": []
+      },
+      {
+        "text": "    ).json().get(\"result\", \"deny\")                  # deny by default",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if decision == \"ask_human\":",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        decision = approvals.request(approver=task.supervisor,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            summary=f\"{tool} {args} for ticket {task.id}\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    audit.write(id=uuid.uuid4().hex, ts=time.time(), task=task.id,",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                tool=tool, args=args, decision=decision)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if budget.calls(task.id) > task.max_calls:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        kill_switch.stop(task.id)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return \"stopped: over budget\"",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    if decision != \"allow\":",
+        "steps": []
+      },
+      {
+        "text": "        return f\"refused: {decision}\"",
+        "steps": []
+      },
+      {
+        "text": "    return TOOLS[tool](args, token=token)",
+        "steps": [
+          2
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Rate every tool’s impact",
+        "text": "Reads, writes and irreversible actions get different treatment. A tool that isn’t listed is “unknown” and will be denied."
+      },
+      {
+        "title": "Issue a narrow, short-lived credential",
+        "text": "The token works for one tool and one customer, and expires in 15 minutes. A leaked token is worth very little."
+      },
+      {
+        "title": "Ask the policy engine at call time",
+        "text": "Open Policy Agent returns allow, ask_human or deny from the actual arguments. If it returns nothing, the answer is deny."
+      },
+      {
+        "title": "Put a person in front of high-impact actions",
+        "text": "The INR 18,000 refund goes to the supervisor with a plain summary. The agent waits for the decision."
+      },
+      {
+        "title": "Log every decision",
+        "text": "Tool, arguments, decision and approver go to an append-only audit log for review and alerting."
+      },
+      {
+        "title": "Cap budgets and keep a kill switch",
+        "text": "A task that exceeds its call or spend budget is stopped at once, however convincing its reasoning."
+      }
+    ],
+    "sceneHeight": 258,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"14\" width=\"114\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"65\" y=\"31\" text-anchor=\"middle\">read_orders</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"128\" y=\"14\" width=\"62\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"159\" y=\"31\" text-anchor=\"middle\">read</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"8\" y=\"48\" width=\"114\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"65\" y=\"65\" text-anchor=\"middle\">send_email</text></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><rect class=\"bx soft\" x=\"128\" y=\"48\" width=\"62\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"159\" y=\"65\" text-anchor=\"middle\">write</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"8\" y=\"82\" width=\"114\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"65\" y=\"99\" text-anchor=\"middle\">refund 18,000</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"128\" y=\"82\" width=\"62\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"159\" y=\"99\" text-anchor=\"middle\">write</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx \" x=\"8\" y=\"116\" width=\"114\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"65\" y=\"133\" text-anchor=\"middle\">delete_customer</text></g><g class=\"a\" style=\"--d:0.35000000000000003s\"><rect class=\"bx soft\" x=\"128\" y=\"116\" width=\"62\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"159\" y=\"133\" text-anchor=\"middle\">irrev.</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"154\" width=\"176\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"96\" y=\"170\" text-anchor=\"middle\">token: C-2231 · 15 min</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"198\" y=\"10\" width=\"34\" height=\"132\" rx=\"8\"/><rect x=\"207\" y=\"72\" width=\"16\" height=\"13\" rx=\"2.5\" class=\"ln acc\"/><path d=\"M210 72v-4a5 5 0 0 1 10 0v4\" class=\"ln acc\"/></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M190 27L196 27\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln acc\" d=\"M234 27L244 27\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"246\" y=\"14\" width=\"86\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"289\" y=\"31\" text-anchor=\"middle\">allow</text></g><g class=\"a\" style=\"--d:0.5s\"><circle cx=\"345\" cy=\"27\" r=\"9\" class=\"bd-pass\"/><path d=\"M341 27l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M190 61L196 61\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><path class=\"ln acc\" d=\"M234 61L244 61\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.52s\"><rect class=\"bx pass\" x=\"246\" y=\"48\" width=\"86\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"289\" y=\"65\" text-anchor=\"middle\">allow</text></g><g class=\"a\" style=\"--d:0.62s\"><circle cx=\"345\" cy=\"61\" r=\"9\" class=\"bd-pass\"/><path d=\"M341 61l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M190 95L196 95\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.5s\"><path class=\"ln \" d=\"M234 95L244 95\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.64s\"><rect class=\"bx warn\" x=\"246\" y=\"82\" width=\"86\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"289\" y=\"99\" text-anchor=\"middle\">ask_human</text></g><g class=\"a\" style=\"--d:0.74s\"><circle cx=\"345\" cy=\"95\" r=\"9\" class=\"bd-warn\"/><path d=\"M345 90.5v5M345 98.5v.5\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M190 129L196 129\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.6000000000000001s\"><path class=\"ln \" d=\"M234 129L244 129\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.76s\"><rect class=\"bx fail\" x=\"246\" y=\"116\" width=\"86\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"289\" y=\"133\" text-anchor=\"middle\">deny</text></g><g class=\"a\" style=\"--d:0.86s\"><circle cx=\"345\" cy=\"129\" r=\"9\" class=\"bd-fail\"/><path d=\"M341.5 125.5l7 7M348.5 125.5l-7 7\" class=\"bd-mark\"/></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"192\" y=\"154\" width=\"160\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"272\" y=\"170\" text-anchor=\"middle\">supervisor: approved</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"188\" width=\"344\" height=\"28\" rx=\"6\"/><text class=\"mono\" x=\"18\" y=\"206\">audit · refund 18,000 · ask_human → approved</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"226\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"242\" text-anchor=\"middle\">budget 12 calls · kill switch armed</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Limits damage even when every text filter fails",
+      "Deny by default refuses new tools and new attacks automatically",
+      "Policies as code are versioned, reviewed and tested",
+      "The audit trail answers who did what, when and why"
+    ],
+    "cons": [
+      "Setup effort: tool inventory, policies and identity plumbing",
+      "Approval prompts add delay and can cause approval fatigue",
+      "Policies drift from reality unless maintained",
+      "Short-lived credentials need token infrastructure"
+    ],
+    "avoidWhen": [
+      "The agent has no tools that read private data or change anything",
+      "A throwaway local prototype with no real credentials (add it before any production use)"
+    ],
+    "tools": [
+      {
+        "name": "Open Policy Agent",
+        "type": "Open source (CNCF)",
+        "what": "Allow, deny and ask decisions from Rego policies over HTTP",
+        "url": "https://www.openpolicyagent.org"
+      },
+      {
+        "name": "Cedar",
+        "type": "Open source (AWS)",
+        "what": "Fast, analysable authorization policies",
+        "url": "https://www.cedarpolicy.com"
+      },
+      {
+        "name": "MCP authorization",
+        "type": "Open specification",
+        "what": "OAuth 2.1 access tokens for MCP tool servers",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization"
+      },
+      {
+        "name": "E2B",
+        "type": "Commercial sandboxes, open-source SDK",
+        "what": "Isolated execution for agent-written code",
+        "url": "https://e2b.dev"
+      },
+      {
+        "name": "Firecracker",
+        "type": "Open source (AWS)",
+        "what": "MicroVMs for strong sandbox isolation",
+        "url": "https://firecracker-microvm.github.io"
+      },
+      {
+        "name": "OpenTelemetry",
+        "type": "Open standard",
+        "what": "Vendor-neutral audit traces of every tool call",
+        "url": "https://opentelemetry.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A support agent can read orders, email customers and issue refunds. It read an email with hidden instructions, so four of the eight tool calls it now attempts were planted by an attacker. Every call passes a policy gate you configure. A supervisor approves genuine requests and rejects planted ones when asked.",
+    "controls": [
+      "Choose what happens to tools the policy doesn’t mention: allow or deny by default.",
+      "Restrict email to the ticket’s customer, and choose a shared admin key or a task-scoped token.",
+      "Set the refund amount above which a supervisor must approve."
+    ],
+    "outputs": [
+      {
+        "name": "Harmful actions executed",
+        "meaning": "Planted calls that actually ran ÷ the 4 planted calls."
+      },
+      {
+        "name": "Legitimate work completed",
+        "meaning": "Genuine calls that ran, automatically or after approval ÷ 4."
+      },
+      {
+        "name": "Approval prompts",
+        "meaning": "How many times the supervisor is interrupted for this one task."
+      },
+      {
+        "name": "Audit log",
+        "meaning": "One line per decision, as it would be stored."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Permissive agent",
+        "expect": "Allow by default, any email recipient, a shared admin key and no approvals up to INR 50,000. Expect all 4 planted calls to run and 0 approval prompts."
+      },
+      {
+        "k": "zt",
+        "name": "Zero trust",
+        "expect": "Deny by default, scoped email, a task-scoped token and approval above INR 10,000. Expect no harmful action, all 4 genuine calls done and 2 approval prompts."
+      },
+      {
+        "k": "askall",
+        "name": "Approve every refund",
+        "expect": "Zero trust with approval for every refund. Expect no harmful action and all genuine work done, but 3 approval prompts, including one for an INR 4,500 refund."
+      }
+    ],
+    "missions": [
+      {
+        "k": "safe",
+        "text": "Make sure no planted call causes a real side effect.",
+        "hint": "Deny by default, scope email and tokens, and keep the approval limit below INR 45,000."
+      },
+      {
+        "k": "lean",
+        "text": "Stop every harmful action while asking the supervisor only once.",
+        "hint": "Set the approval limit between INR 20,000 and INR 40,000, so only the unusual refund needs a person."
+      },
+      {
+        "k": "key",
+        "text": "Keep every other control strict, but let exactly one harmful action through by weakening the credential.",
+        "hint": "Switch to the shared admin key: the cross-customer read succeeds."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Open Policy Agent",
+        "type": "Open source · CNCF graduated",
+        "start": 2,
+        "prod": 3,
+        "best": "A general-purpose policy engine: tool-call decisions written in Rego, versioned, unit-tested and queried over HTTP.",
+        "ex": "POST each tool call to /v1/data/agent/tools/decision and get allow, ask_human or deny back.",
+        "pros": [
+          "Mature, widely deployed and well documented",
+          "Policies are tested like code"
+        ],
+        "cons": [
+          "Rego takes time to learn",
+          "One more service to run and monitor"
+        ],
+        "url": "https://www.openpolicyagent.org"
+      },
+      {
+        "n": "Cedar",
+        "type": "Open source · AWS",
+        "start": 2,
+        "prod": 3,
+        "best": "An authorization language designed to be fast and formally analysable, also behind Amazon Verified Permissions.",
+        "ex": "permit(principal == Agent::\"support\", action == Action::\"refund\", resource) when { context.amount <= 10000 };",
+        "pros": [
+          "Readable policies that can be analysed automatically",
+          "Fast evaluation"
+        ],
+        "cons": [
+          "Smaller ecosystem than OPA",
+          "Best fit when you model principals and resources carefully"
+        ],
+        "url": "https://www.cedarpolicy.com"
+      },
+      {
+        "n": "MCP authorization",
+        "type": "Open specification",
+        "start": 2,
+        "prod": 2,
+        "best": "OAuth 2.1 access tokens between MCP clients and tool servers, bound to a specific server.",
+        "ex": "An MCP tool server that accepts only tokens issued for it, with scopes limited to one customer’s orders.",
+        "pros": [
+          "A standard way to scope agent access to tools",
+          "Short-lived tokens are recommended in the spec"
+        ],
+        "cons": [
+          "Still evolving",
+          "Fine-grained per-call policy is still your job"
+        ],
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization"
+      },
+      {
+        "n": "E2B",
+        "type": "Commercial sandboxes · open-source SDK",
+        "start": 3,
+        "prod": 3,
+        "best": "Isolated cloud sandboxes for code the agent writes and runs.",
+        "ex": "Run the agent’s data-analysis code in a sandbox with no access to production credentials.",
+        "pros": [
+          "Fast-starting, isolated environments",
+          "Simple SDK"
+        ],
+        "cons": [
+          "Paid at volume",
+          "Code and data run outside your own machines"
+        ],
+        "url": "https://e2b.dev"
+      },
+      {
+        "n": "Firecracker",
+        "type": "Open source · AWS",
+        "start": 1,
+        "prod": 3,
+        "best": "MicroVMs that give each agent task strong, VM-level isolation with fast start-up.",
+        "ex": "Self-host one microVM per coding task, destroyed when the task ends.",
+        "pros": [
+          "Strong isolation boundary",
+          "Proven at very large scale"
+        ],
+        "cons": [
+          "Low-level: you build the orchestration",
+          "Linux and KVM only"
+        ],
+        "url": "https://firecracker-microvm.github.io"
+      },
+      {
+        "n": "OpenTelemetry",
+        "type": "Open standard · CNCF",
+        "start": 2,
+        "prod": 3,
+        "best": "Emitting every tool call, argument and decision as a trace span to any backend, for audit and alerting.",
+        "ex": "Alert when one task triggers more than three denied calls in a minute.",
+        "pros": [
+          "Vendor-neutral",
+          "Fits existing observability stacks"
+        ],
+        "cons": [
+          "Not a policy engine by itself",
+          "You design the attributes and retention"
+        ],
+        "url": "https://opentelemetry.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Policy engine for tool calls",
+        "tool": "Open Policy Agent"
+      },
+      {
+        "need": "Scoped access to MCP tools",
+        "tool": "MCP authorization with OAuth scopes"
+      },
+      {
+        "need": "Run agent code safely",
+        "tool": "E2B or Firecracker"
+      }
+    ],
+    "goals": [
+      "Explain least privilege, deny by default and fail closed for tool calls",
+      "Choose which actions need human approval without causing approval fatigue",
+      "Describe what an audit log for agent actions must record"
+    ]
+  },
+  "practice": {
+    "scenario": "An operations agent can read orders, email customers and issue refunds. Every call passes through a policy engine: reads always run, emails may only go to the customer on the ticket, refunds above INR 10,000 wait for a supervisor, and anything else is denied. Every decision is logged for audit.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Maker-checker approval for any money movement an agent starts"
+      },
+      {
+        "industry": "Cloud & DevOps",
+        "use": "Agents plan infrastructure changes; a person approves the apply"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Least privilege: agents see only records for the current case"
+      }
+    ],
+    "analogy": "A hotel key card. It opens your room and the gym, only during your stay, and the front desk logs every swipe.",
+    "library": {
+      "name": "Open Policy Agent",
+      "what": "The CNCF-graduated policy engine. Rules live in Rego files, are versioned and tested like code, and are queried over HTTP.",
+      "install": "docker run -p 8181:8181 openpolicyagent/opa run --server policy.rego"
+    },
+    "samples": [
+      {
+        "file": "policy.rego",
+        "language": "plaintext",
+        "code": "package agent.tools\n\ndefault decision := \"deny\"\n\ndecision := \"allow\" if input.tool in {\"read_orders\", \"get_ticket\"}\n\ndecision := \"allow\" if {\n    input.tool == \"send_email\"\n    input.args.to == input.ticket.customer_email\n}\n\ndecision := \"allow\" if {\n    input.tool == \"refund\"\n    input.args.amount <= 10000\n}\n\ndecision := \"ask_human\" if {\n    input.tool == \"refund\"\n    input.args.amount > 10000\n}"
+      },
+      {
+        "file": "gate.py",
+        "language": "python",
+        "code": "import requests, logging\n\ndef authorize(tool: str, args: dict, ticket: dict) -> str:\n    r = requests.post(\"http://localhost:8181/v1/data/agent/tools/decision\",\n                      json={\"input\": {\"tool\": tool, \"args\": args, \"ticket\": ticket}},\n                      timeout=2)\n    decision = r.json().get(\"result\", \"deny\")     # fail closed\n    logging.info(\"policy tool=%s decision=%s args=%s\", tool, decision, args)\n    return decision                               # \"allow\" | \"ask_human\" | \"deny\""
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Policy: reads allowed; email only to the ticket's customer; refunds ≤ 10,000 allowed, > 10,000 need a person; everything else denied. Decide: (a) refund 12,500 (b) email a different address (c) delete_user (d) read_orders.",
+    "answer": "(a) ask a human (b) deny (c) deny, since it isn't listed (d) allow.",
+    "interview": [
+      {
+        "question": "What does zero trust mean for an AI agent?",
+        "answer": "Treat every tool call as untrusted whatever the model says: authenticate it, check it against policy when it runs, grant only minimal, short-lived permissions, log it, and require human approval for high-impact actions."
+      },
+      {
+        "question": "How do you avoid approval fatigue?",
+        "answer": "Gate only high-impact or irreversible actions, show a clear summary of what will happen and why, batch related approvals, and review approval statistics to relax low-risk rules over time."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "One long-lived admin key for the agent",
+        "fix": "Short-lived, task-scoped credentials per run"
+      },
+      {
+        "mistake": "Allowing unknown tools by default",
+        "fix": "Deny by default and allow explicitly"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "zt01",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Policy: refunds up to and including INR 10,000 are allowed; above that, a supervisor must approve. The agent requests a refund of exactly INR 10,000. What is the decision?",
+      "options": [
+        "allow",
+        "ask_human",
+        "deny",
+        "It depends on the model’s confidence"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The rule is amount ≤ 10,000, so the boundary value is allowed. Only amounts above it wait for a person."
+    },
+    {
+      "id": "zt02",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Policy: reads allowed; send_email only to the ticket’s customer; everything else denied by default. Which calls are denied? Select all that apply.",
+      "options": [
+        "send_email to an address that is not on the ticket",
+        "delete_user, which the policy does not list",
+        "read_orders for the ticket’s customer",
+        "export_customers, which the policy does not list"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "The email breaks its scope, and unlisted tools fall to the default deny. The read is allowed."
+    },
+    {
+      "id": "zt03",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "An agent summarises the current case. Which credential follows least privilege?",
+      "options": [
+        "Hospital-wide read access to all records",
+        "Read-write access to all records, for convenience",
+        "Read-only access to this patient’s records, expiring in 15 minutes",
+        "A permanent key rotated once a year"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Scoped to the task, limited to the data needed and short-lived, so a leaked token is worth very little."
+    },
+    {
+      "id": "zt04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "The policy engine times out during an outage. What should the gate return for the pending tool call?",
+      "options": [
+        "allow, so customers are not affected",
+        "deny: the gate fails closed",
+        "Whatever the agent last received",
+        "Ask the model to decide"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An outage is exactly when an attacker would strike. A guardrail must fail closed."
+    },
+    {
+      "id": "zt05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An agent makes 2,000 refund calls a day. With approval required above INR 1,000, 60% of calls need approval. Raising the limit to INR 10,000 means 4% need approval. How many fewer approval prompts is that per day?",
+      "options": [
+        "1,120",
+        "1,200",
+        "80",
+        "560"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,000 × 60% = 1,200 prompts before, 2,000 × 4% = 80 after: 1,200 − 80 = 1,120 fewer."
+    },
+    {
+      "id": "zt06",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An injected research note convinces an agent to call place_order for 10,000 shares. Every text filter missed it. What limits the damage?",
+      "options": [
+        "A stronger system prompt that forbids trading on documents",
+        "A policy gate with order limits, scoped credentials and approval",
+        "A post-LLM toxicity check on the agent’s order summary",
+        "A lower model temperature so the agent acts more predictably"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Runtime governance acts on the action itself, whatever the model was tricked into saying."
+    },
+    {
+      "id": "zt07",
+      "kind": "single",
+      "industry": "Cloud & DevOps",
+      "question": "An agent proposes Terraform changes to production. Which setup follows zero trust?",
+      "options": [
+        "The agent plans and applies changes with an admin credential",
+        "The agent plans read-only; a person approves the apply step",
+        "The agent applies changes after approving its own plan",
+        "Every change is applied and logged, but none is gated"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Irreversible actions wait for a person, and each step gets only the permissions it needs."
+    },
+    {
+      "id": "zt08",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A research agent’s output drives a payments agent’s tool calls. Which controls apply? Select all that apply.",
+      "options": [
+        "Treat the research agent’s output as untrusted input",
+        "Check each payment call against policy at call time",
+        "Give the payments agent its own scoped credentials",
+        "Skip checks because both agents are yours"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "One agent’s output can carry an injection into another’s actions, so every call is verified on its own."
+    },
+    {
+      "id": "zt09",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A data-analysis agent writes and runs Python on customer-uploaded CSV files. Which control matters most for the execution?",
+      "options": [
+        "Run it on the application server, where the data already sits",
+        "Run it in an isolated sandbox with no secrets and limited network",
+        "Run it only when the model judges the code to be safe",
+        "Run it under the production service account for full access"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sandboxing contains whatever the generated code does, including code shaped by a malicious file."
+    },
+    {
+      "id": "zt10",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which fields belong in the audit record of each tool call? Select all that apply.",
+      "options": [
+        "Tool name and arguments",
+        "Decision and policy version",
+        "Approver identity and timestamp",
+        "The agent’s full access token"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The log must answer who did what, when and why. Storing live tokens would turn the log into a credential leak."
+    },
+    {
+      "id": "zt11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A task’s budget is 40 tool calls or INR 500 of model spend, whichever comes first. A looping task has made 38 calls costing INR 520. What should happen?",
+      "options": [
+        "Continue until it reaches 40 calls",
+        "Stop it now: the spend cap is exceeded",
+        "Ask the agent whether it is nearly done",
+        "Double the budget automatically"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Either cap stops the task. A budget is enforced in code, however convincing the agent’s reasoning."
+    },
+    {
+      "id": "zt12",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Three agents share one admin API key. Which problems does this cause? Select all that apply.",
+      "options": [
+        "Compromising any one agent exposes every permission",
+        "The audit log cannot tell which agent made a call",
+        "Each agent has more access than its task needs",
+        "Tool calls become slower"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A shared broad key defeats least privilege and attribution. Latency is unaffected."
+    },
+    {
+      "id": "zt13",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A developer adds a bulk_export tool but forgets to update the policy. Under deny by default, what happens when the agent calls it?",
+      "options": [
+        "It runs, because new tools are trusted until reviewed",
+        "It is denied until someone explicitly allows it",
+        "It runs, but every call is written to the audit log",
+        "The model decides whether the call looks legitimate"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deny by default refuses new tools automatically, which is safer than hoping someone remembers to block them."
+    },
+    {
+      "id": "zt14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team wants an open-source authorization policy language that is fast and designed for automated analysis of what policies permit. Which fits?",
+      "options": [
+        "Cedar",
+        "Microsoft Presidio",
+        "Llama Guard",
+        "Pydantic"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Cedar is AWS’s open-source policy language, built for speed and analysability. The others detect PII, classify harm or validate data."
+    },
+    {
+      "id": "zt15",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "An agent connects to a remote MCP tool server. What does the MCP authorization specification use?",
+      "options": [
+        "OAuth 2.1 access tokens with scopes",
+        "A shared password pasted into the system prompt",
+        "No authorization when the server is internal",
+        "One admin key in an environment variable for all servers"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "MCP’s authorization spec builds on OAuth 2.1, so each client gets scoped, expiring tokens."
+    },
+    {
+      "id": "zt16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An injected email makes a support agent send a merchant’s settlement statement to an outside address. Which policy rule would have stopped it?",
+      "options": [
+        "send_email may go only to the email address on the ticket",
+        "The toxicity score of every email must be below 0.5",
+        "Emails with attachments must stay under 2 MB each",
+        "The agent must restate the ticket number in each email"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scoping arguments at call time turns a successful injection into a denied call."
+    },
+    {
+      "id": "zt17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Injection succeeds on 0.5% of 20,000 tasks a day. Refunds up to INR 10,000 run without approval, and each injected request asks for INR 9,999. What is the maximum daily loss?",
+      "options": [
+        "INR 9,99,900",
+        "INR 99,990",
+        "INR 0: the gate stops it",
+        "INR 10,00,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "20,000 × 0.5% = 100 attempts × INR 9,999 = INR 9,99,900. An amount limit alone is not enough; add per-customer caps and refund only to the original payment method."
+    },
+    {
+      "id": "zt18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A policy edit accidentally allows refunds above INR 1,00,000 without approval. How should this be prevented?",
+      "options": [
+        "Review every policy by hand once a year",
+        "Version policies and run opa test in CI before deploying",
+        "Let the agent report any policy that seems wrong",
+        "Allow only administrators to talk to the agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Policies are code. Tests for boundary cases catch a wrong comparison before it reaches production."
+    },
+    {
+      "id": "zt19",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which agent actions should wait for human approval? Select all that apply.",
+      "options": [
+        "A NEFT transfer above the approval limit",
+        "Closing a customer’s account",
+        "Reading the customer’s last five transactions",
+        "Waiving a penalty above INR 5,000"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Gate high-impact or irreversible actions. Routine reads should run without prompts to avoid approval fatigue."
+    },
+    {
+      "id": "zt20",
+      "kind": "single",
+      "industry": "SaaS support",
+      "question": "The audit log shows an agent sent 300 emails in two minutes; its normal rate is about 5. What should the runtime controls do?",
+      "options": [
+        "Nothing until the daily report is reviewed",
+        "Stop it via the rate cap or kill switch and alert security",
+        "Ask the agent to explain why it sent so many",
+        "Raise the email quota so the task can finish"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Budgets and a kill switch stop runaway or hijacked agents at once, and the anomaly alert starts the investigation."
+    }
+  ]
+}

@@ -1,0 +1,820 @@
+{
+  "id": "grounding",
+  "moduleSlug": "guardrails",
+  "name": "Grounding and Hallucination Checks",
+  "shortName": "Grounding checks",
+  "question": "Does the retrieved text actually support what the answer says?",
+  "summary": "A grounding check verifies, after generation, that each claim in an answer is supported by the context it was given. The answer is split into atomic claims, a checker scores each claim against the retrieved passages, and answers with unsupported claims are regenerated, flagged or refused. Checkers range from a full LLM judge to small fine-tuned models such as MiniCheck or HHEM that are fast enough for every answer; a cascade sends only the unsure claims to the LLM. The threshold trades errors that reach users against good answers refused. Making the model cite its sources is covered by Citations and Grounded Answers (module 18), and other output checks by Post-LLM Guardrails; this technique is the detector and how to tune it.",
+  "useCases": [
+    "RAG answers about fees, limits, eligibility or policy terms",
+    "Summaries of contracts, claims files or medical notes",
+    "Any high-volume assistant where a wrong fact has a cost"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Claim splitting",
+        "detail": "one checkable fact per claim; long answers hide errors in the middle"
+      },
+      {
+        "term": "Checker",
+        "detail": "LLM judge, NLI model, or a small fact-checker (MiniCheck, HHEM)"
+      },
+      {
+        "term": "Threshold",
+        "detail": "support score below which a claim is flagged; tune on labelled examples"
+      },
+      {
+        "term": "Catch rate",
+        "detail": "share of unsupported answers flagged (recall)"
+      },
+      {
+        "term": "False flags",
+        "detail": "share of good answers flagged; each may become a refusal"
+      },
+      {
+        "term": "Action",
+        "detail": "regenerate with the bad claims named, flag for review, or refuse safely"
+      }
+    ]
+  },
+  "steps": [
+    "Label 300–500 answers as supported or not to get a test set",
+    "Split answers into claims and score each with a small checker",
+    "Tune the threshold, and escalate the unsure band to an LLM judge",
+    "Regenerate once, then refuse; track errors reaching users and good answers refused"
+  ],
+  "pitfalls": [
+    "Checking against the model’s own knowledge instead of the retrieved text",
+    "A threshold picked without labelled data, so good answers are refused all day",
+    "Judging the whole long answer at once, so one wrong figure slips through"
+  ],
+  "tools": [
+    "MiniCheck",
+    "Vectara HHEM",
+    "Ragas faithfulness",
+    "Guardrails AI",
+    "NeMo Guardrails"
+  ],
+  "remember": "Split into claims, check each against the context, tune the threshold on labels.",
+  "caption": "Illustrative: Suraksha Health, a fictional insurer, checks 10,000 policy answers a day.",
+  "comparison": {
+    "scope": "After the model, before the user",
+    "cost": 2,
+    "needs": "Claims the context does not support",
+    "best": "False flags refuse good answers"
+  },
+  "diagram": {
+    "file": "diagrams/grounding.svg"
+  },
+  "lesson": {
+    "file": "grounding_check.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from minicheck.minicheck import MiniCheck",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "checker = MiniCheck(model_name=\"Bespoke-MiniCheck-7B\")   # small fact-checker",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def grounded(answer, passages, thr=0.5):",
+        "steps": []
+      },
+      {
+        "text": "    claims = split_claims(answer)      # LLM or rules: one fact per claim",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    doc = \"\\n\\n\".join(passages)",
+        "steps": []
+      },
+      {
+        "text": "    _, probs, _, _ = checker.score(docs=[doc] * len(claims), claims=claims)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    unsure = [c for c, p in zip(claims, probs) if 0.2 < p < 0.8]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    verdicts = {c: p >= thr for c, p in zip(claims, probs)}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    for c in unsure:",
+        "steps": []
+      },
+      {
+        "text": "        verdicts[c] = llm_judge_supported(c, doc)   # escalate the unsure 20%",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return all(verdicts.values()), [c for c, ok in verdicts.items() if not ok]",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ok, bad = grounded(draft, retrieved)",
+        "steps": []
+      },
+      {
+        "text": "if not ok:",
+        "steps": []
+      },
+      {
+        "text": "    draft = regenerate(question, retrieved, avoid=bad)   # stricter prompt",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    ok, bad = grounded(draft, retrieved)",
+        "steps": []
+      },
+      {
+        "text": "answer = draft if ok else \"I could not confirm this from the policy wording.\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "log_metric(\"grounding_flag\", not ok)                    # weekly review",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Split the answer into claims",
+        "text": "Suraksha Health, a fictional insurer, answers 10,000 policy questions a day. A draft such as “Cataract is covered after a 2-year waiting period, up to ₹40,000 per eye” holds two claims, and each is checked on its own."
+      },
+      {
+        "title": "Score each claim with a small checker",
+        "text": "A fact-checking model scores whether the retrieved policy text supports each claim. It is fast, about 150 ms, and costs about ₹0.03 an answer."
+      },
+      {
+        "title": "Set the threshold",
+        "text": "At 0.5 the checker catches 88% of unsupported answers but flags 6% of good ones. Lower thresholds catch more and flag more."
+      },
+      {
+        "title": "Escalate the unsure band",
+        "text": "Claims scored between 0.2 and 0.8, about 20% of answers, go to an LLM judge. The cascade catches 93% and wrongly flags only 3%."
+      },
+      {
+        "title": "Regenerate, then refuse",
+        "text": "A flagged draft is regenerated with the unsupported claims named; if it still fails, the user gets a safe “could not confirm” reply."
+      },
+      {
+        "title": "Watch the rates",
+        "text": "Of about 600 answers a day with an unsupported claim, about 42 still get through; about 85 good answers are refused. Both go on a weekly dashboard."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"24\" text-anchor=\"middle\">claim: 2-year wait</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"184\" y=\"8\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"24\" text-anchor=\"middle\">claim: ₹40,000 per eye</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">supported 0.93</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">supported 0.12</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"72\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"87\" text-anchor=\"middle\">thr 0.5: catch 88% · false flags 6%</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"102\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"117\" text-anchor=\"middle\">0.2–0.8 → LLM judge</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"102\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"117\" text-anchor=\"middle\">catch 93% · flags 3%</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"148\" text-anchor=\"middle\">regenerate once</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"148\" text-anchor=\"middle\">else “could not confirm”</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"180\" text-anchor=\"middle\">600 → 42 a day</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"164\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"180\" text-anchor=\"middle\">85 good refused</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Catches unsupported facts before users see them",
+      "Claim-level scores show exactly what is wrong",
+      "Small checkers are fast and cheap enough for every answer",
+      "Cascade keeps LLM-judge cost to the unsure cases"
+    ],
+    "cons": [
+      "Only checks against the retrieved text, not the truth",
+      "False flags refuse good answers",
+      "Claim splitting can drop or merge facts",
+      "Adds latency, awkward with streaming"
+    ],
+    "avoidWhen": [
+      "Open-ended creative output with no source to check against",
+      "As a substitute for fixing retrieval that misses the right passage"
+    ],
+    "tools": [
+      {
+        "name": "MiniCheck",
+        "type": "Open source",
+        "what": "Small models that check claims against documents",
+        "url": "https://github.com/Liyan06/MiniCheck"
+      },
+      {
+        "name": "Vectara HHEM",
+        "type": "Open model",
+        "what": "Hallucination evaluation model for (premise, hypothesis) pairs",
+        "url": "https://huggingface.co/vectara/hallucination_evaluation_model"
+      },
+      {
+        "name": "Ragas faithfulness",
+        "type": "Open source",
+        "what": "Claim-level faithfulness score with an LLM",
+        "url": "https://docs.ragas.io"
+      },
+      {
+        "name": "Guardrails AI",
+        "type": "Open source",
+        "what": "Validators, including provenance and grounding checks",
+        "url": "https://www.guardrailsai.com"
+      },
+      {
+        "name": "NeMo Guardrails",
+        "type": "Open source · NVIDIA",
+        "what": "Fact-checking rails for RAG outputs",
+        "url": "https://github.com/NVIDIA/NeMo-Guardrails"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Suraksha Health, a fictional insurer, sends 10,000 RAG answers a day about its policy wordings. About 600 contain a claim the retrieved text does not support.",
+    "controls": [
+      "Choose the detector: none, an LLM judge, a small claim checker, or a cascade.",
+      "Set the support threshold for the claim checker.",
+      "Regenerate flagged answers once before refusing."
+    ],
+    "outputs": [
+      {
+        "name": "Caught",
+        "meaning": "Share of unsupported answers flagged."
+      },
+      {
+        "name": "Reaching users",
+        "meaning": "Unsupported answers still sent each day."
+      },
+      {
+        "name": "Good answers refused",
+        "meaning": "Correct answers replaced by a refusal."
+      },
+      {
+        "name": "Added latency",
+        "meaning": "Average extra time per answer."
+      },
+      {
+        "name": "Cost",
+        "meaning": "₹ a day for checks and regenerations."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No check",
+        "expect": "600 unsupported answers a day reach users."
+      },
+      {
+        "k": "llm",
+        "name": "LLM judge, refuse flagged",
+        "expect": "180 reach users, 470 good refused, +1,200 ms, ₹4,000 a day."
+      },
+      {
+        "k": "claims",
+        "name": "Claim checker at 0.5",
+        "expect": "72 reach users, 564 good refused, +150 ms, ₹300."
+      },
+      {
+        "k": "cascade",
+        "name": "Cascade + regenerate",
+        "expect": "42 reach users, 85 good refused, +516 ms, ₹1,520."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "At most 50 unsupported answers and 150 good refusals a day, with 600 ms or less added.",
+        "hint": "Cascade, and regenerate before refusing."
+      },
+      {
+        "k": "cheap",
+        "text": "With the small claim checker only, let 80 or fewer through for ₹500 a day or less.",
+        "hint": "No regeneration keeps cost down."
+      },
+      {
+        "k": "over",
+        "text": "Show an over-strict check refusing more than 1,000 good answers a day.",
+        "hint": "A low threshold with refusals."
+      }
+    ],
+    "tools": [
+      {
+        "n": "MiniCheck",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Fast claim-level fact checking against documents.",
+        "ex": "Score each claim of a policy answer.",
+        "pros": [
+          "Small and fast",
+          "Strong on grounding benchmarks"
+        ],
+        "cons": [
+          "GPU for the larger model"
+        ],
+        "url": "https://github.com/Liyan06/MiniCheck"
+      },
+      {
+        "n": "Vectara HHEM",
+        "type": "Open model",
+        "start": 3,
+        "prod": 2,
+        "best": "A quick premise–hypothesis score.",
+        "ex": "Flag answers below 0.5.",
+        "pros": [
+          "Easy to run",
+          "CPU friendly"
+        ],
+        "cons": [
+          "Short context window"
+        ],
+        "url": "https://huggingface.co/vectara/hallucination_evaluation_model"
+      },
+      {
+        "n": "Ragas faithfulness",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Offline evaluation of RAG faithfulness.",
+        "ex": "Weekly faithfulness report on sampled traffic.",
+        "pros": [
+          "Claim-level",
+          "Many RAG metrics"
+        ],
+        "cons": [
+          "LLM calls per answer"
+        ],
+        "url": "https://docs.ragas.io"
+      },
+      {
+        "n": "NeMo Guardrails",
+        "type": "Open source · NVIDIA",
+        "start": 2,
+        "prod": 3,
+        "best": "Grounding rails inside a guardrail config.",
+        "ex": "Fact-check rail on a support bot.",
+        "pros": [
+          "Fits other rails",
+          "Configurable"
+        ],
+        "cons": [
+          "Colang learning curve"
+        ],
+        "url": "https://github.com/NVIDIA/NeMo-Guardrails"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Every answer, low latency",
+        "tool": "A small claim checker"
+      },
+      {
+        "need": "Highest accuracy",
+        "tool": "Cascade to an LLM judge"
+      },
+      {
+        "need": "Offline scoring",
+        "tool": "Ragas faithfulness"
+      }
+    ],
+    "goals": [
+      "Split answers into claims and check each against the context",
+      "Tune a threshold on labelled answers",
+      "Balance errors reaching users against good answers refused"
+    ]
+  },
+  "practice": {
+    "scenario": "Suraksha Health, a fictional insurer, answers 10,000 policy questions a day with RAG, and about 600 answers contain a claim the policy text does not support, such as a wrong sub-limit. It splits each draft into claims, scores them with a small fact-checking model in about 150 ms, sends the unsure 20% to an LLM judge, regenerates flagged drafts once and otherwise replies “could not confirm”. Unsupported answers reaching customers fall from 600 to about 42 a day, with about 85 good answers refused.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Waiting periods, sub-limits and exclusions stated in answers"
+      },
+      {
+        "industry": "Banking",
+        "use": "Fees, interest rates and eligibility quoted to customers"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Summaries of discharge notes checked against the source record"
+      }
+    ],
+    "analogy": "A proofreader who ticks each sentence of a report only if they can put a finger on the line in the source file that says it.",
+    "library": {
+      "name": "Vectara HHEM",
+      "what": "An open hallucination evaluation model that scores whether a hypothesis is supported by a premise.",
+      "install": "pip install transformers torch"
+    },
+    "note": "The HHEM model loads with trust_remote_code; check its model card for the current usage and licence. Tune the 0.5 threshold on your own labelled answers.",
+    "samples": [
+      {
+        "file": "hhem_check.py",
+        "language": "python",
+        "code": "from transformers import AutoModelForSequenceClassification\n\nmodel = AutoModelForSequenceClassification.from_pretrained(\n    \"vectara/hallucination_evaluation_model\", trust_remote_code=True)\n\npolicy = (\"Cataract surgery is covered after a waiting period of 24 months. \"\n          \"The limit is Rs 25,000 per eye.\")\nclaims = [\"Cataract is covered after a two-year waiting period.\",\n          \"The limit is Rs 40,000 per eye.\"]\n\nscores = model.predict([(policy, c) for c in claims])     # 0 = unsupported, 1 = supported\nfor c, s in zip(claims, scores.tolist()):\n    print(f\"{s:.2f}\", \"OK  \" if s >= 0.5 else \"FLAG\", c)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "600 of 10,000 daily answers are unsupported. A checker catches 88% of them and flags 6% of the 9,400 good answers. How many answers are flagged in total each day?",
+    "answer": "Caught: 0.88 × 600 = 528. False flags: 0.06 × 9,400 = 564. Total flagged 528 + 564 = 1,092, and 72 unsupported answers get through.",
+    "expected": {
+      "value": 1092,
+      "tolerance": 5,
+      "label": "flagged ="
+    },
+    "interview": [
+      {
+        "question": "How would you detect hallucinations in a RAG answer?",
+        "answer": "Split the answer into atomic claims, score each against the retrieved passages with an NLI or fact-checking model, escalate unsure scores to an LLM judge, and regenerate or refuse answers with unsupported claims. Tune the threshold on labelled examples."
+      },
+      {
+        "question": "Why check claim by claim?",
+        "answer": "A long answer can be mostly right with one wrong figure; whole-answer judging often misses it. Claim-level scores also show exactly what to fix."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Picking a threshold without labels",
+        "fix": "Tune it on a few hundred labelled answers"
+      },
+      {
+        "mistake": "Refusing on the first flag",
+        "fix": "Regenerate once with the bad claims named, then refuse"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "gd01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What does a grounding check verify?",
+      "options": [
+        "That the answer is polite",
+        "That each claim is supported by the given context",
+        "That the answer is short",
+        "That the user is logged in"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Support in the retrieved text."
+    },
+    {
+      "id": "gd02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why split answers into claims?",
+      "options": [
+        "One wrong figure can hide in a long answer",
+        "To save tokens",
+        "To translate them",
+        "Required by RBI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Claim-level checks find it."
+    },
+    {
+      "id": "gd03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "600 unsupported answers; checker catches 88%. How many get through?",
+      "options": [
+        "72",
+        "88",
+        "528",
+        "12"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "600 × 0.12."
+    },
+    {
+      "id": "gd04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "9,400 good answers; 6% false flags. How many good answers flagged?",
+      "options": [
+        "56",
+        "564",
+        "940",
+        "6"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.06 × 9,400."
+    },
+    {
+      "id": "gd05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Lowering the threshold usually?",
+      "options": [
+        "Catches more and flags more good answers",
+        "Catches fewer",
+        "Changes nothing",
+        "Removes latency"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Recall up, false flags up."
+    },
+    {
+      "id": "gd06",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are small checker models for grounding? Select all that apply.",
+      "options": [
+        "MiniCheck",
+        "Vectara HHEM",
+        "BM25",
+        "An NLI model"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "BM25 is a retrieval scorer."
+    },
+    {
+      "id": "gd07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What is a cascade in grounding checks?",
+      "options": [
+        "A fast checker for all, an LLM judge only for unsure claims",
+        "Two LLMs for every claim",
+        "No checking",
+        "A retry loop without checks"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Keeps cost down."
+    },
+    {
+      "id": "gd08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Claim scores 0.95, 0.9 and 0.1 are averaged against 0.5. Result and problem?",
+      "options": [
+        "0.65 passes; the unsupported claim hides",
+        "0.1 fails; fine",
+        "0.95 passes; fine",
+        "Error"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Require every claim to pass."
+    },
+    {
+      "id": "gd09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A flagged draft should first be?",
+      "options": [
+        "Regenerated with the bad claims named",
+        "Sent anyway",
+        "Deleted with no reply",
+        "Translated"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Then refuse if it fails again."
+    },
+    {
+      "id": "gd10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What does a grounding check NOT tell you?",
+      "options": [
+        "Whether the retrieved text itself is true or current",
+        "Whether the answer matches the text",
+        "Which claim is unsupported",
+        "A support score"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It checks against context, not the world."
+    },
+    {
+      "id": "gd11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "How should the threshold be chosen?",
+      "options": [
+        "On a few hundred labelled answers",
+        "By guessing 0.5",
+        "By the vendor",
+        "Randomly each day"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Measure catch rate and false flags."
+    },
+    {
+      "id": "gd12",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "10,000 answers × ₹0.03 per check costs a day?",
+      "options": [
+        "₹30",
+        "₹300",
+        "₹3,000",
+        "₹3"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "10,000 × 0.03."
+    },
+    {
+      "id": "gd13",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which should be tracked after launch? Select all that apply.",
+      "options": [
+        "Unsupported answers reaching users",
+        "Good answers refused",
+        "Added latency",
+        "Font size"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "All three trade off."
+    },
+    {
+      "id": "gd14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which technique makes the model cite sources for each claim?",
+      "options": [
+        "Citations and Grounded Answers",
+        "Vector compression",
+        "Rate limiting",
+        "Sharding"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one is the detector."
+    },
+    {
+      "id": "gd15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An LLM judge adds 1,200 ms; a small checker 150 ms. Difference?",
+      "options": [
+        "1,050 ms",
+        "1,350 ms",
+        "150 ms",
+        "8×"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1,200 − 150."
+    },
+    {
+      "id": "gd16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "SelfCheckGPT detects hallucinations by?",
+      "options": [
+        "Comparing several sampled answers for consistency",
+        "Reading the source",
+        "Counting tokens",
+        "Asking the user"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Useful when there is no context."
+    },
+    {
+      "id": "gd17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Retrieval missed the right passage. The grounding check will likely?",
+      "options": [
+        "Flag correct facts as unsupported",
+        "Fix retrieval",
+        "Do nothing",
+        "Improve recall"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Fix retrieval separately."
+    },
+    {
+      "id": "gd18",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which actions can follow a flag? Select all that apply.",
+      "options": [
+        "Regenerate",
+        "Send for human review",
+        "Refuse safely",
+        "Hide the flag and send"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Never silently send."
+    },
+    {
+      "id": "gd19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Catch rate rises from 88% to 93% on 600 unsupported. How many more caught a day?",
+      "options": [
+        "30",
+        "50",
+        "5",
+        "93"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "600 × 0.05."
+    },
+    {
+      "id": "gd20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Why is grounding awkward with streaming?",
+      "options": [
+        "Claims are checked after text is written, but streaming has already shown it",
+        "It is faster",
+        "Streams have no text",
+        "It is not awkward"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Buffer or check sentence by sentence."
+    }
+  ]
+}

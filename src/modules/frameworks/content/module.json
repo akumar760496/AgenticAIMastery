@@ -1,0 +1,228 @@
+{
+  "slug": "frameworks",
+  "number": 16,
+  "techniqueOrder": [
+    "plain",
+    "pydantic",
+    "langgraph",
+    "openai",
+    "claude",
+    "adk",
+    "crew",
+    "tsagents",
+    "llamaindex"
+  ],
+  "glossary": [
+    {
+      "term": "agent loop",
+      "definition": "Call the model with tools, run the tools it requests, return the results, and repeat until it answers."
+    },
+    {
+      "term": "step budget",
+      "definition": "A cap on loop iterations or tool calls so an agent cannot run forever."
+    },
+    {
+      "term": "framework lock-in",
+      "definition": "Depending on a framework’s abstractions so deeply that switching is costly."
+    },
+    {
+      "term": "output type",
+      "definition": "In Pydantic AI, the typed model an agent’s final answer must validate against."
+    },
+    {
+      "term": "dependency injection",
+      "definition": "Passing resources such as a database client into an agent run instead of using globals."
+    },
+    {
+      "term": "checkpointer",
+      "definition": "LangGraph’s store that saves graph state after each step, per thread."
+    },
+    {
+      "term": "thread",
+      "definition": "One saved conversation or case history that a run can pause and resume."
+    },
+    {
+      "term": "interrupt",
+      "definition": "A LangGraph call that pauses a run for human input until it is resumed."
+    },
+    {
+      "term": "handoff",
+      "definition": "Transferring a conversation to another agent that then answers the user directly."
+    },
+    {
+      "term": "tripwire",
+      "definition": "A guardrail result that stops an agent run immediately."
+    },
+    {
+      "term": "hook",
+      "definition": "Code that runs at a point in the agent loop, such as before a tool call, and can block it."
+    },
+    {
+      "term": "workflow agent",
+      "definition": "In ADK, an agent that orchestrates sub-agents in sequence, in parallel or in a loop."
+    },
+    {
+      "term": "crew",
+      "definition": "In CrewAI, a set of role-based agents working through tasks under a process."
+    },
+    {
+      "term": "durable execution",
+      "definition": "Running long workflows so they survive crashes and resume from saved state."
+    },
+    {
+      "term": "Zod",
+      "definition": "A TypeScript schema library used to define and validate tool inputs."
+    },
+    {
+      "term": "streamText",
+      "definition": "AI SDK function that runs the tool loop and streams tokens and tool calls."
+    },
+    {
+      "term": "query engine",
+      "definition": "A LlamaIndex object that retrieves and synthesises an answer from an index."
+    },
+    {
+      "term": "QueryEngineTool",
+      "definition": "A wrapper that lets an agent call a query engine as a tool."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: Building effective agents (2024)",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "id": "S2",
+      "title": "Pydantic AI documentation",
+      "url": "https://ai.pydantic.dev"
+    },
+    {
+      "id": "S3",
+      "title": "LangGraph documentation",
+      "url": "https://docs.langchain.com/oss/python/langgraph/overview"
+    },
+    {
+      "id": "S4",
+      "title": "LangChain and LangGraph reach v1.0 (Oct 2025)",
+      "url": "https://www.langchain.com/blog/langchain-langgraph-1dot0"
+    },
+    {
+      "id": "S5",
+      "title": "OpenAI Agents SDK documentation",
+      "url": "https://openai.github.io/openai-agents-python/"
+    },
+    {
+      "id": "S6",
+      "title": "Claude Agent SDK overview",
+      "url": "https://docs.claude.com/en/api/agent-sdk/overview"
+    },
+    {
+      "id": "S7",
+      "title": "Claude Agent SDK for Python (GitHub)",
+      "url": "https://github.com/anthropics/claude-agent-sdk-python"
+    },
+    {
+      "id": "S8",
+      "title": "Google Agent Development Kit",
+      "url": "https://adk.dev"
+    },
+    {
+      "id": "S9",
+      "title": "CrewAI documentation",
+      "url": "https://docs.crewai.com"
+    },
+    {
+      "id": "S10",
+      "title": "Atlan: Microsoft Agent Framework status (1.0 GA, April 2026)",
+      "url": "https://atlan.com/know/ai-agent/microsoft/agent-framework/"
+    },
+    {
+      "id": "S11",
+      "title": "Microsoft AutoGen repository (maintenance mode)",
+      "url": "https://github.com/microsoft/autogen"
+    },
+    {
+      "id": "S12",
+      "title": "Model Context Protocol",
+      "url": "https://modelcontextprotocol.io"
+    },
+    {
+      "id": "S13",
+      "title": "Agent2Agent (A2A) protocol",
+      "url": "https://a2a-protocol.org"
+    },
+    {
+      "id": "S14",
+      "title": "Temporal: durable execution",
+      "url": "https://temporal.io"
+    },
+    {
+      "id": "S15",
+      "title": "Vercel AI SDK documentation",
+      "url": "https://ai-sdk.dev/docs"
+    },
+    {
+      "id": "S16",
+      "title": "Mastra documentation",
+      "url": "https://mastra.ai/docs"
+    },
+    {
+      "id": "S17",
+      "title": "LlamaIndex documentation",
+      "url": "https://docs.llamaindex.ai"
+    },
+    {
+      "id": "S18",
+      "title": "LlamaIndex Workflows guide",
+      "url": "https://docs.llamaindex.ai/en/stable/module_guides/workflow/"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Our first agent, a few tools, small team",
+      "techniqueId": "plain",
+      "advice": "Write the loop yourself with a provider SDK; add a framework when a need appears."
+    },
+    {
+      "symptom": "We want typed outputs and to switch providers easily",
+      "techniqueId": "pydantic",
+      "advice": "Pydantic AI: typed outputs and dependencies over most providers."
+    },
+    {
+      "symptom": "Cases run for days and need human approvals",
+      "techniqueId": "langgraph",
+      "advice": "LangGraph with a Postgres checkpointer and interrupts."
+    },
+    {
+      "symptom": "A triage agent should hand off to specialists, on OpenAI",
+      "techniqueId": "openai",
+      "advice": "OpenAI Agents SDK: handoffs, guardrails, sessions, traces."
+    },
+    {
+      "symptom": "The agent must work with files, code and a shell",
+      "techniqueId": "claude",
+      "advice": "Claude Agent SDK, with narrow permissions and hooks."
+    },
+    {
+      "symptom": "We are a Java or Go shop on Google Cloud",
+      "techniqueId": "adk",
+      "advice": "Google ADK: workflow agents in your language, A2A built in."
+    },
+    {
+      "symptom": "The work splits into roles, or we are a .NET shop",
+      "techniqueId": "crew",
+      "advice": "CrewAI for Python role teams; Microsoft Agent Framework for .NET."
+    },
+    {
+      "symptom": "The product team works in TypeScript and wants agents inside its web app",
+      "techniqueId": "tsagents",
+      "advice": "Use the Vercel AI SDK for typed tools and streaming, and Mastra for workflows that pause and resume."
+    },
+    {
+      "symptom": "The agent mostly answers from large, messy document collections",
+      "techniqueId": "llamaindex",
+      "advice": "Use LlamaIndex: parse and index the documents, give the agent a query engine tool, and save Context for long cases."
+    }
+  ]
+}

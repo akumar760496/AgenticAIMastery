@@ -1,0 +1,252 @@
+{
+  "slug": "guardrails",
+  "number": 2,
+  "techniqueOrder": [
+    "pre",
+    "pii",
+    "post",
+    "det",
+    "zt",
+    "grounding"
+  ],
+  "glossary": [
+    {
+      "term": "prompt injection",
+      "definition": "Text that tries to override an AI system's instructions, such as “ignore previous instructions”."
+    },
+    {
+      "term": "indirect prompt injection",
+      "definition": "Instructions hidden in content an agent reads: web pages, emails, documents or tool results."
+    },
+    {
+      "term": "jailbreak",
+      "definition": "A prompt designed to make a model break its safety rules."
+    },
+    {
+      "term": "PII",
+      "definition": "Personally identifiable information: names, contact details, ID and account numbers."
+    },
+    {
+      "term": "Luhn check",
+      "definition": "A checksum valid card numbers pass; confirms a digit string is likely a real card number."
+    },
+    {
+      "term": "allow list",
+      "definition": "Only listed values are permitted; everything else is refused by default."
+    },
+    {
+      "term": "deny list",
+      "definition": "Listed values are refused; everything else is permitted."
+    },
+    {
+      "term": "threshold",
+      "definition": "The score above which a classifier's label triggers an action such as block or flag."
+    },
+    {
+      "term": "least privilege",
+      "definition": "Granting only the minimum permissions a task needs, for the shortest time."
+    },
+    {
+      "term": "human-in-the-loop",
+      "definition": "A person reviews or approves an action before it runs."
+    },
+    {
+      "term": "policy as code",
+      "definition": "Access rules written as versioned, testable code, such as Rego for Open Policy Agent."
+    },
+    {
+      "term": "grounding",
+      "definition": "Whether a statement is supported by a trusted source such as retrieved documents."
+    },
+    {
+      "term": "false positive",
+      "definition": "A safe item wrongly flagged or blocked."
+    },
+    {
+      "term": "redaction",
+      "definition": "Removing or replacing personal data in text so it cannot be read."
+    },
+    {
+      "term": "pseudonymisation",
+      "definition": "Replacing personal data with placeholders or tokens that can be mapped back only with a separately protected key or vault."
+    },
+    {
+      "term": "Verhoeff checksum",
+      "definition": "The check-digit algorithm used by Aadhaar numbers; it catches all single-digit errors and swaps of adjacent digits."
+    },
+    {
+      "term": "classifier",
+      "definition": "A model that assigns a label and a score to text, such as a safety model that flags harmful requests."
+    },
+    {
+      "term": "review band",
+      "definition": "A range of scores just below a block threshold that goes to a person instead of passing silently."
+    },
+    {
+      "term": "grounding check",
+      "definition": "A test, after generation, that each claim is supported by the context the model was given."
+    },
+    {
+      "term": "atomic claim",
+      "definition": "A single checkable fact extracted from a longer answer."
+    },
+    {
+      "term": "false flag",
+      "definition": "A correct answer wrongly marked as unsupported by a checker."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "OWASP Top 10 for LLM Applications 2025",
+      "url": "https://genai.owasp.org/llm-top-10/"
+    },
+    {
+      "id": "S2",
+      "title": "Indirect prompt injection (Greshake et al., 2023)",
+      "url": "https://arxiv.org/abs/2302.12173"
+    },
+    {
+      "id": "S3",
+      "title": "Spotlighting: defending against indirect prompt injection (Hines et al., 2024)",
+      "url": "https://arxiv.org/abs/2403.14720"
+    },
+    {
+      "id": "S4",
+      "title": "Microsoft Presidio documentation",
+      "url": "https://microsoft.github.io/presidio/"
+    },
+    {
+      "id": "S5",
+      "title": "Llama Prompt Guard 2 model card",
+      "url": "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M"
+    },
+    {
+      "id": "S6",
+      "title": "NeMo Guardrails (Rebedea et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.10501"
+    },
+    {
+      "id": "S7",
+      "title": "Guardrails AI documentation",
+      "url": "https://www.guardrailsai.com/docs"
+    },
+    {
+      "id": "S8",
+      "title": "Pydantic documentation",
+      "url": "https://docs.pydantic.dev/latest/"
+    },
+    {
+      "id": "S9",
+      "title": "SelfCheckGPT: hallucination detection (Manakul et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.08896"
+    },
+    {
+      "id": "S10",
+      "title": "Llama Guard (Inan et al., 2023)",
+      "url": "https://arxiv.org/abs/2312.06674"
+    },
+    {
+      "id": "S11",
+      "title": "ShieldGemma (Zeng et al., 2024)",
+      "url": "https://arxiv.org/abs/2407.21772"
+    },
+    {
+      "id": "S12",
+      "title": "OpenAI moderation guide",
+      "url": "https://platform.openai.com/docs/guides/moderation"
+    },
+    {
+      "id": "S13",
+      "title": "Jailbroken: how does LLM safety training fail? (Wei et al., 2023)",
+      "url": "https://arxiv.org/abs/2307.02483"
+    },
+    {
+      "id": "S14",
+      "title": "NIST SP 800-207: Zero Trust Architecture",
+      "url": "https://csrc.nist.gov/pubs/sp/800/207/final"
+    },
+    {
+      "id": "S15",
+      "title": "Open Policy Agent documentation",
+      "url": "https://www.openpolicyagent.org/docs/latest/"
+    },
+    {
+      "id": "S16",
+      "title": "Defeating prompt injections by design: CaMeL (Debenedetti et al., 2025)",
+      "url": "https://arxiv.org/abs/2503.18813"
+    },
+    {
+      "id": "S17",
+      "title": "Model Context Protocol: authorization",
+      "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization"
+    },
+    {
+      "id": "S18",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "id": "S19",
+      "title": "RE2 regular expression library",
+      "url": "https://github.com/google/re2"
+    },
+    {
+      "id": "S20",
+      "title": "MeitY: Data protection framework (DPDP Act, 2023 and Rules)",
+      "url": "https://www.meity.gov.in/data-protection-framework"
+    },
+    {
+      "id": "S21",
+      "title": "Presidio: supported entities, including IN_PAN and IN_AADHAAR",
+      "url": "https://presidio.dataprivacystack.org/supported_entities/"
+    },
+    {
+      "id": "S22",
+      "title": "MiniCheck: efficient fact-checking of LLMs on grounding documents (Tang, Laban and Durrett, 2024)",
+      "url": "https://arxiv.org/abs/2404.10774"
+    },
+    {
+      "id": "S23",
+      "title": "Vectara: Hallucination evaluation model (HHEM) model card",
+      "url": "https://huggingface.co/vectara/hallucination_evaluation_model"
+    },
+    {
+      "id": "S24",
+      "title": "SelfCheckGPT: zero-resource black-box hallucination detection (Manakul et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.08896"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Users might try a jailbreak or hide instructions in a document",
+      "techniqueId": "pre",
+      "advice": "Screen input, documents and tool results for injection and jailbreaks before the model sees them."
+    },
+    {
+      "symptom": "Customers paste PAN, Aadhaar or card numbers into chat",
+      "techniqueId": "pii",
+      "advice": "Detect them with patterns plus checksums, replace them with typed placeholders, and keep the real values in a short-lived vault."
+    },
+    {
+      "symptom": "The bot might state wrong facts or say something offensive",
+      "techniqueId": "post",
+      "advice": "Check each draft for grounding, toxicity, leaks and format before it is sent."
+    },
+    {
+      "symptom": "Some risks are exact patterns, others are polite paraphrases",
+      "techniqueId": "det",
+      "advice": "Use rules for exact patterns and limits, classifiers for meaning, and run the rules first."
+    },
+    {
+      "symptom": "The agent can move money, send emails or change data",
+      "techniqueId": "zt",
+      "advice": "Rate each tool by impact, deny by default, scope credentials, and set the amount above which a person must approve."
+    },
+    {
+      "symptom": "RAG answers sometimes state figures or terms the documents do not contain",
+      "techniqueId": "grounding",
+      "advice": "Split answers into claims, score each against the retrieved text with a fast checker, escalate unsure ones, and regenerate or refuse."
+    }
+  ]
+}

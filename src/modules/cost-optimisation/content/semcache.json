@@ -1,0 +1,898 @@
+{
+  "id": "semcache",
+  "moduleSlug": "cost-optimisation",
+  "name": "Semantic Response Caching",
+  "shortName": "Semantic cache",
+  "question": "Has someone already asked this, in other words?",
+  "summary": "Store whole answers keyed by the meaning of the question. Each new question is embedded and compared with cached questions; if one is similar enough, in the same scope and not expired, its stored answer is returned and the model is never called. This differs from prompt caching, where the provider reuses a processed prompt prefix but the model still writes a fresh answer. The risks are false hits (a similar but different question gets the wrong answer), stale answers after the source changes, and personal answers leaking between users.",
+  "useCases": [
+    "High-volume support bots where many users ask the same FAQ in different words",
+    "Answers that depend only on shared content, such as plans, policies and how-to steps",
+    "Traffic where a lookup is far cheaper and faster than an LLM call"
+  ],
+  "keyFacts": {
+    "label": "Key decisions",
+    "items": [
+      {
+        "term": "Similarity threshold",
+        "detail": "how close a question must be to reuse an answer; lower means more hits and more false hits"
+      },
+      {
+        "term": "Scope",
+        "detail": "global, per tenant or per user; personalised answers are never shared"
+      },
+      {
+        "term": "What to cache",
+        "detail": "FAQ-like intents only; account-specific and live-data intents bypass the cache"
+      },
+      {
+        "term": "TTL",
+        "detail": "how long an entry lives before it must be regenerated"
+      },
+      {
+        "term": "Invalidation",
+        "detail": "purge or version entries when the source document changes"
+      },
+      {
+        "term": "Metrics",
+        "detail": "hit rate, false-hit rate from sampled reviews, and ₹ saved net of lookups"
+      }
+    ]
+  },
+  "steps": [
+    "Classify intents and send account-specific or live-data questions straight to the model",
+    "Pick a threshold from a labelled set of paraphrase and near-miss pairs, not by feel",
+    "Tag every entry with its scope and the version of the source it came from",
+    "Sample hits for review, track false-hit rate and ₹ saved, and purge on source changes"
+  ],
+  "pitfalls": [
+    "A loose threshold returns confident answers to different questions: “roaming in UAE” is not “roaming in USA”",
+    "A global cache holding account answers shows one customer’s data to another",
+    "A long TTL keeps serving old prices after the tariff changes"
+  ],
+  "tools": [
+    "GPTCache",
+    "RedisVL SemanticCache",
+    "LangChain caches",
+    "LiteLLM caching",
+    "Portkey semantic cache"
+  ],
+  "remember": "Cache the shared answers, never the personal ones. Tune the threshold on near misses.",
+  "caption": "Illustrative: Tarang Mobile, a fictional telecom operator, with 1,00,000 questions a day, a 0.90 threshold, a global FAQ cache and account intents excluded.",
+  "comparison": {
+    "scope": "Requests that reach the model",
+    "cost": 3,
+    "needs": "Medium: vector store, intent filter, reviews",
+    "best": "False hits give wrong answers"
+  },
+  "diagram": {
+    "file": "diagrams/semcache.svg"
+  },
+  "lesson": {
+    "file": "faq_cache.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from redisvl.extensions.cache.llm import SemanticCache",
+        "steps": []
+      },
+      {
+        "text": "from redisvl.query.filter import Tag",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ACCOUNT = {\"bill\", \"balance\", \"recharge_status\", \"sim_block\"}   # never cached",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "cache = SemanticCache(",
+        "steps": []
+      },
+      {
+        "text": "    name=\"tarang_faq\",",
+        "steps": []
+      },
+      {
+        "text": "    redis_url=\"redis://localhost:6379\",",
+        "steps": []
+      },
+      {
+        "text": "    distance_threshold=0.10,          # cosine distance 0.10 = similarity 0.90",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    ttl=24 * 3600,                    # entries expire after 24 hours",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    filterable_fields=[{\"name\": \"scope\", \"type\": \"tag\"},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                       {\"name\": \"tariff_v\", \"type\": \"tag\"}],",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": ")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def answer(question: str, user: dict) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    if classify_intent(question) in ACCOUNT:          # live, personal data",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return llm_answer(question, user=user)        # straight to the model",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    tariff_v = current_tariff_version()               # e.g. \"2026-09\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    only = (Tag(\"scope\") == \"global\") & (Tag(\"tariff_v\") == tariff_v)",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      {
+        "text": "    hits = cache.check(prompt=question, filter_expression=only, num_results=1)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if hits:",
+        "steps": []
+      },
+      {
+        "text": "        log_hit(question, hits[0][\"prompt\"], float(hits[0][\"vector_distance\"]))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return hits[0][\"response\"]                    # no LLM call",
+        "steps": [
+          2,
+          6
+        ]
+      },
+      {
+        "text": "    reply = llm_answer(question, user=None)           # shared facts only",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    cache.store(prompt=question, response=reply,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                filters={\"scope\": \"global\", \"tariff_v\": tariff_v})",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    log_miss(question)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return reply",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Keep personal questions out",
+        "text": "40,000 of Tarang Mobile's 1,00,000 daily questions are about a customer's own bill, balance or SIM. Their answers depend on live, personal data, so they go straight to the model and are never looked up or stored."
+      },
+      {
+        "title": "Set the threshold on near misses",
+        "text": "RedisVL measures cosine distance, so distance_threshold 0.10 means similarity 0.90. “How do I turn on roaming?” and “activate roaming?” score 0.94 and rightly share an answer. “Roaming packs for UAE” and “Roaming packs for USA” can score 0.91 and must not. Choose the threshold from labelled paraphrase and near-miss pairs."
+      },
+      {
+        "title": "Scope the cache",
+        "text": "Every entry is tagged scope=global and the lookup filters on that tag. Only shared answers are stored, and they are generated without the user's details, so one customer's answer can never be served to another."
+      },
+      {
+        "title": "Store on a miss, with a TTL",
+        "text": "On a miss the model answers and the reply is stored with a 24-hour TTL. The next paraphrase within a day is a hit; after 24 hours the entry expires and is written again."
+      },
+      {
+        "title": "Invalidate when the source changes",
+        "text": "Each entry carries the tariff version it was written under. When the tariff page changes mid-week the version bumps, old entries stop matching at once, and the next question gets a fresh answer. Relying on the 24-hour TTL alone would serve about 5,610 stale price answers."
+      },
+      {
+        "title": "Measure hits, false hits and ₹",
+        "text": "Log every hit with its distance and sample hits for human review. At 0.90 the cache answers 45,600 questions a day, about 720 of them false hits. At ₹0.40 per LLM answer and ₹0.01 per lookup on the 60,000 FAQ questions, it saves ₹18,240 − ₹600 = ₹17,640 a day."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl l a\" x=\"8\" y=\"12\" style=\"--d:0s\">1,00,000 questions a day</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"8\" y=\"18\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"93\" y=\"34\" text-anchor=\"middle\">bill · balance · SIM</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"184\" y=\"18\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"34\" text-anchor=\"middle\">40,000 → model, not cached</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"52\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"68\" text-anchor=\"middle\">distance ≤ 0.10  =  similarity ≥ 0.90</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"8\" y=\"82\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"93\" y=\"98\" text-anchor=\"middle\">roaming paraphrase 0.94</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx fail\" x=\"184\" y=\"82\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"98\" text-anchor=\"middle\">UAE vs USA 0.91: false</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"116\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"132\" text-anchor=\"middle\">scope = global</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"116\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"132\" text-anchor=\"middle\">no user details stored</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"150\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"62\" y=\"166\" text-anchor=\"middle\">miss</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M118 162L128 162\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx \" x=\"130\" y=\"150\" width=\"90\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"175\" y=\"166\" text-anchor=\"middle\">LLM</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M222 162L232 162\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx pass\" x=\"234\" y=\"150\" width=\"118\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"293\" y=\"166\" text-anchor=\"middle\">store · 24 h</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"184\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"200\" text-anchor=\"middle\">tariff_v 2026-09 → 10</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"184\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"200\" text-anchor=\"middle\">old entries stop matching</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"218\" width=\"170\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"234\" text-anchor=\"middle\">45,600 hits · 720 false</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"218\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"234\" text-anchor=\"middle\">₹17,640 saved a day</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Repeated questions skip the model entirely, so they cost a lookup instead of an LLM call",
+      "Cached answers return in milliseconds instead of seconds",
+      "Popular answers stay consistent across thousands of customers",
+      "Stacks with prompt caching and routing on the questions that still miss"
+    ],
+    "cons": [
+      "False hits give a confident answer to a different question",
+      "Stale answers linger after prices or policies change unless you purge",
+      "A badly scoped cache can show one customer another customer’s data",
+      "Needs an embedding model, a vector store and a review loop to tune"
+    ],
+    "avoidWhen": [
+      "Most questions are personal or depend on live data, such as balances and order status (cache the shared facts the model uses instead)",
+      "Answers must reflect data that changes minute to minute (use prompt caching and fresh generation)"
+    ],
+    "tools": [
+      {
+        "name": "GPTCache",
+        "type": "Open source (Zilliz)",
+        "what": "Semantic cache library with pluggable embeddings, vector stores and similarity checks",
+        "url": "https://github.com/zilliztech/GPTCache"
+      },
+      {
+        "name": "RedisVL SemanticCache",
+        "type": "Open source (Redis)",
+        "what": "Semantic cache on Redis with a distance threshold, TTL and tag filters for scope",
+        "url": "https://github.com/redis/redis-vl-python"
+      },
+      {
+        "name": "LangChain caches",
+        "type": "Open source (LangChain)",
+        "what": "Plug a semantic cache such as Redis into any LangChain model call",
+        "url": "https://docs.langchain.com"
+      },
+      {
+        "name": "LiteLLM caching",
+        "type": "Open source",
+        "what": "Proxy-level caching, including a Redis semantic cache with a similarity threshold",
+        "url": "https://docs.litellm.ai/docs/proxy/caching"
+      },
+      {
+        "name": "Portkey",
+        "type": "Commercial gateway",
+        "what": "Simple and semantic caching at the gateway with a TTL",
+        "url": "https://portkey.ai/docs/product/ai-gateway/cache-simple-and-semantic"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Tarang Mobile, a fictional telecom operator, gets 1,00,000 support questions a day: 60,000 FAQ-like (15,000 of them about tariffs) and 40,000 about a customer's own bill, balance or SIM. An LLM answer costs ₹0.40 and a cache lookup ₹0.01. You set how similar a question must be to reuse a stored answer, who shares the cache, how long entries live and whether account questions skip it. Mid-week the tariffs change.",
+    "controls": [
+      "Click a similarity threshold from 0.80 to 0.98.",
+      "Choose the cache scope (global or per user) and the entry lifetime (1 hour, 24 hours or 7 days).",
+      "Tick whether account-specific intents skip the cache and whether tariff answers are purged when the tariff page changes, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Hit rate",
+        "meaning": "Share of the 1,00,000 daily questions answered from the cache without calling the model."
+      },
+      {
+        "name": "False hits a day",
+        "meaning": "Stored answers served to questions they do not fit: near-miss FAQs and any cached account answer, since account data is live."
+      },
+      {
+        "name": "Stale tariff answers after the change",
+        "meaning": "Old price answers served after the mid-week tariff change, until entries expire or are purged."
+      },
+      {
+        "name": "₹ saved a day",
+        "meaning": "Hits × ₹0.40 minus lookups × ₹0.01. False hits count here too, which is why saving alone is a poor target."
+      },
+      {
+        "name": "Privacy leaks a day",
+        "meaning": "Account answers served from a global cache to a different customer."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Loose, global, 7 days, everything cached",
+        "expect": "Hit rate 96.5% and ₹37,618 saved a day, but 42,420 false hits, 37,620 privacy leaks and 47,360 stale tariff answers."
+      },
+      {
+        "k": "safe",
+        "name": "0.90, global, 24 h, account intents skip",
+        "expect": "Hit rate 45.6%, 720 false hits, no leaks, ₹17,640 saved, but 5,610 stale tariff answers after the change."
+      },
+      {
+        "k": "peruser",
+        "name": "0.90, per user, 24 h, everything cached",
+        "expect": "Hit rate 6.2%, only ₹1,467 saved, and 3,108 false hits because cached account answers go out of date."
+      },
+      {
+        "k": "tuned",
+        "name": "0.90, global, 24 h, skip account, purge on change",
+        "expect": "Hit rate 45.6%, 720 false hits, no leaks, no stale answers, ₹17,640 saved a day."
+      }
+    ],
+    "missions": [
+      {
+        "k": "safe",
+        "text": "Reach a hit rate of at least 40% with no more than 1,000 false hits a day, no privacy leaks and no more than 1,000 stale tariff answers.",
+        "hint": "Use 0.90, a global cache, account intents skipping it, and purge tariff answers on change."
+      },
+      {
+        "k": "leak",
+        "text": "Show that even the strictest threshold does not stop privacy leaks in a global cache.",
+        "hint": "Set 0.98, keep the cache global and let account intents in: with a 24-hour TTL, 31,280 account answers a day still reach the wrong customer."
+      },
+      {
+        "k": "ttlonly",
+        "text": "Without purging, keep stale tariff answers under 500 while the hit rate stays at or above 30% with no leaks.",
+        "hint": "Shorten the TTL to 1 hour at 0.90 with account intents skipping the cache."
+      }
+    ],
+    "tools": [
+      {
+        "n": "RedisVL SemanticCache",
+        "type": "Open source · Redis",
+        "start": 3,
+        "prod": 3,
+        "best": "A semantic cache on Redis with a distance threshold, TTL and tag filters for scope and source version.",
+        "ex": "A telecom FAQ cache tagged scope=global and tariff_v, so a tariff change retires old answers at once.",
+        "pros": [
+          "Threshold, TTL and filters in one object",
+          "Runs on Redis many teams already operate"
+        ],
+        "cons": [
+          "Threshold is a cosine distance, easy to confuse with similarity",
+          "Tuning and review loops are yours to build"
+        ],
+        "url": "https://github.com/redis/redis-vl-python"
+      },
+      {
+        "n": "GPTCache",
+        "type": "Open source · Zilliz",
+        "start": 2,
+        "prod": 2,
+        "best": "A modular semantic cache: pick the embedding model, vector store and similarity evaluator.",
+        "ex": "Prototype a support-bot cache with a local embedding model and FAISS before choosing a production store.",
+        "pros": [
+          "Very configurable pipeline",
+          "Works in front of any model"
+        ],
+        "cons": [
+          "Many moving parts to configure",
+          "Check release activity before relying on it in production"
+        ],
+        "url": "https://github.com/zilliztech/GPTCache"
+      },
+      {
+        "n": "LiteLLM caching",
+        "type": "Open source · proxy",
+        "start": 3,
+        "prod": 3,
+        "best": "Turn on a Redis semantic cache at the gateway with a similarity threshold, for every app behind the proxy.",
+        "ex": "A shared proxy where the help-centre bot opts in to semantic caching and the account bot does not.",
+        "pros": [
+          "No application code changes",
+          "Per-request controls to skip the cache"
+        ],
+        "cons": [
+          "Scope rules still need care at the gateway",
+          "Less control over what is stored per intent"
+        ],
+        "url": "https://docs.litellm.ai/docs/proxy/caching"
+      },
+      {
+        "n": "LangChain caches",
+        "type": "Open source · LangChain",
+        "start": 3,
+        "prod": 2,
+        "best": "Set a semantic cache, such as a Redis one, globally for LangChain model calls.",
+        "ex": "Add a semantic cache to an existing LangChain FAQ chain in a few lines to measure the hit rate.",
+        "pros": [
+          "Quick to add to LangChain apps",
+          "Several backends available"
+        ],
+        "cons": [
+          "Global by default, so scoping personal answers needs extra work",
+          "Tied to the LangChain call path"
+        ],
+        "url": "https://docs.langchain.com"
+      },
+      {
+        "n": "Portkey",
+        "type": "Commercial · gateway",
+        "start": 3,
+        "prod": 3,
+        "best": "Simple and semantic caching at the gateway with a TTL and cache analytics.",
+        "ex": "Turn on semantic caching for a public FAQ assistant and read the hit rate and savings from the dashboard.",
+        "pros": [
+          "Managed, with analytics",
+          "Works across providers"
+        ],
+        "cons": [
+          "Another party in the data path",
+          "Semantic mode needs the right plan"
+        ],
+        "url": "https://portkey.ai/docs/product/ai-gateway/cache-simple-and-semantic"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Semantic cache inside your own service",
+        "tool": "RedisVL SemanticCache"
+      },
+      {
+        "need": "Cache for every app behind one gateway",
+        "tool": "LiteLLM proxy or Portkey"
+      },
+      {
+        "need": "Experiment with embeddings and stores",
+        "tool": "GPTCache"
+      }
+    ],
+    "goals": [
+      "Explain how a semantic response cache differs from provider prompt caching",
+      "Choose a threshold and scope that keep false hits and privacy leaks near zero",
+      "Explain why TTL alone is a weak answer to source changes, and how purging by version fixes it"
+    ]
+  },
+  "practice": {
+    "scenario": "Tarang Mobile, a fictional telecom operator, gets 1,00,000 support questions a day. 60,000 are FAQ-like, such as “How do I activate international roaming?” asked in dozens of ways, in English and Hinglish. A semantic cache with a 0.90 similarity threshold answers 45,600 of them from stored answers, while questions about a customer's own bill, balance or SIM skip the cache entirely. When the tariffs change mid-week, entries tagged with the old tariff version stop matching at once.",
+    "industries": [
+      {
+        "industry": "Telecom support",
+        "use": "Plan, roaming and recharge FAQs reused across millions of customers; bills and balances always generated fresh"
+      },
+      {
+        "industry": "Banking and payments",
+        "use": "“How do I raise a UPI dispute?” cached globally; “why was my UPI payment declined?” never cached"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Return and delivery policy answers cached per region, with a purge when the policy page changes"
+      }
+    ],
+    "analogy": "A railway enquiry counter with a board of printed answers to common questions. The clerk points to the board when a question matches one on it, but never for “where is my ticket?”, and the board is reprinted the day the timetable changes.",
+    "library": {
+      "name": "RedisVL SemanticCache",
+      "what": "A semantic cache on Redis: set a cosine distance threshold and a TTL, tag entries with filterable fields such as scope and source version, then check() before calling the model and store() after a miss.",
+      "install": "pip install redisvl"
+    },
+    "note": "classify_intent, llm_answer and current_tariff_version are stubs for your own intent classifier, model call and content version. RedisVL moved SemanticCache to redisvl.extensions.cache.llm in recent releases; older versions import it from redisvl.extensions.llmcache. The threshold script uses sentence-transformers; use the same embedding model as your cache.",
+    "samples": [
+      {
+        "file": "faq_cache.py",
+        "language": "python",
+        "code": "from redisvl.extensions.cache.llm import SemanticCache\nfrom redisvl.query.filter import Tag\n\nACCOUNT_INTENTS = {\"bill\", \"balance\", \"recharge_status\", \"sim_block\"}\n\ncache = SemanticCache(\n    name=\"tarang_faq\",\n    redis_url=\"redis://localhost:6379\",\n    distance_threshold=0.10,            # cosine distance: similarity >= 0.90\n    ttl=24 * 3600,                      # seconds\n    filterable_fields=[{\"name\": \"scope\", \"type\": \"tag\"},\n                       {\"name\": \"tariff_v\", \"type\": \"tag\"}],\n)\n\n\ndef answer(question: str, user: dict) -> str:\n    if classify_intent(question) in ACCOUNT_INTENTS:\n        return llm_answer(question, user=user)          # personal: never cached\n    version = current_tariff_version()\n    only = (Tag(\"scope\") == \"global\") & (Tag(\"tariff_v\") == version)\n    hits = cache.check(prompt=question, filter_expression=only, num_results=1)\n    if hits:\n        return hits[0][\"response\"]\n    reply = llm_answer(question, user=None)             # shared facts only\n    cache.store(prompt=question, response=reply,\n                filters={\"scope\": \"global\", \"tariff_v\": version})\n    return reply"
+      },
+      {
+        "file": "pick_threshold.py",
+        "language": "python",
+        "code": "from sentence_transformers import SentenceTransformer\n\n# Labelled pairs: True = same answer is correct, False = near miss\nPAIRS = [\n    (\"How do I activate international roaming?\", \"activate roaming kaise kare\", True),\n    (\"How do I turn on roaming?\", \"Enable roaming on my number\", True),\n    (\"Roaming packs for UAE\", \"Roaming packs for USA\", False),\n    (\"Price of the 299 plan\", \"Price of the 399 plan\", False),\n    (\"How do I port my number to Tarang?\", \"Steps to port in to Tarang Mobile\", True),\n]\n\nmodel = SentenceTransformer(\"all-MiniLM-L6-v2\")\n\n\ndef similarity(a: str, b: str) -> float:\n    ea, eb = model.encode([a, b], normalize_embeddings=True)\n    return float(ea @ eb)\n\n\nscored = [(similarity(a, b), same) for a, b, same in PAIRS]\nfor th in (0.80, 0.85, 0.90, 0.95, 0.98):\n    hits = [same for sim, same in scored if sim >= th]\n    false_hits = sum(1 for same in hits if not same)\n    recall = sum(hits) / sum(same for _, same in scored)\n    print(f\"threshold {th:.2f}: recall {recall:.0%}, false hits {false_hits}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Tarang Mobile sends its 60,000 daily FAQ questions through a semantic cache; account questions skip it. 45,600 are hits. An LLM answer costs ₹0.40 and each lookup ₹0.01. How many rupees a day does the cache save?",
+    "answer": "Hits avoid 45,600 × ₹0.40 = ₹18,240 of LLM calls. Every FAQ question pays a lookup: 60,000 × ₹0.01 = ₹600. Net saving: ₹18,240 − ₹600 = ₹17,640 a day.",
+    "expected": {
+      "value": 17640,
+      "tolerance": 50,
+      "label": "₹ a day ="
+    },
+    "interview": [
+      {
+        "question": "How is a semantic response cache different from prompt caching?",
+        "answer": "Prompt caching is a provider feature: the processed prompt prefix is reused, but the model still generates a fresh answer, so answers stay correct and only input cost falls. A semantic cache sits in your own stack and returns a stored answer when a new question is similar enough, so the model is not called at all. It saves more per hit but can return a wrong answer on a near miss, a stale answer after the source changes, or another user's answer if scoped badly."
+      },
+      {
+        "question": "How would you choose the similarity threshold?",
+        "answer": "Build a labelled set from real traffic: paraphrase pairs that should share an answer and near misses that should not, such as two plans or two countries. Embed them with the cache's own model, and for each threshold measure recall and the false-hit rate. Pick the loosest threshold whose false-hit rate is acceptable, then keep sampling live hits for review, because traffic drifts."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Caching every intent in one global cache",
+        "fix": "Exclude account-specific and live-data intents, and tag entries with a scope"
+      },
+      {
+        "mistake": "Relying on TTL alone when source content changes",
+        "fix": "Tag entries with the source version and purge or stop matching when it changes"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sk01",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom support bot gets 1,00,000 questions a day, and thousands of them ask how to activate roaming in different words. Each pays for a fresh LLM answer. Which technique targets this directly?",
+      "options": [
+        "Prompt caching of the system prompt",
+        "A semantic response cache keyed by question embeddings",
+        "Batch processing overnight",
+        "A larger context window"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Paraphrased repeats of the same FAQ can be served a stored answer when their embeddings are close enough, skipping the model entirely."
+    },
+    {
+      "id": "sk02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is the key difference between prompt caching and a semantic response cache?",
+      "options": [
+        "Prompt caching skips the model; a semantic cache does not",
+        "A semantic cache returns a stored answer without calling the model; prompt caching reuses the prefix but still generates a fresh answer",
+        "They are the same feature under different names",
+        "Prompt caching only works for images"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Prompt caching cuts input cost while the model still answers; a semantic cache replaces the model call with a lookup."
+    },
+    {
+      "id": "sk03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments app caches answers globally. “Why was my UPI payment declined?” from one user returns another user’s answer. What is the root cause?",
+      "options": [
+        "The threshold is too strict",
+        "An account-specific intent was cached in a global scope",
+        "The TTL is too short",
+        "The embedding model is too small"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Personal questions look alike across users but their answers differ. They must skip the cache or be scoped per user."
+    },
+    {
+      "id": "sk04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A cache hits 45,600 of the 60,000 FAQ questions it checks each day. An LLM answer costs ₹0.40 and a lookup ₹0.01. What is the net daily saving?",
+      "options": [
+        "₹18,240",
+        "₹17,640",
+        "₹18,840",
+        "₹17,040"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "45,600 × ₹0.40 = ₹18,240 saved; 60,000 × ₹0.01 = ₹600 spent on lookups; ₹18,240 − ₹600 = ₹17,640."
+    },
+    {
+      "id": "sk05",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "“Visa rules for UAE” and “Visa rules for USA” have similarity 0.91. The threshold is 0.90. What happens?",
+      "options": [
+        "A correct hit",
+        "A false hit: the UAE answer is served for the USA question",
+        "A miss",
+        "The cache asks the user to clarify"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Near misses score high because most words match. Tune the threshold on labelled near-miss pairs, or add a check on key entities."
+    },
+    {
+      "id": "sk06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "RedisVL’s SemanticCache is configured with distance_threshold=0.08. What similarity does that require?",
+      "options": [
+        "At least 0.08",
+        "At least 0.92",
+        "At most 0.92",
+        "Exactly 0.08"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cosine distance is 1 minus similarity, so a distance of at most 0.08 means similarity of at least 0.92."
+    },
+    {
+      "id": "sk07",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which questions are good candidates for a global semantic cache? Select all that apply.",
+      "options": [
+        "How do I download my policy document?",
+        "What does a cashless claim mean?",
+        "What is the status of my claim?",
+        "Which documents are needed to file a motor claim?"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "How-to and policy explanations are shared. Claim status depends on the customer’s live record and must be generated fresh."
+    },
+    {
+      "id": "sk08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Tariffs change on Wednesday. Cached price answers have a 7-day TTL and are not purged. Tariff hits run at 13,500 a day. Using the rule of thumb that stale answers ≈ daily hits × TTL in days ÷ 2, roughly how many stale answers go out?",
+      "options": [
+        "6,750",
+        "13,500",
+        "47,250",
+        "94,500"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Entries written before the change expire gradually over 7 days, so on average half are stale: 13,500 × 7 ÷ 2 = 47,250."
+    },
+    {
+      "id": "sk09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "With the same 13,500 tariff hits a day, the TTL is cut to 24 hours, still without a purge. How many stale answers now?",
+      "options": [
+        "6,750",
+        "13,500",
+        "562",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "13,500 × 1 ÷ 2 = 6,750. A shorter TTL shrinks the stale window but does not close it; only a purge on change does."
+    },
+    {
+      "id": "sk10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital chatbot caches “What are OPD timings?” globally. The timings change for the monsoon. What is the best fix?",
+      "options": [
+        "Lower the threshold",
+        "Tag entries with the version of the timings page and purge or stop matching them when it changes",
+        "Switch to per-user scope",
+        "Increase the TTL"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Invalidation tied to the source version retires old answers the moment the page changes, instead of waiting for expiry."
+    },
+    {
+      "id": "sk11",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which metrics should a team track for a semantic cache? Select all that apply.",
+      "options": [
+        "Hit rate",
+        "False-hit rate from sampled human reviews",
+        "₹ saved net of lookup cost",
+        "Number of tokens in the system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Hit rate and savings show value; the false-hit rate shows the price paid in wrong answers. Prompt length belongs to prompt caching."
+    },
+    {
+      "id": "sk12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A B2B help desk serves many companies with different contracts. Which scope fits cached answers about “our SLA for P1 tickets”?",
+      "options": [
+        "Global",
+        "Per tenant",
+        "Per user",
+        "No cache at all is the only option"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The answer depends on the company’s contract, not the individual user, so per-tenant scope shares it safely within one customer."
+    },
+    {
+      "id": "sk13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A per-user cache at 0.90 hits only 6% of questions. Why so low?",
+      "options": [
+        "The threshold is too loose",
+        "Individual users rarely repeat their own questions, so there is little to reuse",
+        "Per-user caches are not allowed to store answers",
+        "Embeddings do not work per user"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reuse comes from many people asking the same shared question. A per-user cache sees few repeats."
+    },
+    {
+      "id": "sk14",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Lowering the threshold from 0.90 to 0.80 raises the hit rate from 46% to 60% on FAQ traffic, and the daily saving rises too. What should you check before shipping?",
+      "options": [
+        "Nothing: more saving is better",
+        "The false-hit rate on sampled hits, because many of the extra hits may be wrong answers",
+        "The embedding dimension",
+        "Whether the cache uses Redis"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Saving counts false hits as money saved. Judge a threshold by false hits and saving together."
+    },
+    {
+      "id": "sk15",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A wallet’s support bot adds a semantic cache. Which intents should skip it? Select all that apply.",
+      "options": [
+        "Where is my refund?",
+        "What is my wallet balance?",
+        "How do I set a UPI PIN?",
+        "Why was my KYC rejected?"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Refund status, balance and KYC outcome depend on the customer’s own records. Setting a UPI PIN is a shared how-to."
+    },
+    {
+      "id": "sk16",
+      "kind": "single",
+      "industry": "Education",
+      "question": "A cache stores answers generated with the student’s name and course inside them, then serves them globally. What is wrong?",
+      "options": [
+        "Nothing, if the threshold is high",
+        "Personal details inside cached answers can be shown to other students",
+        "The TTL is too short",
+        "Embeddings cannot handle names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only answers generated from shared facts, without personal details, belong in a shared scope."
+    },
+    {
+      "id": "sk17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "1,00,000 questions a day. The cache is checked only for the 60,000 FAQ questions, with 48,000 hits. What is the hit rate over all traffic?",
+      "options": [
+        "80%",
+        "48%",
+        "60%",
+        "40%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "48,000 ÷ 1,00,000 = 48%. Against FAQ traffic alone it would be 80%, so say which base you use."
+    },
+    {
+      "id": "sk18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A team sets the threshold by trying a few questions by hand until results “look right”. What is the better approach?",
+      "options": [
+        "Use the library default",
+        "Measure recall and false hits on a labelled set of paraphrase and near-miss pairs at several thresholds",
+        "Always use 0.99",
+        "Ask the LLM to pick a threshold"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A labelled set turns the trade-off into numbers you can defend and re-check when traffic or the embedding model changes."
+    },
+    {
+      "id": "sk19",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "An NBFC’s FAQ cache must follow India’s DPDP Act principles. Which design choices help? Select all that apply.",
+      "options": [
+        "Store only answers generated without personal data",
+        "Exclude loan-account intents from the cache",
+        "Set a TTL so entries do not live forever",
+        "Log full customer questions with PAN numbers in the cache key"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Keeping personal data out of cached entries and limiting retention support data-minimisation. Storing PAN numbers in keys does the opposite. This is educational, not legal advice."
+    },
+    {
+      "id": "sk20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An LLM answer costs ₹0.50 and a lookup ₹0.02. At what hit rate on checked questions does the cache break even?",
+      "options": [
+        "2%",
+        "4%",
+        "10%",
+        "25%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Every checked question pays ₹0.02; each hit saves ₹0.50. Break-even when hit rate × 0.50 = 0.02, so 4%."
+    }
+  ]
+}

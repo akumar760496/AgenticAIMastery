@@ -1,0 +1,935 @@
+{
+  "id": "durable",
+  "moduleSlug": "operations",
+  "name": "Durable Execution and Checkpointing",
+  "shortName": "Durable execution",
+  "question": "What happens when the process dies mid-task?",
+  "summary": "A durable execution engine records the result of every step in an event history, so a workflow that crashes, is redeployed or waits days for a human resumes where it stopped, instead of starting over and repeating side effects. In Temporal, workflow code must be deterministic and all I/O, including model and tool calls, runs in activities with timeouts and retry policies. LangGraph offers a lighter form with checkpointers keyed by a thread id.",
+  "useCases": [
+    "Long-running agents: minutes to days, with human approvals in between",
+    "Steps with side effects: payments, refunds, emails, tickets",
+    "Expensive model steps you cannot afford to repeat after a crash"
+  ],
+  "keyFacts": {
+    "label": "Building blocks",
+    "items": [
+      {
+        "term": "Workflow",
+        "detail": "deterministic orchestration code; replayed from history after a crash"
+      },
+      {
+        "term": "Activity",
+        "detail": "a model call, tool call or API call, with a timeout and retry policy"
+      },
+      {
+        "term": "Event history",
+        "detail": "the recorded result of every completed step"
+      },
+      {
+        "term": "Signals and timers",
+        "detail": "wait for a human approval or a deadline for days, durably"
+      },
+      {
+        "term": "Checkpointer",
+        "detail": "LangGraph saves state after each step; resume with the same thread id"
+      },
+      {
+        "term": "Idempotency",
+        "detail": "activities run at least once, so side effects still need keys (Panel 8)"
+      }
+    ]
+  },
+  "steps": [
+    "Put every model and tool call in an activity with a timeout and retry policy",
+    "Keep the workflow deterministic: no clocks, random numbers or I/O in it",
+    "Wait for approvals with signals or timers, not a sleeping process",
+    "Give every side-effecting activity an idempotency key"
+  ],
+  "pitfalls": [
+    "Non-deterministic workflow code breaks replay",
+    "Assuming exactly-once: an activity can run again after a crash",
+    "Checkpointing only at the end, so a crash loses all progress"
+  ],
+  "tools": [
+    "Temporal",
+    "LangGraph checkpointers",
+    "AWS Step Functions",
+    "Restate",
+    "Inngest",
+    "DBOS"
+  ],
+  "remember": "Record every step. Resume, don’t restart. Keys on side effects.",
+  "caption": "Illustrative: a ten-step claims job crashes at step 7; the durable version re-runs one step, a plain script all seven.",
+  "comparison": {
+    "scope": "Lost progress and repeated side effects",
+    "cost": 3,
+    "needs": "An engine and deterministic code",
+    "best": "Replay breaks on non-deterministic code"
+  },
+  "diagram": {
+    "file": "diagrams/durable.svg"
+  },
+  "lesson": {
+    "file": "claim_workflow.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import asyncio",
+        "steps": []
+      },
+      {
+        "text": "from datetime import timedelta",
+        "steps": []
+      },
+      {
+        "text": "from temporalio import activity, workflow",
+        "steps": []
+      },
+      {
+        "text": "from temporalio.client import Client",
+        "steps": []
+      },
+      {
+        "text": "from temporalio.common import RetryPolicy",
+        "steps": []
+      },
+      {
+        "text": "from temporalio.worker import Worker",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@activity.defn",
+        "steps": []
+      },
+      {
+        "text": "async def summarise(claim_id: str) -> str:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return await call_model(f\"Summarise claim {claim_id}\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@activity.defn",
+        "steps": []
+      },
+      {
+        "text": "async def release_payment(claim_id: str, key: str) -> str:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return await hospital_api.pay(claim_id, idempotency_key=key)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@workflow.defn",
+        "steps": []
+      },
+      {
+        "text": "class CashlessClaim:",
+        "steps": []
+      },
+      {
+        "text": "    def __init__(self) -> None:",
+        "steps": []
+      },
+      {
+        "text": "        self.approved = False",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    @workflow.signal",
+        "steps": []
+      },
+      {
+        "text": "    def approve(self) -> None:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        self.approved = True",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    @workflow.run",
+        "steps": []
+      },
+      {
+        "text": "    async def run(self, claim_id: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "        await workflow.execute_activity(summarise, claim_id,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            start_to_close_timeout=timedelta(seconds=90),",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            retry_policy=RetryPolicy(maximum_attempts=4))",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        await workflow.wait_condition(lambda: self.approved)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return await workflow.execute_activity(release_payment,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            args=[claim_id, f\"pay-{claim_id}\"],",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            start_to_close_timeout=timedelta(seconds=30))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def main():",
+        "steps": []
+      },
+      {
+        "text": "    client = await Client.connect(\"localhost:7233\")",
+        "steps": []
+      },
+      {
+        "text": "    async with Worker(client, task_queue=\"claims\", workflows=[CashlessClaim],",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      {
+        "text": "                      activities=[summarise, release_payment]):",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      {
+        "text": "        await asyncio.Event().wait()",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Put every call in an activity",
+        "text": "Model calls, APIs and payments are activities. The workflow only orchestrates them, which keeps it deterministic and replayable."
+      },
+      {
+        "title": "Timeouts and retries per activity",
+        "text": "The summary may take 90 seconds and is retried up to 4 times with backoff. A flaky model call no longer fails the whole claim."
+      },
+      {
+        "title": "Every result goes into the history",
+        "text": "When an activity completes, the server appends its result to the workflow’s event history. That history, not the process memory, is the source of truth."
+      },
+      {
+        "title": "Wait durably for the surveyor",
+        "text": "wait_condition blocks until the approve signal arrives, for minutes or days. No process has to stay alive while it waits."
+      },
+      {
+        "title": "Crash, replay, continue",
+        "text": "If the worker dies during step 7, another worker replays the history: steps 1 to 6 return their recorded results instantly, and the workflow continues waiting for approval."
+      },
+      {
+        "title": "Key the side effect",
+        "text": "Activities run at least once: a crash after the hospital was paid but before the result was recorded retries the payment. The key pay-CL-2291 makes the retry return the first result."
+      }
+    ],
+    "sceneHeight": 256,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"110\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"63\" y=\"23\">Workflow</text><text class=\"sb\" x=\"63\" y=\"38\">orchestrates</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M120 26L138 26\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"140\" y=\"6\" width=\"100\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"190\" y=\"19\" text-anchor=\"middle\">summarise</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"140\" y=\"28\" width=\"100\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"190\" y=\"41\" text-anchor=\"middle\">fraud_check</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"248\" y=\"6\" width=\"104\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"19\" text-anchor=\"middle\">decide</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"248\" y=\"28\" width=\"104\" height=\"18\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"41\" text-anchor=\"middle\">release_payment</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"56\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"70\" text-anchor=\"middle\">timeout 90 s · up to 4 attempts · backoff 2×</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"96\" style=\"text-anchor:start;--d:0s\">Event history</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"116\" text-anchor=\"middle\">1–2 fetched</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx pass\" x=\"124\" y=\"102\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"179\" y=\"116\" text-anchor=\"middle\">3 OCR done</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx pass\" x=\"240\" y=\"102\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"295\" y=\"116\" text-anchor=\"middle\">4 summary done</text></g><g class=\"a\" style=\"--d:0.33999999999999997s\"><rect class=\"bx pass\" x=\"8\" y=\"126\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"140\" text-anchor=\"middle\">5 fraud: clear</text></g><g class=\"a\" style=\"--d:0.42000000000000004s\"><rect class=\"bx pass\" x=\"124\" y=\"126\" width=\"110\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"179\" y=\"140\" text-anchor=\"middle\">6 decided: pay</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"240\" y=\"126\" width=\"112\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"140\" text-anchor=\"middle\">7 wait: approve</text></g><text class=\"sb a\" x=\"8\" y=\"168\" style=\"text-anchor:start;--d:0.1s\">waiting for the surveyor: 2 days, no process held</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"176\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"191\" text-anchor=\"middle\">worker crash during 7</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M178 187L190 187\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"192\" y=\"176\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"272\" y=\"191\" text-anchor=\"middle\">replay 6 → wait at 7</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"208\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"223\" text-anchor=\"middle\">release_payment · key pay-CL-2291</text></g><text class=\"sb a\" x=\"8\" y=\"246\" style=\"text-anchor:start;--d:0.15s\">a repeat with the same key returns the first result: paid once</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Crashes and redeploys lose no progress",
+      "Waits of hours or days cost nothing",
+      "Retries and timeouts are declared, not hand-written",
+      "The event history is an audit trail of every step"
+    ],
+    "cons": [
+      "A new runtime to operate, or a managed service to pay for",
+      "Determinism rules constrain how workflow code is written",
+      "Workflow code changes need versioning",
+      "Still at least once: side effects need idempotency keys"
+    ],
+    "avoidWhen": [
+      "Short, stateless requests that finish in seconds and can simply be retried",
+      "Tasks with no side effects and cheap steps, where restarting is fine"
+    ],
+    "tools": [
+      {
+        "name": "Temporal",
+        "type": "Open source, cloud",
+        "what": "Durable workflows with activities, signals and timers",
+        "url": "https://docs.temporal.io"
+      },
+      {
+        "name": "LangGraph checkpointers",
+        "type": "Open source (LangChain)",
+        "what": "State saved after each step; resume by thread id",
+        "url": "https://langchain-ai.github.io/langgraph/concepts/persistence/"
+      },
+      {
+        "name": "AWS Step Functions",
+        "type": "Managed (AWS)",
+        "what": "Serverless state machines with retries",
+        "url": "https://docs.aws.amazon.com/step-functions/"
+      },
+      {
+        "name": "Restate",
+        "type": "Open source",
+        "what": "Durable execution with journaling for services",
+        "url": "https://docs.restate.dev"
+      },
+      {
+        "name": "Inngest",
+        "type": "Open source, cloud",
+        "what": "Durable steps in event-driven functions",
+        "url": "https://www.inngest.com/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A health insurer’s cashless-claim job runs ten steps: fetch the claim and policy, OCR the bills, summarise, screen for fraud, decide, wait for a surveyor’s approval, pay the hospital, notify and close. Steps 3 to 6 are model calls of 6,000 tokens each. Crash it anywhere, under three ways of running it.",
+    "controls": [
+      "Choose how the job runs: a plain script, LangGraph with a checkpointer, or a Temporal workflow.",
+      "Drag the slider to pick the step during which the process crashes.",
+      "Tick the idempotency key on the payment, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Steps",
+        "meaning": "The ten steps: crashed, run again, or kept from history."
+      },
+      {
+        "name": "Steps run again",
+        "meaning": "How many steps execute a second time after the crash."
+      },
+      {
+        "name": "Model calls repeated · tokens wasted",
+        "meaning": "Model steps executed again, and tokens spent redoing completed ones."
+      },
+      {
+        "name": "Duplicate payment",
+        "meaning": "Whether the hospital is paid twice."
+      },
+      {
+        "name": "Surveyor asked again",
+        "meaning": "Whether a completed or pending approval is lost."
+      },
+      {
+        "name": "Time to resume",
+        "meaning": "How long until the job is running again."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Plain script, crash at step 6",
+        "expect": "6 steps run again, 4 model calls repeated, 18,000 tokens wasted; resumes after 30 min."
+      },
+      {
+        "k": "ckpt",
+        "name": "Checkpointer, crash at step 8, no key",
+        "expect": "Only step 8 runs again, but the hospital is paid twice."
+      },
+      {
+        "k": "durable",
+        "name": "Temporal, crash at step 8, with key",
+        "expect": "Only step 8 runs again, paid once, resumed in under a minute."
+      },
+      {
+        "k": "late",
+        "name": "Temporal, crash at step 6",
+        "expect": "Only the in-flight decide step runs again: 1 model call repeated, no completed work wasted."
+      }
+    ],
+    "missions": [
+      {
+        "k": "one",
+        "text": "Crash during step 6 and run at most one step again.",
+        "hint": "Anything that records completed steps resumes at the step in flight."
+      },
+      {
+        "k": "paid",
+        "text": "Crash during step 8 (the payment) without paying twice or asking the surveyor again.",
+        "hint": "Resume from recorded state, and give the payment an idempotency key."
+      },
+      {
+        "k": "fast",
+        "text": "Crash at step 7 or later and resume in under a minute without repeating any model call.",
+        "hint": "Automatic resumption needs a durable engine, not a supervisor job."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Temporal",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "Durable workflows with activities, retries, signals and timers.",
+        "ex": "A CashlessClaim workflow that waits days for a surveyor signal, then pays with an idempotency key.",
+        "pros": [
+          "Battle-tested at scale",
+          "Waits and retries are first-class"
+        ],
+        "cons": [
+          "A cluster to run, or a cloud bill",
+          "Determinism rules to learn"
+        ],
+        "url": "https://docs.temporal.io"
+      },
+      {
+        "n": "LangGraph checkpointers",
+        "type": "Open source · LangChain",
+        "start": 3,
+        "prod": 2,
+        "best": "Graph state saved after each step; resume by thread id; human interrupts.",
+        "ex": "A Postgres checkpointer so an approval interrupt survives a pod restart.",
+        "pros": [
+          "Minimal extra infrastructure",
+          "Built into the agent graph"
+        ],
+        "cons": [
+          "Something must trigger the resume",
+          "Not a general workflow engine"
+        ],
+        "url": "https://langchain-ai.github.io/langgraph/concepts/persistence/"
+      },
+      {
+        "n": "AWS Step Functions",
+        "type": "Managed · AWS",
+        "start": 3,
+        "prod": 3,
+        "best": "Serverless state machines with retries and wait states.",
+        "ex": "A claims state machine that calls Lambda functions and waits for a task token from the surveyor app.",
+        "pros": [
+          "Fully managed",
+          "Visual execution history"
+        ],
+        "cons": [
+          "AWS only",
+          "State machine language rather than code"
+        ],
+        "url": "https://docs.aws.amazon.com/step-functions/"
+      },
+      {
+        "n": "Restate",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Durable execution for services, journaling each step.",
+        "ex": "A durable handler that journals model calls and resumes after a crash.",
+        "pros": [
+          "Lightweight to run",
+          "Code-first"
+        ],
+        "cons": [
+          "Younger ecosystem",
+          "Fewer integrations"
+        ],
+        "url": "https://docs.restate.dev"
+      },
+      {
+        "n": "Inngest",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "Event-driven functions with durable steps and waits.",
+        "ex": "step.run for each model call and step.waitForEvent for the approval.",
+        "pros": [
+          "Quick to adopt",
+          "Good developer experience"
+        ],
+        "cons": [
+          "Hosted model by default",
+          "Less control at very large scale"
+        ],
+        "url": "https://www.inngest.com/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Long-running, business-critical jobs with approvals",
+        "tool": "Temporal"
+      },
+      {
+        "need": "My agent is already a LangGraph graph",
+        "tool": "A LangGraph checkpointer with Postgres"
+      },
+      {
+        "need": "I am all-in on AWS and serverless",
+        "tool": "AWS Step Functions"
+      }
+    ],
+    "goals": [
+      "See why recorded steps beat restarting",
+      "Understand at-least-once side effects",
+      "Know when a checkpointer is enough and when to use a durable engine"
+    ]
+  },
+  "practice": {
+    "scenario": "A health insurer’s cashless-claim agent runs ten steps: fetch the claim, fetch the policy, OCR the bills, summarise, screen for fraud, decide, wait for a surveyor’s approval (sometimes two days), release payment to the hospital, notify, close. It runs as a Temporal workflow, so a pod restart while waiting for approval loses nothing, and the payment activity carries an idempotency key.",
+    "industries": [
+      {
+        "industry": "Health insurance",
+        "use": "Claims that wait days for a surveyor, then release payment exactly once"
+      },
+      {
+        "industry": "Lending",
+        "use": "Loan origination with bureau pulls, document checks and a credit-committee approval"
+      },
+      {
+        "industry": "Logistics",
+        "use": "Shipment exception handling across carriers over several days"
+      }
+    ],
+    "analogy": "A board game saved after every move. If the power cuts out, you reload and carry on from the last move, not the first.",
+    "library": {
+      "name": "Temporal Python SDK",
+      "what": "Durable workflows: every activity result is recorded in the event history; workers replay it after a crash and continue.",
+      "install": "pip install temporalio"
+    },
+    "note": "Run a Worker that registers the workflow and activities on a task queue. Workflow code must stay deterministic; do all I/O in activities.",
+    "samples": [
+      {
+        "file": "claim_workflow.py",
+        "language": "python",
+        "code": "from datetime import timedelta\nfrom temporalio import activity, workflow\nfrom temporalio.common import RetryPolicy\n\n@activity.defn\nasync def summarise_claim(claim_id: str) -> str: ...          # model call\n\n@activity.defn\nasync def release_payment(claim_id: str, key: str) -> str: ...  # sends Idempotency-Key\n\n@workflow.defn\nclass CashlessClaim:\n    def __init__(self) -> None:\n        self.approved = False\n\n    @workflow.signal\n    def approve(self) -> None:                     # sent by the surveyor's app\n        self.approved = True\n\n    @workflow.run\n    async def run(self, claim_id: str) -> str:\n        summary = await workflow.execute_activity(\n            summarise_claim, claim_id,\n            start_to_close_timeout=timedelta(seconds=90),\n            retry_policy=RetryPolicy(maximum_attempts=4, backoff_coefficient=2.0))\n        await workflow.wait_condition(lambda: self.approved)   # can wait for days\n        return await workflow.execute_activity(\n            release_payment, args=[claim_id, f\"pay-{claim_id}\"],\n            start_to_close_timeout=timedelta(seconds=30))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A ten-step job crashes during step 7. A plain script restarts from step 1, re-running steps 1 to 7. Steps 3, 4, 5 and 6 are model calls of 6,000 tokens each; the rest use no model. How many model tokens does the restart waste?",
+    "answer": "The completed model steps 3 to 6 run again: 4 × 6,000 = 24,000 tokens. A durable workflow replays their recorded results from history instead, and only step 7 runs again.",
+    "expected": {
+      "value": 24000,
+      "tolerance": 50,
+      "label": "tokens wasted ="
+    },
+    "interview": [
+      {
+        "question": "Why must Temporal workflow code be deterministic?",
+        "answer": "After a crash the worker replays the workflow code against the event history to rebuild its state. If the code makes different decisions on replay, for example because it reads the clock or a random number, it no longer matches the history. Put all I/O and non-determinism in activities, whose results are recorded."
+      },
+      {
+        "question": "Does durable execution give exactly-once side effects?",
+        "answer": "No. An activity can run again if a worker crashes after the side effect but before the result is recorded. Activities are at least once, so payments, emails and tickets need idempotency keys that the receiving system honours."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Sleeping inside a process while waiting days for approval",
+        "fix": "Wait on a durable signal or timer"
+      },
+      {
+        "mistake": "Calling APIs directly from workflow code",
+        "fix": "Do all I/O in activities with timeouts and retry policies"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "du01",
+      "kind": "single",
+      "industry": "Health insurance",
+      "question": "A cashless-claim job waits up to two days for a surveyor. What is the problem with a Python process that sleeps while waiting?",
+      "options": [
+        "Sleeping uses too many tokens",
+        "Any restart or deploy in those two days loses the wait and the progress",
+        "Python cannot sleep for two days",
+        "The surveyor cannot see the claim"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A durable signal or timer survives restarts; a sleeping process does not."
+    },
+    {
+      "id": "du02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "An 8-step loan job crashes during step 6. A plain script restarts from step 1. Steps 2, 3 and 4 are model calls of 5,000 tokens each. How many tokens of completed work are wasted?",
+      "options": [
+        "5,000",
+        "10,000",
+        "15,000",
+        "20,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Completed model steps 2, 3 and 4 run again: 3 × 5,000 = 15,000."
+    },
+    {
+      "id": "du03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A Temporal activity releases a payment. The worker crashes after the bank accepted it but before the result was recorded. What happens next?",
+      "options": [
+        "Nothing; Temporal guarantees exactly once",
+        "The activity may run again, so the payment needs an idempotency key",
+        "The workflow is deleted",
+        "The bank reverses the payment"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Activities are at least once; the key makes the retry return the first result."
+    },
+    {
+      "id": "du04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which code must go in activities rather than in Temporal workflow code?",
+      "options": [
+        "The order of steps",
+        "Model calls, API calls and anything else with I/O",
+        "Loops over a list already in memory",
+        "Variable assignments"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Workflow code is replayed; I/O runs in activities, whose results are recorded."
+    },
+    {
+      "id": "du05",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which of these make Temporal workflow code non-deterministic? Select all that apply.",
+      "options": [
+        "Calling datetime.now()",
+        "Calling random.random()",
+        "Awaiting execute_activity for a model call",
+        "Using workflow.now()"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Wall-clock time and random numbers differ on replay; activities and the workflow clock are deterministic."
+    },
+    {
+      "id": "du06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is Temporal’s event history?",
+      "options": [
+        "The worker’s log file",
+        "A cache of model responses",
+        "The recorded sequence of a workflow’s events, including each completed activity’s result",
+        "The list of deployed versions"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Replaying the history rebuilds the workflow’s state after a crash."
+    },
+    {
+      "id": "du07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A LangGraph agent uses a Postgres checkpointer. After a pod restart, how does it continue a paused run?",
+      "options": [
+        "It restarts automatically on its own",
+        "It is invoked again with the same thread id and loads the saved state",
+        "It replays the model calls",
+        "It cannot continue"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Checkpointers save state per thread; something must call the graph again with that thread id."
+    },
+    {
+      "id": "du08",
+      "kind": "multi",
+      "industry": "Health insurance",
+      "question": "A claims job crashes during the payment step. Which combination avoids both a double payment and asking the surveyor again? Select all that apply.",
+      "options": [
+        "Resume from recorded state instead of restarting from step 1",
+        "Send an idempotency key with the payment",
+        "Restart the whole job from step 1",
+        "Increase the payment timeout"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Recorded state keeps the approval; the key makes the repeated payment safe."
+    },
+    {
+      "id": "du09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A returns-processing agent finishes in 3 seconds and has no side effects. Is durable execution worth it?",
+      "options": [
+        "Yes, always",
+        "Probably not: a failed request can simply be retried",
+        "Yes, because it makes the model faster",
+        "No, because it cannot call models"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Durable execution pays off for long, costly or side-effecting work."
+    },
+    {
+      "id": "du10",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What does a RetryPolicy with maximum_attempts=4 on a model-call activity give you?",
+      "options": [
+        "Four different answers to choose from",
+        "Up to four attempts, with backoff, before the activity fails",
+        "Four parallel calls",
+        "A cap of four tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Transient failures are retried by the engine, not by hand-written loops."
+    },
+    {
+      "id": "du11",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A workflow waits for a customer to upload documents, with a deadline of 7 days. Which Temporal features fit?",
+      "options": [
+        "A signal for the upload and a durable timer for the deadline",
+        "A while loop that polls every second",
+        "A cron job that restarts the workflow",
+        "A larger worker pool"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Signals deliver events and timers enforce deadlines, both durably."
+    },
+    {
+      "id": "du12",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are true of activities in Temporal? Select all that apply.",
+      "options": [
+        "They can be retried according to a policy",
+        "They should have timeouts",
+        "They run exactly once, guaranteed",
+        "They must avoid all I/O"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Activities are where I/O belongs, with timeouts and retries; they are at least once, not exactly once."
+    },
+    {
+      "id": "du13",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A team changes the order of steps in a running workflow’s code. Why can this break in-flight workflows?",
+      "options": [
+        "The server rejects all changes",
+        "Replay of existing histories no longer matches the new code",
+        "Activities stop working",
+        "Signals are lost"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Workflow code changes need versioning so old executions replay with the old logic."
+    },
+    {
+      "id": "du14",
+      "kind": "single",
+      "industry": "Health insurance",
+      "question": "A 10-step job crashes during step 7. Under a durable workflow, how many steps run again?",
+      "options": [
+        "0",
+        "1",
+        "6",
+        "7"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Steps 1 to 6 come from history; only the step in flight, 7, runs again."
+    },
+    {
+      "id": "du15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "When is a LangGraph checkpointer usually enough, rather than a full durable engine? Select all that apply.",
+      "options": [
+        "The agent pauses for a human and is resumed by the next user request",
+        "Losing a few seconds of in-flight work is acceptable",
+        "Workflows run for weeks with many timers and side effects",
+        "Resumption must happen automatically within seconds after any crash"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Checkpointers suit request-driven pauses; long, timer-heavy, auto-resuming workflows suit engines like Temporal."
+    },
+    {
+      "id": "du16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What is the main purpose of the idempotency key in f\"pay-{claim_id}\"?",
+      "options": [
+        "To speed up the payment",
+        "To make repeated payment calls for the same claim return the first result",
+        "To encrypt the claim id",
+        "To sort payments by date"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The same key on a retry lets the receiving API deduplicate it."
+    },
+    {
+      "id": "du17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why is durable execution valuable for expensive model steps even without side effects?",
+      "options": [
+        "It makes model calls cheaper per token",
+        "Completed steps are not recomputed after a crash, so their tokens are not spent twice",
+        "It removes the need for timeouts",
+        "It caches all prompts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Recorded results replace recomputation on resume."
+    },
+    {
+      "id": "du18",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "A loan-origination workflow calls a credit bureau, waits for a committee, then disburses. Which design choices are sound? Select all that apply.",
+      "options": [
+        "Bureau call as an activity with a timeout and retries",
+        "Disbursement with an idempotency key",
+        "The committee wait as a sleeping thread",
+        "Reading the clock directly in workflow code"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Activities with timeouts and keyed side effects are sound; sleeping threads and wall-clock reads in workflow code are not."
+    },
+    {
+      "id": "du19",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking workflow’s worker is redeployed mid-run. What happens under Temporal?",
+      "options": [
+        "The run is lost",
+        "Another worker picks up the workflow and replays its history",
+        "The customer must start again",
+        "The server pauses until the same worker returns"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Any worker on the task queue can continue the workflow from its history."
+    },
+    {
+      "id": "du20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which statement best contrasts durable execution with idempotency (Panel 8)?",
+      "options": [
+        "They are the same thing",
+        "Durable execution resumes the workflow; idempotency makes each repeated side effect safe",
+        "Idempotency replaces durable execution",
+        "Durable execution makes idempotency keys unnecessary"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "You need both: resumption for progress, keys for safe repeats."
+    }
+  ]
+}

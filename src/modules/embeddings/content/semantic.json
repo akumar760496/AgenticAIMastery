@@ -1,0 +1,905 @@
+{
+  "id": "semantic",
+  "moduleSlug": "embeddings",
+  "name": "Semantic Embeddings",
+  "shortName": "Dense vectors",
+  "question": "Which texts mean the same thing?",
+  "summary": "An embedding model maps text to a dense vector, typically a few hundred to a few thousand numbers, so that texts with similar meaning land close together. Search becomes a nearest-neighbour lookup by cosine similarity, which matches paraphrases and synonyms that share no words at all.",
+  "useCases": [
+    "Users describe things in their own words, not your terminology",
+    "Question answering over documentation or knowledge bases",
+    "Clustering, deduplication and recommendations"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Dense vector",
+        "detail": "e.g. 384 to 3,072 floats per chunk"
+      },
+      {
+        "term": "Cosine similarity",
+        "detail": "cos θ = a·b ÷ (‖a‖ ‖b‖)"
+      },
+      {
+        "term": "Chunking",
+        "detail": "split documents into passages, ~200–800 tokens, with overlap"
+      },
+      {
+        "term": "Bi-encoder",
+        "detail": "query and document embedded separately, compared fast"
+      },
+      {
+        "term": "Choosing a model",
+        "detail": "compare on MTEB, then on your own queries"
+      }
+    ]
+  },
+  "steps": [
+    "Chunk documents on natural boundaries such as headings and paragraphs, with a little overlap",
+    "Embed chunks with the same model you will use for queries",
+    "Store vectors with metadata: source, section, date, permissions",
+    "Measure recall@k on real questions before tuning anything else"
+  ],
+  "pitfalls": [
+    "Weak on exact terms: IDs, codes, rare names",
+    "Domain jargon may need a domain-tuned model",
+    "Changing models means re-embedding the whole corpus"
+  ],
+  "tools": [
+    "OpenAI text-embedding-3",
+    "Cohere Embed",
+    "Voyage AI",
+    "BGE",
+    "E5",
+    "sentence-transformers"
+  ],
+  "remember": "Similar meaning, nearby vectors.",
+  "caption": "The query shares no words with “refund policy”, yet it lands in the refunds cluster.",
+  "comparison": {
+    "scope": "Meaning",
+    "cost": 2,
+    "needs": "Natural-language, paraphrased queries",
+    "best": "Misses exact IDs and rare terms"
+  },
+  "diagram": {
+    "file": "diagrams/semantic.svg"
+  },
+  "lesson": {
+    "file": "semantic_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from sentence_transformers import SentenceTransformer",
+        "steps": []
+      },
+      {
+        "text": "import numpy as np",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def chunk(text, size=200, overlap=40):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    words = text.split()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    step = size - overlap",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return [\" \".join(words[i:i + size]) for i in range(0, len(words), step)]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "chunks = [c for doc in help_centre_docs for c in chunk(doc)]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = SentenceTransformer(\"all-MiniLM-L6-v2\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "doc_vecs = model.encode(chunks, normalize_embeddings=True)   # shape (n, 384)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "query = \"can I get my money back?\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "q = model.encode(query, normalize_embeddings=True)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "scores = doc_vecs @ q          # unit vectors: dot product = cosine",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "top = np.argsort(-scores)[:2]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "for i in top:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    print(f\"{scores[i]:.2f}  {chunks[i][:60]}\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def recall_at_k(eval_set, k=5):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    hits = 0",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    for question, gold_id in eval_set:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        s = doc_vecs @ model.encode(question, normalize_embeddings=True)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        hits += gold_id in np.argsort(-s)[:k]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return hits / len(eval_set)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Chunk the documents",
+        "text": "Split each document into passages of about 200 words with a 40-word overlap, so no idea is cut at a boundary. One help article becomes three chunks."
+      },
+      {
+        "title": "Embed every chunk",
+        "text": "The model turns each chunk into 384 numbers. Normalizing each vector to unit length lets a plain dot product act as cosine similarity."
+      },
+      {
+        "title": "Embed the query with the same model",
+        "text": "The question goes through the same model. A vector from a different model lives in a different space and can’t be compared."
+      },
+      {
+        "title": "Score by cosine similarity",
+        "text": "Compare the query vector with every chunk vector. The refunds chunk scores 0.71 even though it shares no words with the question."
+      },
+      {
+        "title": "Return the nearest neighbours",
+        "text": "Sort by score and keep the top k. With k = 2 the two refund chunks come back; the shipping chunk at 0.22 does not."
+      },
+      {
+        "title": "Measure recall@k",
+        "text": "Run 200 real questions with known answers and count how often the right chunk is in the top 5. Tune chunking and the model against this number."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"100\" height=\"54\" rx=\"7\"/><text class=\"lb\" x=\"58\" y=\"32\">Help article</text><text class=\"sb\" x=\"58\" y=\"47\">refunds.md</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M58 62L58 72\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"76\" width=\"100\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"58\" y=\"92\" text-anchor=\"middle\">c1 refunds</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><rect class=\"bx soft\" x=\"8\" y=\"106\" width=\"100\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"58\" y=\"122\" text-anchor=\"middle\">c2 credit</text></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx soft\" x=\"8\" y=\"136\" width=\"100\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"58\" y=\"152\" text-anchor=\"middle\">c3 shipping</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M110 118L124 118\" marker-end=\"url(#arr)\"/></g><g class=\"a dark-t\" style=\"--d:0.1s\"><rect class=\"bx dark\" x=\"126\" y=\"76\" width=\"72\" height=\"84\" rx=\"7\"/><text class=\"lb\" x=\"162\" y=\"115\">Encoder</text><text class=\"sb\" x=\"162\" y=\"130\">MiniLM</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M200 118L214 118\" marker-end=\"url(#arr)\"/></g><text class=\"sb a\" x=\"264\" y=\"70\" text-anchor=\"middle\" style=\"--d:0.3s;text-anchor:middle\">384 dims each</text><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx \" x=\"216\" y=\"76\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"92\" text-anchor=\"middle\">[.12 −.48 …]</text></g><g class=\"a\" style=\"--d:0.44999999999999996s\"><rect class=\"bx \" x=\"216\" y=\"106\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"122\" text-anchor=\"middle\">[.09 −.41 …]</text></g><g class=\"a\" style=\"--d:0.55s\"><rect class=\"bx \" x=\"216\" y=\"136\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"152\" text-anchor=\"middle\">[.61 .20 …]</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"184\" width=\"188\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"102\" y=\"200\" text-anchor=\"middle\">“can I get my money back?”</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln \" d=\"M198 196L214 196\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"216\" y=\"184\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"264\" y=\"200\" text-anchor=\"middle\">[.10 −.50 …]</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"sb a\" x=\"334\" y=\"70\" text-anchor=\"middle\" style=\"--d:0s;text-anchor:middle\">cos</text><text class=\"mono a\" x=\"334\" y=\"92\" text-anchor=\"middle\" style=\"--d:0.15s;text-anchor:middle\">0.71</text><text class=\"mono a\" x=\"334\" y=\"122\" text-anchor=\"middle\" style=\"--d:0.27s;text-anchor:middle\">0.58</text><text class=\"mono a\" x=\"334\" y=\"152\" text-anchor=\"middle\" style=\"--d:0.39s;text-anchor:middle\">0.22</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect x=\"212\" y=\"73\" width=\"142\" height=\"30\" rx=\"7\" style=\"fill:none;stroke:var(--pass);stroke-width:1.6\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect x=\"212\" y=\"103\" width=\"142\" height=\"30\" rx=\"7\" style=\"fill:none;stroke:var(--pass);stroke-width:1.6\"/></g><text class=\"tag-t pass a\" x=\"284\" y=\"176\" text-anchor=\"middle\" style=\"--d:0.3s;text-anchor:middle\">top 2 returned</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"218\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"235\" text-anchor=\"middle\">recall@5 on 200 real questions = 0.91</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Matches meaning, so paraphrases and synonyms are found",
+      "One model covers questions, clustering, deduplication and recommendations",
+      "Fast at query time: documents are embedded once, ahead of time",
+      "Many strong open and hosted models, compared on MTEB"
+    ],
+    "cons": [
+      "Weak on exact tokens such as error codes, SKUs and IDs",
+      "Similarity scores are hard to explain to users",
+      "Domain jargon may be blurred by a general model",
+      "Switching models means re-embedding the whole corpus"
+    ],
+    "avoidWhen": [
+      "Queries are mostly exact codes or names (use BM25, or hybrid)",
+      "You need an auditable reason why each result matched"
+    ],
+    "tools": [
+      {
+        "name": "sentence-transformers",
+        "type": "Open source",
+        "what": "Local embedding with thousands of pretrained models",
+        "url": "https://www.sbert.net"
+      },
+      {
+        "name": "OpenAI embeddings",
+        "type": "Hosted API",
+        "what": "text-embedding-3 models with an adjustable dimensions parameter",
+        "url": "https://platform.openai.com/docs/guides/embeddings"
+      },
+      {
+        "name": "Cohere Embed",
+        "type": "Hosted API",
+        "what": "Multilingual embeddings with separate query and document input types",
+        "url": "https://docs.cohere.com/docs/embeddings"
+      },
+      {
+        "name": "Voyage AI",
+        "type": "Hosted API",
+        "what": "General and domain-specific embedding models",
+        "url": "https://docs.voyageai.com/docs/embeddings"
+      },
+      {
+        "name": "BGE (FlagEmbedding)",
+        "type": "Open source",
+        "what": "Strong open models, including multilingual bge-m3",
+        "url": "https://github.com/FlagOpen/FlagEmbedding"
+      },
+      {
+        "name": "MTEB",
+        "type": "Open benchmark",
+        "what": "Comparing embedding models across tasks before testing your own",
+        "url": "https://github.com/embeddings-benchmark/mteb"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A payments app’s help centre has eight articles. A customer types a question in their own words, the question and every article are embedded with the same model, and the articles are ranked by cosine similarity. Your job is to return every relevant article and nothing else.",
+    "controls": [
+      "Pick the customer’s question, including a bare error code.",
+      "Set k, the number of results, and a minimum similarity below which results are dropped.",
+      "Tick the box to embed the query with a different model than the documents."
+    ],
+    "outputs": [
+      {
+        "name": "Recall@k",
+        "meaning": "Relevant articles returned ÷ all relevant articles. Did we find everything?"
+      },
+      {
+        "name": "Precision@k",
+        "meaning": "Relevant articles returned ÷ articles returned. How much noise came with it?"
+      },
+      {
+        "name": "Results returned",
+        "meaning": "How many articles survive both the top-k cut and the similarity threshold."
+      },
+      {
+        "name": "Top result relevant",
+        "meaning": "Whether the very first result is one of the right articles."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Refund question",
+        "expect": "k = 2 returns D1 and D2: recall 67% (2 of 3 refund articles) and precision 100%."
+      },
+      {
+        "k": "strict",
+        "name": "Sign-in, k = 5",
+        "expect": "All 3 sign-in articles come back with D2 and D4: recall 100%, precision 60%."
+      },
+      {
+        "k": "code",
+        "name": "Bare error code",
+        "expect": "“E1045” returns D7, D6 and D2. The right article, D8, is fourth at 0.37: recall 0%."
+      },
+      {
+        "k": "mismatch",
+        "name": "Model mismatch",
+        "expect": "The query vector comes from another model, so the scores are noise: recall 0%, precision 0%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "full",
+        "text": "Return all three refund articles with k no larger than 3.",
+        "hint": "Start from the refund preset and raise k by one."
+      },
+      {
+        "k": "strict",
+        "text": "For the sign-in question with k = 5, reach 100% recall and 100% precision.",
+        "hint": "The off-topic results score below 0.10; the weakest relevant one scores 0.41. Set the minimum similarity between them."
+      },
+      {
+        "k": "mismatch",
+        "text": "Embed the query with a different model and see recall fall to 0% even with k = 3.",
+        "hint": "Tick the mismatch box and set k to 3."
+      }
+    ],
+    "tools": [
+      {
+        "n": "sentence-transformers",
+        "type": "Open source · Python",
+        "start": 3,
+        "prod": 2,
+        "best": "Encoding text locally with thousands of pretrained models, from small CPU models to large multilingual ones.",
+        "ex": "Embed 60,000 help-centre chunks with all-MiniLM-L6-v2 on a laptop CPU, then search them with a dot product.",
+        "pros": [
+          "One line to encode; runs offline",
+          "Same library covers cross-encoders and fine-tuning"
+        ],
+        "cons": [
+          "You run and scale the inference yourself",
+          "Model choice is on you: check MTEB and your own queries"
+        ],
+        "url": "https://www.sbert.net"
+      },
+      {
+        "n": "OpenAI embeddings",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Hosted text-embedding-3 models with a dimensions parameter for smaller vectors.",
+        "ex": "Embed a product catalogue with text-embedding-3-small through a batch job, no GPUs to manage.",
+        "pros": [
+          "No infrastructure to run",
+          "Adjustable output dimensions"
+        ],
+        "cons": [
+          "Data leaves your environment",
+          "Per-token cost and rate limits"
+        ],
+        "url": "https://platform.openai.com/docs/guides/embeddings"
+      },
+      {
+        "n": "Cohere Embed",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "Multilingual embeddings with separate input types for queries and documents.",
+        "ex": "Search Hindi and English support tickets in one index for an Indian telecom operator.",
+        "pros": [
+          "Strong multilingual coverage",
+          "Query and document input types built in"
+        ],
+        "cons": [
+          "Hosted only, unless you buy a private deployment",
+          "Per-call pricing"
+        ],
+        "url": "https://docs.cohere.com/docs/embeddings"
+      },
+      {
+        "n": "Voyage AI",
+        "type": "Commercial API",
+        "start": 3,
+        "prod": 3,
+        "best": "General-purpose and domain-specific embedding models, for example for code, finance and law.",
+        "ex": "Embed contracts with a law-tuned model for a clause search tool.",
+        "pros": [
+          "Domain-specific model options",
+          "Long input context"
+        ],
+        "cons": [
+          "Hosted only",
+          "Smaller ecosystem than the largest providers"
+        ],
+        "url": "https://docs.voyageai.com/docs/embeddings"
+      },
+      {
+        "n": "BGE (FlagEmbedding)",
+        "type": "Open models · BAAI",
+        "start": 2,
+        "prod": 3,
+        "best": "Strong open embedding models you can self-host, including multilingual bge-m3.",
+        "ex": "Self-host bge-m3 inside a bank’s own cloud account so customer text never leaves it.",
+        "pros": [
+          "Open weights and permissive licences",
+          "Dense, sparse and multi-vector output in bge-m3"
+        ],
+        "cons": [
+          "You run GPUs for large volumes",
+          "More setup than a hosted API"
+        ],
+        "url": "https://github.com/FlagOpen/FlagEmbedding"
+      },
+      {
+        "n": "MTEB",
+        "type": "Open benchmark",
+        "start": 3,
+        "prod": 1,
+        "best": "Shortlisting embedding models across retrieval, clustering and classification tasks.",
+        "ex": "Pick three candidates from MTEB retrieval scores, then compare them on 200 of your own questions.",
+        "pros": [
+          "Many models and tasks in one place",
+          "Free and public"
+        ],
+        "cons": [
+          "Public tasks may not look like yours",
+          "A shortlist, not a final decision"
+        ],
+        "url": "https://github.com/embeddings-benchmark/mteb"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Prototype this week",
+        "tool": "sentence-transformers"
+      },
+      {
+        "need": "Hosted, no infrastructure",
+        "tool": "OpenAI, Cohere or Voyage"
+      },
+      {
+        "need": "Self-hosted in production",
+        "tool": "BGE on your own GPUs"
+      }
+    ],
+    "goals": [
+      "Compute cosine similarity and explain why normalized vectors make it a dot product",
+      "Explain recall@k and precision@k and how k and a threshold trade them off",
+      "Explain why queries and documents must be embedded with the same model"
+    ]
+  },
+  "practice": {
+    "scenario": "On an investment app's help centre, a user types “why did money leave my account on the 5th?”. Semantic search matches it to the article “Auto-debit for SIP instalments”, even though the two share almost no words.",
+    "industries": [
+      {
+        "industry": "Fintech",
+        "use": "Help-centre search in customers’ own words"
+      },
+      {
+        "industry": "HR tech",
+        "use": "Match job descriptions to résumés by meaning"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Find similar clinical notes or trial eligibility criteria"
+      }
+    ],
+    "analogy": "A good librarian who hears “books about sad robots” and walks you to the right shelf, even though no title says that.",
+    "library": {
+      "name": "sentence-transformers",
+      "what": "The standard open-source library for embeddings: thousands of pretrained models, CPU-friendly, one line to encode.",
+      "install": "pip install sentence-transformers"
+    },
+    "samples": [
+      {
+        "file": "semantic.py",
+        "language": "python",
+        "code": "from sentence_transformers import SentenceTransformer, util\n\nmodel = SentenceTransformer(\"all-MiniLM-L6-v2\")     # 384 dims, runs on CPU\ndocs = [\"Auto-debit for SIP instalments\",\n        \"How to change your registered mobile number\",\n        \"Brokerage charges for intraday trades\"]\ndoc_vecs = model.encode(docs, normalize_embeddings=True)\n\nquery = model.encode(\"why did money leave my account on the 5th?\",\n                     normalize_embeddings=True)\nscores = util.cos_sim(query, doc_vecs)[0]\nfor s, d in sorted(zip(scores.tolist(), docs), reverse=True):\n    print(f\"{s:.2f}  {d}\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Compute the cosine similarity of a = [1, 2, 2] and b = [2, 1, 2].",
+    "answer": "a · b = 2 + 2 + 4 = 8. ‖a‖ = ‖b‖ = 3. Cosine = 8 ÷ 9 ≈ 0.889: very similar direction.",
+    "expected": {
+      "value": 0.889,
+      "tolerance": 0.005,
+      "label": "cosine ="
+    },
+    "interview": [
+      {
+        "question": "What's the difference between a bi-encoder and a cross-encoder?",
+        "answer": "A bi-encoder embeds query and document separately, so document vectors are precomputed and search is fast. A cross-encoder reads them together for more accurate relevance but can't precompute, so it's used to re-rank a short list."
+      },
+      {
+        "question": "How do you choose a chunk size?",
+        "answer": "Big enough to hold a complete idea, small enough to be specific: often 200–800 tokens with some overlap, split on headings or paragraphs. Tune it by measuring recall@k on real questions."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Embedding queries and documents with different models",
+        "fix": "Use the same model, including any required query/document prefixes"
+      },
+      {
+        "mistake": "Fixed-size chunks that cut sentences and tables",
+        "fix": "Chunk on structure: headings, paragraphs, table boundaries"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "se01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Customers search “money deducted twice”. The right article is titled “Duplicate debit reversal”, and keyword search finds nothing. What helps most?",
+      "options": [
+        "BM25 with stemming",
+        "Dense semantic embeddings",
+        "Binary quantization",
+        "Longer chunks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The query and title share no words but mean the same thing. Dense embeddings match meaning."
+    },
+    {
+      "id": "se02",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Two symptom notes embed as a = [3, 4] and b = [4, 3]. What is their cosine similarity?",
+      "options": [
+        "0.96",
+        "0.48",
+        "0.75",
+        "1.00"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "a · b = 12 + 12 = 24; ‖a‖ = ‖b‖ = 5; 24 ÷ 25 = 0.96."
+    },
+    {
+      "id": "se03",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Product search quality is poor after launch. Which of these could be causing it? Select all that apply.",
+      "options": [
+        "Documents were embedded with one model and queries with another",
+        "Chunks cut specification tables in half",
+        "Cosine similarity is computed on normalized vectors",
+        "Most queries are bare SKU codes"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Mismatched models, broken chunks and code-only queries all hurt dense search. Cosine on normalized vectors is correct."
+    },
+    {
+      "id": "se04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "The team switched embedding models for new policy documents only; old documents keep their old vectors. What happens to searches over old documents?",
+      "options": [
+        "They improve, because queries use the better model",
+        "Scores against old vectors become meaningless",
+        "Nothing changes while the dimensions match",
+        "Only the similarity threshold needs lowering"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Different models produce unrelated vector spaces. Re-embed the whole corpus when you change models."
+    },
+    {
+      "id": "se05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "On 200 test questions, the right chunk appears in the top 5 for 168 of them. What is recall@5?",
+      "options": [
+        "0.84",
+        "0.168",
+        "0.80",
+        "0.92"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "168 ÷ 200 = 0.84."
+    },
+    {
+      "id": "se06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why is a bi-encoder, not a cross-encoder, used to search 10 million help-centre chunks?",
+      "options": [
+        "Bi-encoders are always more accurate",
+        "Document vectors can be computed once, ahead of time",
+        "Cross-encoders only work in English",
+        "Bi-encoders need no training data"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A bi-encoder embeds documents independently, so search is a fast vector comparison. A cross-encoder must read every query–document pair."
+    },
+    {
+      "id": "se07",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A firm embeds each 12,000-word contract as a single vector, and clause questions retrieve the wrong contracts. What is the best fix?",
+      "options": [
+        "Chunk on clause and section boundaries with a little overlap",
+        "Use a larger embedding model on whole contracts",
+        "Lower the similarity threshold",
+        "Switch to binary vectors"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One vector for a whole contract blurs every clause together. Chunks of a few hundred tokens keep each clause findable."
+    },
+    {
+      "id": "se08",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "What should you store next to each chunk vector in the index? Select all that apply.",
+      "options": [
+        "Source document and section",
+        "Course and publication date",
+        "Access permissions",
+        "The float values again as a text string"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Metadata lets you cite, filter by date or course, and enforce permissions. Duplicating the vector as text adds nothing."
+    },
+    {
+      "id": "se09",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Both vectors are normalized to unit length and their dot product is 0.83. What is their cosine similarity?",
+      "options": [
+        "0.83",
+        "0.69",
+        "It depends on their lengths",
+        "0.91"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "For unit vectors cosine = a · b ÷ (1 × 1), so it equals the dot product."
+    },
+    {
+      "id": "se10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "5 million chunks are embedded at 768 float32 dimensions. How much memory do the raw vectors need?",
+      "options": [
+        "About 15.4 GB",
+        "About 3.8 GB",
+        "About 1.5 GB",
+        "About 61 GB"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "768 × 4 B = 3,072 B per vector × 5 million ≈ 15.4 GB."
+    },
+    {
+      "id": "se11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "Passengers write to support in Hindi, Tamil and English. How should you choose the embedding model?",
+      "options": [
+        "Pick the model with the most dimensions",
+        "Shortlist multilingual models and compare recall on real queries in each language",
+        "Translate everything to English and use any model",
+        "Use BM25 only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Language coverage varies by model. Measure on your own queries, per language."
+    },
+    {
+      "id": "se12",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "After switching models, a similarity threshold of 0.8 that worked before now returns almost nothing. Why?",
+      "options": [
+        "The new model is broken",
+        "Score ranges differ between models, so thresholds must be re-tuned",
+        "Cosine similarity cannot exceed 0.8",
+        "The index needs rebuilding with more shards"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each model spreads its scores differently. Tune thresholds per model on your own data, or rely on ranking."
+    },
+    {
+      "id": "se13",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A hospital is choosing an embedding model for clinical guideline search. Which steps are sound? Select all that apply.",
+      "options": [
+        "Shortlist candidates from MTEB",
+        "Build a labelled set of real clinician questions",
+        "Compare recall@k of each candidate on that set",
+        "Pick the model with the largest vectors"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Public benchmarks shortlist; your own labelled questions decide. Vector size alone says little about quality."
+    },
+    {
+      "id": "se14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Exact nearest-neighbour search over 200 million vectors takes seconds per query. What is the standard remedy?",
+      "options": [
+        "An approximate nearest-neighbour index such as HNSW",
+        "A larger k",
+        "Replacing vectors with BM25",
+        "Fewer chunks per document"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ANN indexes trade a little recall for orders-of-magnitude faster search."
+    },
+    {
+      "id": "se15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The team uses an E5 model but embeds queries and products with no prefixes, and quality is lower than published results. What is the likely fix?",
+      "options": [
+        "Add the “query: ” and “passage: ” prefixes the model was trained with",
+        "Switch to Euclidean distance",
+        "Lowercase all text",
+        "Increase the batch size"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "E5 models expect these prefixes. Follow the model card’s input format."
+    },
+    {
+      "id": "se16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Besides search, what else can the same claim-description embeddings do well?",
+      "options": [
+        "Flag near-duplicate claims by very high cosine similarity",
+        "Calculate the payout amount",
+        "Read handwriting in scanned forms",
+        "Encrypt claim records"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Embeddings support clustering, deduplication and recommendations, not arithmetic or OCR."
+    },
+    {
+      "id": "se17",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why add a 40-word overlap between consecutive 200-word chunks?",
+      "options": [
+        "So an idea split at a boundary still appears whole in one chunk",
+        "To make the index smaller",
+        "To make every chunk the same vector",
+        "Because models require it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Overlap reduces the chance that the sentence answering a question is cut in half."
+    },
+    {
+      "id": "se18",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which queries are likely to fail with dense-only search? Select all that apply.",
+      "options": [
+        "“SIM swap ref SR-44871”",
+        "“my internet is really slow at night”",
+        "“IMEI 356938035643809”",
+        "“how do I port my number”"
+      ],
+      "correct": [
+        0,
+        2
+      ],
+      "explanation": "Reference numbers and IMEIs are exact tokens with little meaning. Natural-language questions suit dense search."
+    },
+    {
+      "id": "se19",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What is the cosine similarity of a = [1, 0, 1] and b = [0, 1, 1]?",
+      "options": [
+        "0.50",
+        "1.00",
+        "0.71",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "a · b = 1; ‖a‖ = ‖b‖ = √2; 1 ÷ 2 = 0.50."
+    },
+    {
+      "id": "se20",
+      "kind": "single",
+      "industry": "HR tech",
+      "question": "A résumé-search index holds 1 million embedded chunks, and 5,000 new résumés arrive daily. The model is unchanged. What should you do?",
+      "options": [
+        "Embed only the new résumés with the same model and add them",
+        "Re-embed all 1 million chunks every day",
+        "Embed new résumés with the newest model available",
+        "Rebuild the index with BM25"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Re-embedding everything is needed only when the model changes. New content just needs the same model."
+    }
+  ]
+}

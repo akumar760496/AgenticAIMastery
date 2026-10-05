@@ -1,0 +1,883 @@
+{
+  "id": "debate",
+  "moduleSlug": "multi-agent",
+  "name": "Debate and Critic Ensembles",
+  "shortName": "Debate",
+  "question": "Will more opinions make the answer more correct?",
+  "summary": "Several agents answer independently, read each other’s reasoning over a few rounds, and settle on an answer by vote or by a judge. It costs a multiple of a single call. Du et al. (2023) reported gains with 3 agents and 2 rounds, but later work found that majority voting accounts for most of those gains, so debate is worth it only when agents’ errors are independent and a second opinion can catch them.",
+  "useCases": [
+    "High-stakes answers where errors are costly: coverage, compliance, diagnosis support",
+    "Questions with a checkable argument that others can verify",
+    "Deciding which cases to escalate: disagreement is a useful signal"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "Du et al. 2023",
+        "detail": "3 agents, 2 rounds: arithmetic 67.0% → 81.8%, GSM8K 77.0% → 85.0%"
+      },
+      {
+        "term": "Degeneration of thought",
+        "detail": "one agent anchors on its first answer (Liang et al.)"
+      },
+      {
+        "term": "Judge",
+        "detail": "settles a split; may be unfair across different models"
+      },
+      {
+        "term": "Smit et al. 2023",
+        "detail": "debate does not reliably beat self-consistency"
+      },
+      {
+        "term": "Choi et al. 2025",
+        "detail": "majority voting explains most of debate’s gains"
+      },
+      {
+        "term": "Cost",
+        "detail": "agents × (rounds + 1) calls, plus the judge"
+      }
+    ]
+  },
+  "steps": [
+    "Collect independent first answers, ideally from varied prompts or models",
+    "Share answers and reasons for one or two rounds; stop early on agreement",
+    "Aggregate by majority vote or a judge with a rubric, never the last speaker",
+    "Compare against plain voting at the same cost before adopting debate"
+  ],
+  "pitfalls": [
+    "Correlated agents agree on the same mistake",
+    "Agents conform to a confident but wrong peer",
+    "Rounds multiply cost for little gain over voting"
+  ],
+  "tools": [
+    "AutoGen group chat",
+    "LangGraph",
+    "debate-or-vote",
+    "OpenAI Agents SDK",
+    "CrewAI"
+  ],
+  "remember": "Vote first. Debate only if it beats the vote.",
+  "caption": "Illustrative: 3 agents × 3 rounds = 9 calls; plain voting uses 3.",
+  "comparison": {
+    "scope": "How answers are checked",
+    "cost": 3,
+    "needs": "Independent agents and a vote",
+    "best": "Costly; gains often from voting"
+  },
+  "diagram": {
+    "file": "diagrams/debate.svg"
+  },
+  "lesson": {
+    "file": "coverage_debate.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import asyncio",
+        "steps": []
+      },
+      {
+        "text": "from collections import Counter",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def label(answer: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    return \"NOT COVERED\" if answer.upper().startswith(\"NOT\") else \"COVERED\"",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def ask(agent, question, peers=None):           # any chat client",
+        "steps": []
+      },
+      {
+        "text": "    prompt = question if peers is None else (",
+        "steps": []
+      },
+      {
+        "text": "        f\"{question}\\nOther assessors said:\\n{peers}\\nRevise or defend.\")",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "    return await agent.complete(prompt)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def debate(agents, question, max_rounds=2):",
+        "steps": []
+      },
+      {
+        "text": "    answers = await asyncio.gather(*(ask(a, question) for a in agents))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    calls = len(agents)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    for _ in range(max_rounds):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if len({label(x) for x in answers}) == 1:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            break                            # all agree: stop early",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        peers = \"\\n---\\n\".join(answers)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        answers = await asyncio.gather(",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            *(ask(a, question, peers) for a in agents))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        calls += len(agents)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    votes = Counter(label(x) for x in answers)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return votes.most_common(1)[0][0], calls         # never answers[-1]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def vote_only(agents, question):               # the baseline",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    answers = await asyncio.gather(*(ask(a, question) for a in agents))",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return Counter(label(x) for x in answers).most_common(1)[0][0], len(agents)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Independent first answers",
+        "text": "Three agents read the claim and the policy separately. Two say covered, citing the day-care clause; one says not covered."
+      },
+      {
+        "title": "Share answers and reasons",
+        "text": "Each agent now sees the others’ answers and the clauses they relied on. This is where a checkable argument can correct an error."
+      },
+      {
+        "title": "Revise or defend",
+        "text": "Each agent answers again. The third agent finds the day-care clause it missed and changes its answer."
+      },
+      {
+        "title": "Stop early on agreement",
+        "text": "All three now agree, so the second round is skipped. Stopping early saves a third of the calls."
+      },
+      {
+        "title": "Aggregate the group",
+        "text": "The final answer is the majority of the last round, not whichever agent spoke last. A judge with a rubric is the alternative when votes split."
+      },
+      {
+        "title": "Compare with plain voting",
+        "text": "Round 0 alone was already 2 against 1 for covered. Voting got the same answer in 3 calls instead of 6, so debate must earn its extra cost on cases like this."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl m a\" x=\"60\" y=\"16\" style=\"--d:0s\">Round 0</text><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"24\" cy=\"40\" r=\"12\" class=\"bx\"/><text class=\"mono\" x=\"24\" y=\"44\" text-anchor=\"middle\">A1</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"54\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M50 40l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"70\" y=\"44\" style=\"--d:0.25s\">covered</text><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"24\" cy=\"74\" r=\"12\" class=\"bx\"/><text class=\"mono\" x=\"24\" y=\"78\" text-anchor=\"middle\">A2</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"54\" cy=\"74\" r=\"9\" class=\"bd-pass\"/><path d=\"M50 74l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"70\" y=\"78\" style=\"--d:0.35s\">covered</text><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"24\" cy=\"108\" r=\"12\" class=\"bx\"/><text class=\"mono\" x=\"24\" y=\"112\" text-anchor=\"middle\">A3</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"54\" cy=\"108\" r=\"9\" class=\"bd-fail\"/><path d=\"M50.5 104.5l7 7M57.5 104.5l-7 7\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"70\" y=\"112\" style=\"--d:0.45s\">not covered</text>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M152 74L194 74\" marker-end=\"url(#arr)\"/></g><text class=\"sb a\" x=\"173\" y=\"62\" style=\"--d:0.1s\">reasons</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl m a\" x=\"240\" y=\"16\" style=\"--d:0s\">Round 1</text><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"208\" cy=\"40\" r=\"12\" class=\"bx\"/><text class=\"mono\" x=\"208\" y=\"44\" text-anchor=\"middle\">A1</text></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"238\" cy=\"40\" r=\"9\" class=\"bd-pass\"/><path d=\"M234 40l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"254\" y=\"44\" style=\"--d:0.25s\">covered</text><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"208\" cy=\"74\" r=\"12\" class=\"bx\"/><text class=\"mono\" x=\"208\" y=\"78\" text-anchor=\"middle\">A2</text></g><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"238\" cy=\"74\" r=\"9\" class=\"bd-pass\"/><path d=\"M234 74l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"254\" y=\"78\" style=\"--d:0.35s\">covered</text><g class=\"a\" style=\"--d:0.30000000000000004s\"><circle cx=\"208\" cy=\"108\" r=\"12\" class=\"bx acc\"/><text class=\"mono\" x=\"208\" y=\"112\" text-anchor=\"middle\">A3</text></g><g class=\"a\" style=\"--d:0.4s\"><circle cx=\"238\" cy=\"108\" r=\"9\" class=\"bd-pass\"/><path d=\"M234 108l3 3 5-6\" class=\"bd-mark\"/></g><text class=\"mono l a\" x=\"254\" y=\"112\" style=\"--d:0.45s\">revised</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl m a\" x=\"180\" y=\"136\" style=\"--d:0s\">All agree, so round 2 is skipped</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx pass\" x=\"110\" y=\"146\" width=\"140\" height=\"38\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"162\">COVERED</text><text class=\"sb\" x=\"180\" y=\"177\">majority 3 of 3</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"208\" style=\"text-anchor:end;--d:0s\">Debate</text><rect x=\"110\" y=\"198\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"198\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"208\" style=\"--d:0.2s\">6 calls</text><text class=\"tl a\" x=\"104\" y=\"230\" style=\"text-anchor:end;--d:0.15s\">Vote only</text><rect x=\"110\" y=\"220\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"220\" width=\"95\" height=\"12\" rx=\"3\" class=\"bar grow \" style=\"--d:0.25s\"/><text class=\"mono l a\" x=\"306\" y=\"230\" style=\"--d:0.35s\">3 calls</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Independent answers catch many one-off errors",
+      "Disagreement is a useful signal for human review",
+      "Reasons can be checked, not just counted",
+      "Works with any model and no framework"
+    ],
+    "cons": [
+      "Costs agents × rounds calls, plus any judge",
+      "Correlated agents agree on the same mistake",
+      "Agents may conform to a confident but wrong peer",
+      "Majority voting often captures most of the gain for less"
+    ],
+    "avoidWhen": [
+      "A person already checks every answer",
+      "Errors are cheap to fix later, or all agents share one model and one prompt"
+    ],
+    "tools": [
+      {
+        "name": "AutoGen group chat",
+        "type": "Open source (Microsoft, maintenance mode)",
+        "what": "Round-robin and selector group chats for multi-agent discussion",
+        "url": "https://microsoft.github.io/autogen/stable/"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Parallel answer nodes, a vote node and conditional extra rounds",
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "name": "debate-or-vote",
+        "type": "Research code",
+        "what": "Reproducing the comparison of debate against majority voting",
+        "url": "https://github.com/deeplearning-wisc/debate-or-vote"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Parallel agent runs gathered with asyncio, then a vote",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "CrewAI",
+        "type": "Open source",
+        "what": "Reviewer and critic roles inside a crew",
+        "url": "https://docs.crewai.com/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A Pune general insurer checks health-claim coverage against the policy wording. Each agent is right with the accuracy you set. Correlation is the share of cases where all agents share one blind spot (all right or all wrong together). A debate round lifts each agent a little on the remaining cases, and each call costs about 2k tokens.",
+    "controls": [
+      "Set the number of agents and debate rounds.",
+      "Set each agent’s accuracy and how correlated their errors are.",
+      "Choose how the final answer is picked: last speaker, majority vote or a judge."
+    ],
+    "outputs": [
+      {
+        "name": "Final accuracy",
+        "meaning": "Shared-blind-spot cases at single-agent accuracy plus independent cases after debate and aggregation."
+      },
+      {
+        "name": "Gain over one agent",
+        "meaning": "Final accuracy minus one agent’s accuracy."
+      },
+      {
+        "name": "Gain over plain voting",
+        "meaning": "Final accuracy minus a majority vote of the same agents with no rounds."
+      },
+      {
+        "name": "Model calls",
+        "meaning": "Agents × (rounds + 1), plus 1 for a judge."
+      },
+      {
+        "name": "Accuracy per 10k tokens",
+        "meaning": "Final accuracy ÷ tokens used, a rough value-for-money measure."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One agent",
+        "expect": "One agent at 70%: 70.0% accuracy in 1 call, and nothing checks it."
+      },
+      {
+        "k": "vote",
+        "name": "Vote of three",
+        "expect": "3 agents, no rounds, majority vote, 20% correlation: 76.7%, +6.7 points over one agent in 3 calls."
+      },
+      {
+        "k": "debate",
+        "name": "One debate round",
+        "expect": "The same 3 agents after 1 round: 78.2%, +8.2 over one agent but only +1.5 over plain voting, for 6 calls instead of 3."
+      },
+      {
+        "k": "last",
+        "name": "Last speaker",
+        "expect": "3 agents, 2 rounds, but the last speaker’s answer is taken: 71.8%, only +1.8 over one agent and 4.9 points below voting, in 9 calls."
+      }
+    ],
+    "missions": [
+      {
+        "k": "ten",
+        "text": "Beat one agent’s accuracy by 10 points or more.",
+        "hint": "More independent agents with a majority vote. With 20% correlation, 5 agents at 70% reach 81.0%."
+      },
+      {
+        "k": "beatvote",
+        "text": "Beat plain voting by more than 2 points.",
+        "hint": "Add rounds with low correlation. Weaker agents leave more room for debate to fix: try 3 agents at 60%, 3 rounds, 0% correlation."
+      },
+      {
+        "k": "corr",
+        "text": "Show high error correlation (60% or more) erasing the gain of a 3+ agent debate to under 2 points over one agent.",
+        "hint": "Keep a vote or judge, at least 1 round, and raise correlation to 90%."
+      }
+    ],
+    "tools": [
+      {
+        "n": "AutoGen group chat",
+        "type": "Open source · Microsoft (maintenance mode)",
+        "start": 3,
+        "prod": 2,
+        "best": "Round-robin and selector group chats where agents see and answer each other.",
+        "ex": "Three assessor agents discuss a claim in a RoundRobinGroupChat that stops after 2 rounds.",
+        "pros": [
+          "Debate loop with no custom code",
+          "Composable termination"
+        ],
+        "cons": [
+          "In maintenance mode",
+          "Easy to overspend without caps"
+        ],
+        "url": "https://microsoft.github.io/autogen/stable/"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Explicit graphs with typed state, reducers, parallel branches, checkpoints and interrupts.",
+        "ex": "Carrier, warehouse and weather nodes write to one typed board that a dispatcher node reads.",
+        "pros": [
+          "Precise control of state and flow",
+          "Persistence and human-in-the-loop"
+        ],
+        "cons": [
+          "More code than prompt-level frameworks",
+          "Graph design takes practice"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "n": "debate-or-vote",
+        "type": "Research code",
+        "start": 1,
+        "prod": 1,
+        "best": "Reproducing the comparison of multi-agent debate with plain majority voting across benchmarks.",
+        "ex": "Run debate and voting on a sample of your own labelled claims before committing to rounds.",
+        "pros": [
+          "Controlled comparison",
+          "Published method"
+        ],
+        "cons": [
+          "Research code",
+          "Benchmarks may not match your task"
+        ],
+        "url": "https://github.com/deeplearning-wisc/debate-or-vote"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Lightweight Python agents with tools, handoffs, agents-as-tools, guardrails and tracing.",
+        "ex": "A manager agent calls a research agent as a tool, then hands the chat to a support agent.",
+        "pros": [
+          "Small, readable API",
+          "Tracing included"
+        ],
+        "cons": [
+          "Orchestration beyond handoffs is up to you",
+          "Some features favour OpenAI models"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "CrewAI",
+        "type": "Open source · hosted option",
+        "start": 3,
+        "prod": 2,
+        "best": "Role-based crews that run tasks sequentially or under a manager agent.",
+        "ex": "An analyst, a writer and a reviewer crew draft a weekly market note.",
+        "pros": [
+          "Fast to prototype with roles",
+          "Sequential and hierarchical processes"
+        ],
+        "cons": [
+          "Less control over state than a graph",
+          "Manager behaviour can be hard to predict"
+        ],
+        "url": "https://docs.crewai.com/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Cheapest reliable ensemble",
+        "tool": "Independent answers and a majority vote"
+      },
+      {
+        "need": "Debate without custom code",
+        "tool": "AutoGen group chat, with caps"
+      },
+      {
+        "need": "Before adopting debate",
+        "tool": "Compare with voting on labelled cases"
+      }
+    ],
+    "goals": [
+      "Calculate majority-vote accuracy for independent agents",
+      "Explain why correlated errors erase ensemble gains",
+      "Compare debate with voting at equal cost"
+    ]
+  },
+  "practice": {
+    "scenario": "A Pune general insurer checks whether health claims are covered by the policy wording. Three agents read the claim and the policy independently and answer covered or not covered with the clause they rely on. If they disagree, they see each other’s reasons for one round; a majority decides, and any case still split goes to a human assessor.",
+    "industries": [
+      {
+        "industry": "Health insurance",
+        "use": "Coverage decisions with disagreement sent to an assessor"
+      },
+      {
+        "industry": "Legal",
+        "use": "Clause interpretation checked by independent readers"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Diagnosis-support suggestions where a second opinion is cheap relative to an error"
+      }
+    ],
+    "analogy": "A panel of three examiners marking the same answer sheet. They mark alone first, compare only when they differ, and a majority sets the mark; a split goes to the chief examiner.",
+    "library": {
+      "name": "asyncio with any chat client",
+      "what": "Debate needs no framework: parallel calls, a round of shared reasons, and a vote. The OpenAI Python client is used here; any client works.",
+      "install": "pip install openai"
+    },
+    "note": "Always compare with plain majority voting at the same number of calls before adopting debate rounds.",
+    "samples": [
+      {
+        "file": "coverage_vote.py",
+        "language": "python",
+        "code": "import asyncio\nfrom collections import Counter\nfrom openai import AsyncOpenAI\n\nclient = AsyncOpenAI()\nMODEL = \"gpt-4.1-mini\"                        # use your current model\n\nasync def ask(prompt: str) -> str:\n    r = await client.chat.completions.create(\n        model=MODEL, messages=[{\"role\": \"user\", \"content\": prompt}])\n    return r.choices[0].message.content\n\ndef label(answer: str) -> str:\n    return \"NOT COVERED\" if \"NOT COVERED\" in answer.upper() else \"COVERED\"\n\nasync def decide(claim: str, policy: str, n=3, rounds=1):\n    q = (f\"Policy:\\n{policy}\\n\\nClaim:\\n{claim}\\n\\nAnswer COVERED or NOT \"\n         \"COVERED, then quote the clause you rely on.\")\n    answers = await asyncio.gather(*(ask(q) for _ in range(n)))\n    for _ in range(rounds):\n        if len({label(a) for a in answers}) == 1:\n            break                              # all agree: stop early\n        others = \"\\n---\\n\".join(answers)\n        answers = await asyncio.gather(*(ask(\n            f\"{q}\\n\\nOther assessors said:\\n{others}\\n\\nRevise or defend \"\n            \"your answer.\") for _ in range(n)))\n    votes = Counter(label(a) for a in answers)\n    verdict, count = votes.most_common(1)[0]\n    return verdict if count > n / 2 else \"REFER TO ASSESSOR\""
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Three agents are each right 70% of the time, with independent errors. What is the majority-vote accuracy, in percent?",
+    "answer": "The vote is right when at least 2 of 3 are right: 3 × 0.7² × 0.3 + 0.7³ = 0.441 + 0.343 = 0.784, so 78.4%. Correlated errors would pull this back towards 70%.",
+    "expected": {
+      "value": 78.4,
+      "tolerance": 0.1,
+      "label": "accuracy % ="
+    },
+    "interview": [
+      {
+        "question": "When is multi-agent debate worth its cost?",
+        "answer": "When agents’ errors are fairly independent, the answer has a checkable argument, and errors are expensive. Measure it against plain majority voting at the same number of calls; recent work finds voting explains most of debate’s gains."
+      },
+      {
+        "question": "What goes wrong in debate?",
+        "answer": "Agents conform to a confident but wrong peer, anchor on their first answer (degeneration of thought), or share the same blind spot when they use the same model and prompt. A judge can also be biased when agents use different models."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t take the last speaker’s answer as the result.",
+        "fix": "Aggregate the final round by majority vote or a judge with a rubric."
+      },
+      {
+        "mistake": "Don’t run debate rounds by default.",
+        "fix": "Start with independent answers and a vote; add rounds only if they measurably help."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "db01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Three independent agents are each right 80% of the time. What is the accuracy of their majority vote?",
+      "options": [
+        "80.0%",
+        "89.6%",
+        "96.0%",
+        "51.2%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "At least 2 of 3 right: 3 × 0.8² × 0.2 + 0.8³ = 0.384 + 0.512 = 0.896."
+    },
+    {
+      "id": "db02",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "Four agents answer, then debate for 2 rounds, and a judge decides. How many model calls is that?",
+      "options": [
+        "12",
+        "13",
+        "9",
+        "8"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "4 agents × (1 initial + 2 rounds) = 12, plus 1 judge = 13."
+    },
+    {
+      "id": "db03",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is debate most likely to help a health insurer’s coverage checks? Select all that apply.",
+      "options": [
+        "The agents’ errors are fairly independent",
+        "The answer rests on a clause others can check",
+        "All agents use the same model and the same prompt",
+        "A human assessor already reviews every case"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Independent errors and checkable arguments let agents correct each other. Identical agents share blind spots, and a full human review makes the extra calls redundant."
+    },
+    {
+      "id": "db04",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Which setup did Du et al. (2023) mainly use for their multiagent-debate results?",
+      "options": [
+        "2 agents, 5 rounds",
+        "3 agents, 2 rounds",
+        "10 agents, 1 round",
+        "1 agent reflecting 3 times"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Their main experiments used 3 agents and 2 rounds, for example lifting GSM8K from 77.0% to 85.0%."
+    },
+    {
+      "id": "db05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What did Choi, Zhu and Li (NeurIPS 2025) find about multi-agent debate across seven benchmarks?",
+      "options": [
+        "Debate always beats voting",
+        "Majority voting alone accounts for most of the gains attributed to debate",
+        "Debate hurts accuracy",
+        "Judges are unnecessary"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "They found voting explains most of debate’s gains, so compare against voting before paying for rounds."
+    },
+    {
+      "id": "db06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A debate function ends with final = answers[-1]. What is wrong?",
+      "options": [
+        "Nothing: the last answer is the most refined",
+        "It takes the last agent’s answer instead of the group’s majority",
+        "It should be answers[0]",
+        "It should average the answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The last speaker is one agent. The final answer should be a majority vote of the final round or a judge’s decision."
+    },
+    {
+      "id": "db07",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "What can go wrong in multi-agent debate? Select all that apply.",
+      "options": [
+        "Agents conform to a confident but wrong peer",
+        "An agent sticks to its first answer (degeneration of thought)",
+        "Agents with correlated errors agree on the same mistake",
+        "Three agents always tie"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Conformity, anchoring and correlated errors are known failure modes. With 3 agents and two answers, a tie is impossible."
+    },
+    {
+      "id": "db08",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Agents are each 70% accurate. On 50% of cases they share one blind spot (all right or all wrong together); on the rest they are independent, where a 3-agent vote reaches 78.4%. What is the overall accuracy?",
+      "options": [
+        "78.4%",
+        "74.2%",
+        "70.0%",
+        "77.0%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "0.5 × 0.70 + 0.5 × 0.784 = 0.35 + 0.392 = 0.742."
+    },
+    {
+      "id": "db09",
+      "kind": "single",
+      "industry": "Research",
+      "question": "Liang et al. (2023) add a judge to multi-agent debate. What caution do they raise?",
+      "options": [
+        "Judges are always unbiased",
+        "An LLM judge may not be fair when the debating agents use different LLMs",
+        "Judges need no instructions",
+        "Judges make debate cheaper"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "They warn that a judge may favour answers from its own kind of model."
+    },
+    {
+      "id": "db10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Three agents debate for 3 rounds in total (the first answers plus 2 more rounds) at about 2k tokens per call. Plain voting uses only the first round. How many extra tokens does debate cost?",
+      "options": [
+        "6k",
+        "12k",
+        "18k",
+        "4k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Debate: 3 × 3 × 2k = 18k. Voting: 3 × 2k = 6k. Extra: 12k."
+    },
+    {
+      "id": "db11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A diagnosis-support team wants to use disagreement between agents well. Which practices help? Select all that apply.",
+      "options": [
+        "Send cases that stay split to a clinician",
+        "Stop early when all agents agree",
+        "Always run the maximum number of rounds",
+        "Drop the dissenting agent’s answer without reading it"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Disagreement is a signal for escalation, and agreement is a reason to stop. Always maxing rounds wastes calls; ignoring dissent throws away the check."
+    },
+    {
+      "id": "db12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What did Smit et al. (2023) conclude about multi-agent debate?",
+      "options": [
+        "It reliably beats every other method",
+        "It does not reliably beat self-consistency and is more sensitive to hyperparameters",
+        "It needs no tuning",
+        "It only works with one agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "They found debate does not reliably outperform self-consistency and depends heavily on settings."
+    },
+    {
+      "id": "db13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Five independent agents are each right 60% of the time. What is the majority-vote accuracy?",
+      "options": [
+        "60.0%",
+        "68.3%",
+        "64.8%",
+        "91.3%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "P(at least 3 right) = 10 × 0.6³ × 0.4² + 5 × 0.6⁴ × 0.4 + 0.6⁵ = 0.3456 + 0.2592 + 0.0778 = 0.6826."
+    },
+    {
+      "id": "db14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Four agents split 2 against 2 on whether a transaction breaches a limit. What is a sound way to settle it?",
+      "options": [
+        "Take the last speaker’s answer",
+        "A judge with a clear rubric, or escalation to a person",
+        "Pick the answer alphabetically first",
+        "Rerun until one side wins"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Even numbers can tie. A rubric-based judge or a human settles ties transparently."
+    },
+    {
+      "id": "db15",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Before adding debate rounds to product-question answering, which cheaper options should you try? Select all that apply.",
+      "options": [
+        "A majority vote over independent answers",
+        "Self-consistency: sampling one model several times and voting",
+        "Adding debate rounds to every query by default",
+        "More rounds with the same prompt and model"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Voting and self-consistency capture much of the gain for fewer calls. Default or extra rounds are the costly option being tested."
+    },
+    {
+      "id": "db16",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Plain voting reaches 78% accuracy in 3 calls; debate reaches 80% in 9 calls. How many extra calls does each extra percentage point cost?",
+      "options": [
+        "2",
+        "3",
+        "6",
+        "4.5"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6 extra calls ÷ 2 extra points = 3 calls per point."
+    },
+    {
+      "id": "db17",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "What early-stopping rule suits a debate loop?",
+      "options": [
+        "Stop after the first answer",
+        "Stop as soon as all agents give the same answer",
+        "Never stop before the maximum rounds",
+        "Stop when one agent is confident"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unanimous agreement means another round is unlikely to change the vote, so stopping saves calls."
+    },
+    {
+      "id": "db18",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Why is an odd number of agents often used for a majority vote?",
+      "options": [
+        "Odd numbers are cheaper",
+        "With two possible answers, an odd number cannot tie",
+        "Models prefer odd numbers",
+        "It raises each agent’s accuracy"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "For a yes/no answer, an odd count guarantees a majority."
+    },
+    {
+      "id": "db19",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A research team wants its analyst agents’ errors to be more independent. Which changes help? Select all that apply.",
+      "options": [
+        "Use different models for different agents",
+        "Give agents different prompts or perspectives",
+        "Give each agent a different subset of the evidence",
+        "Repeat the same temperature-0 prompt on the same model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Diversity of model, prompt and evidence reduces shared blind spots. Identical deterministic calls give identical answers."
+    },
+    {
+      "id": "db20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What is “degeneration of thought” in multi-agent debate?",
+      "options": [
+        "A model forgetting its instructions",
+        "An agent becoming stuck on its first answer even when it is wrong, so further reflection adds nothing",
+        "A drop in token speed",
+        "Agents refusing to answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Liang et al. name this problem and use debate between agents to break it."
+    }
+  ]
+}

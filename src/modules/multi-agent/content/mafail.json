@@ -1,0 +1,906 @@
+{
+  "id": "mafail",
+  "moduleSlug": "multi-agent",
+  "name": "Failure Modes and Coordination Control",
+  "shortName": "Failure control",
+  "question": "Why did the team loop, stall or overspend?",
+  "summary": "Multi-agent teams repeat steps, miss stopping conditions, ignore each other, stop early or skip verification. The MAST study of over 1,600 traces sorts these into 14 modes in three categories. Coordination control answers them with hard caps on turns, tokens, time and depth, combined so that any one can stop the run, plus explicit stop signals, repetition detection and a verifier.",
+  "useCases": [
+    "Any agent team that runs unattended: overnight, in CI, at scale",
+    "Coder–reviewer or peer-to-peer loops",
+    "Budgets that must hold per run or per day"
+  ],
+  "keyFacts": {
+    "label": "Key facts",
+    "items": [
+      {
+        "term": "MAST categories",
+        "detail": "system design ≈ 44%, inter-agent misalignment ≈ 32%, task verification ≈ 24%"
+      },
+      {
+        "term": "Top modes",
+        "detail": "step repetition 15.7%, reasoning–action mismatch 13.2%, unaware of stopping 12.4%"
+      },
+      {
+        "term": "AutoGen",
+        "detail": "11 termination conditions, combined with | (either) or & (both)"
+      },
+      {
+        "term": "Claude Agent SDK",
+        "detail": "max_budget_usd ends the run and refuses new sub-agents"
+      },
+      {
+        "term": "LangGraph",
+        "detail": "GraphRecursionError at the recursion limit (1000 by default from v1.0.6)"
+      },
+      {
+        "term": "OpenAI Agents SDK",
+        "detail": "max_turns raises MaxTurnsExceeded"
+      }
+    ]
+  },
+  "steps": [
+    "Name one explicit stop signal, such as TERMINATE, and say when to use it",
+    "Add caps on messages, tokens and time, combined with OR",
+    "Detect repeated messages and intervene before the loop runs on",
+    "Verify with a real check before accepting done; return partial results with a reason"
+  ],
+  "pitfalls": [
+    "Combining caps with AND means none fires until all do",
+    "Caps set too tight cut legitimate long runs",
+    "A done claim without a check ships wrong output"
+  ],
+  "tools": [
+    "AutoGen termination",
+    "Claude Agent SDK limits",
+    "OpenAI Agents SDK max_turns",
+    "LangGraph recursion limit",
+    "MAST"
+  ],
+  "remember": "Any cap stops it. Nothing counts as done until checked.",
+  "caption": "Illustrative: 4k tokens per message. Repetition is caught at message 9 and tests pass at message 12.",
+  "comparison": {
+    "scope": "When the team stops",
+    "cost": 1,
+    "needs": "Caps, a stop signal and a verifier",
+    "best": "Tight caps cut long runs"
+  },
+  "diagram": {
+    "file": "diagrams/mafail.svg"
+  },
+  "lesson": {
+    "file": "bounded_team.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from autogen_agentchat.agents import AssistantAgent",
+        "steps": []
+      },
+      {
+        "text": "from autogen_agentchat.teams import RoundRobinGroupChat",
+        "steps": []
+      },
+      {
+        "text": "from autogen_agentchat.conditions import (TextMentionTermination,",
+        "steps": []
+      },
+      {
+        "text": "    MaxMessageTermination, TokenUsageTermination, TimeoutTermination,",
+        "steps": []
+      },
+      {
+        "text": "    FunctionalTermination)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "done = TextMentionTermination(\"APPROVED\")          # the stop signal",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "caps = (MaxMessageTermination(30)",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "        | TokenUsageTermination(max_total_token=100_000)",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "        | TimeoutTermination(timeout_seconds=720))",
+        "steps": [
+          2,
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "seen = {}",
+        "steps": []
+      },
+      {
+        "text": "def looping(new_msgs) -> bool:           # called with new messages",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    for m in new_msgs:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if seen.get(m.source) == m.to_text():",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            return True                  # same text twice in a row",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        seen[m.source] = m.to_text()",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return False",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# coder, model and run_tests are defined as usual",
+        "steps": []
+      },
+      {
+        "text": "reviewer = AssistantAgent(\"reviewer\", model_client=model, tools=[run_tests],",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    system_message=\"Call run_tests. Say APPROVED only if it returns PASS.\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "stop = done | caps | FunctionalTermination(looping)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "team = RoundRobinGroupChat([coder, reviewer], termination_condition=stop)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def main():",
+        "steps": []
+      },
+      {
+        "text": "    result = await team.run(task=\"Fix the invoice rounding bug\")",
+        "steps": []
+      },
+      {
+        "text": "    if \"APPROVED\" not in (result.stop_reason or \"\"):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return {\"status\": \"partial\", \"reason\": result.stop_reason,",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                \"last_patch\": result.messages[-2].to_text()}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {\"status\": \"done\", \"patch\": result.messages[-2].to_text()}",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Name the stop signal",
+        "text": "Agree on one explicit word, APPROVED, and say exactly when an agent may use it. Without one, a team has no way to say it is finished."
+      },
+      {
+        "title": "Add hard caps",
+        "text": "Cap messages (30), tokens (100k) and wall time (12 minutes). Agents forget to stop; caps do not."
+      },
+      {
+        "title": "Combine them with OR",
+        "text": "The | operator stops the run when any one condition fires. & would wait until all of them had fired, so a missing stop word could keep it running for ever."
+      },
+      {
+        "title": "Detect repetition",
+        "text": "A custom condition compares each agent’s new message with its previous one. Here the coder resends the same patch at message 9, and the loop is caught."
+      },
+      {
+        "title": "Verify before stopping",
+        "text": "The reviewer must run the tests and may say APPROVED only if they pass. At message 12 they do, so done means checked, not claimed."
+      },
+      {
+        "title": "Return partial results with a reason",
+        "text": "If a cap or the loop check stops the run instead, return the last patch marked partial, with the stop reason, so a person can pick it up."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"190\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"103\" y=\"24\" text-anchor=\"middle\">stop signal: “APPROVED”</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"44\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"62\" y=\"59\" text-anchor=\"middle\">30 messages</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"126\" y=\"44\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"59\" text-anchor=\"middle\">100k tokens</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"244\" y=\"44\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"298\" y=\"59\" text-anchor=\"middle\">12 minutes</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"lb a\" x=\"121\" y=\"60\" style=\"--d:0s\">|</text><text class=\"lb a\" x=\"239\" y=\"60\" style=\"--d:0.1s\">|</text><text class=\"tl m a\" x=\"180\" y=\"88\" style=\"--d:0.2s\">OR: the first condition reached stops the run</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<rect class=\"a\" x=\"8\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0s\"/><rect class=\"a\" x=\"36\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.05s\"/><rect class=\"a\" x=\"64\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.1s\"/><rect class=\"a\" x=\"92\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.15000000000000002s\"/><rect class=\"a\" x=\"120\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.2s\"/><rect class=\"a\" x=\"148\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.25s\"/><rect class=\"a\" x=\"176\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.30000000000000004s\"/><rect class=\"a\" x=\"204\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.35000000000000003s\"/><rect class=\"a\" x=\"232\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--warn);opacity:0.9;--d:0.4s\"/><g class=\"a\" style=\"--d:0.5s\"><text class=\"tag-t warn\" x=\"236\" y=\"138\">repeat · msg 9</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<rect class=\"a\" x=\"260\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0s\"/><rect class=\"a\" x=\"288\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--ink-2);opacity:0.45;--d:0.08s\"/><rect class=\"a\" x=\"316\" y=\"102\" width=\"24\" height=\"18\" rx=\"3\" style=\"fill:var(--pass);opacity:0.9;--d:0.16s\"/><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t pass\" x=\"322\" y=\"138\">tests pass</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"160\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"176\" text-anchor=\"middle\">APPROVED at msg 12 · 48k tokens · done</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"8\" y=\"194\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"210\" text-anchor=\"middle\">cap or loop instead → partial patch + stop reason</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Every run ends, however the agents behave",
+      "Spend per run becomes predictable",
+      "Stop reasons make failures diagnosable",
+      "A verifier turns “done” into a checked result"
+    ],
+    "cons": [
+      "Caps set too tight cut legitimate long runs",
+      "Verification adds calls and time",
+      "Repetition checks can miss near-duplicates",
+      "More configuration to test and maintain"
+    ],
+    "avoidWhen": [
+      "Never: every unattended team needs at least one hard cap",
+      "Do not use AND to combine safety caps"
+    ],
+    "tools": [
+      {
+        "name": "AutoGen termination",
+        "type": "Open source (Microsoft, maintenance mode)",
+        "what": "11 termination conditions combined with | and &",
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html"
+      },
+      {
+        "name": "Claude Agent SDK limits",
+        "type": "Agent SDK (Anthropic)",
+        "what": "max_budget_usd, sub-agent depth and concurrency caps",
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "name": "OpenAI Agents SDK max_turns",
+        "type": "Open source (OpenAI)",
+        "what": "max_turns on Runner.run; MaxTurnsExceeded when passed",
+        "url": "https://openai.github.io/openai-agents-python/running_agents/"
+      },
+      {
+        "name": "LangGraph recursion limit",
+        "type": "Open source (LangChain)",
+        "what": "recursion_limit in the run config; GraphRecursionError when reached",
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "name": "MAST",
+        "type": "Research dataset and taxonomy",
+        "what": "14 failure modes in 3 categories for labelling your own traces",
+        "url": "https://github.com/multi-agent-systems-failure-taxonomy/MAST"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A SaaS firm runs 50 overnight coder–reviewer runs. A run needs 8 to 26 messages; each message costs 4k tokens and 20 seconds. Eight runs fall into a loop, re-sending the same patch; six claim APPROVED too early; and some agents simply forget to say APPROVED. Runs that nothing stops are killed by hand at 60 messages (240k tokens).",
+    "controls": [
+      "Toggle message (30), token (100k, 25 messages) and time (12 minutes, 36 messages) caps.",
+      "Toggle a repetition detector and a verifier that runs the tests before APPROVED counts.",
+      "Choose AND or OR to combine the stop signal and caps, and set how often agents forget to say APPROVED."
+    ],
+    "outputs": [
+      {
+        "name": "Endless runs",
+        "meaning": "Runs that no condition ever stops."
+      },
+      {
+        "name": "Average tokens per run",
+        "meaning": "Including runs killed by hand, against what the work needs."
+      },
+      {
+        "name": "Premature stops",
+        "meaning": "Runs ended before the work was done: false APPROVED claims or a cap reached too soon."
+      },
+      {
+        "name": "Loops cut by a cap",
+        "meaning": "Looping runs stopped by a cap, returning a partial result."
+      },
+      {
+        "name": "Unverified outputs",
+        "meaning": "Runs that ended on an APPROVED claim nobody checked."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No stop rules",
+        "expect": "No caps: 15 of 50 runs never end (8 loops and 7 that never say APPROVED), 6 stop early on false claims, 35 outputs ship unchecked, and runs average 116.1k tokens (1.72× what the work needs)."
+      },
+      {
+        "k": "andcaps",
+        "name": "Caps combined with AND",
+        "expect": "All three caps, but with AND: still 15 endless runs, because AND waits for an APPROVED that never comes; the rest run on to message 36. 172.8k tokens per run (2.56×), 35 unverified."
+      },
+      {
+        "k": "andver",
+        "name": "AND caps with a verifier",
+        "expect": "The verifier ends false claims and unverified outputs (0), but the 8 loops never pass their tests, so they are still endless under AND. 159.4k per run (2.36×)."
+      },
+      {
+        "k": "det",
+        "name": "Repetition detector only",
+        "expect": "The detector breaks the 8 loops, but 7 runs that never say APPROVED are endless, 6 stop early and 43 outputs ship unchecked. 90.5k per run (1.34×)."
+      }
+    ],
+    "missions": [
+      {
+        "k": "noendless",
+        "text": "Get endless runs to 0.",
+        "hint": "Turn on at least one cap and combine with OR."
+      },
+      {
+        "k": "fewprem",
+        "text": "With at least two caps on, keep premature stops at 2 or fewer and no endless runs.",
+        "hint": "False APPROVED claims and a tight token cap both stop runs too soon. The verifier catches one; the other is a cap to drop."
+      },
+      {
+        "k": "verified",
+        "text": "With the verifier on, ship 0 unverified outputs at under 1.3× the base tokens, with no endless runs.",
+        "hint": "Verifier plus OR-combined caps (the detector helps too)."
+      }
+    ],
+    "tools": [
+      {
+        "n": "AutoGen termination",
+        "type": "Open source · Microsoft (maintenance mode)",
+        "start": 3,
+        "prod": 2,
+        "best": "11 built-in termination conditions for messages, tokens, time, handoffs, text and more, combined with | and &.",
+        "ex": "Stop a coder–reviewer team on APPROVED, 30 messages or 100k tokens, whichever comes first.",
+        "pros": [
+          "Composable and explicit",
+          "FunctionalTermination for custom checks"
+        ],
+        "cons": [
+          "In maintenance mode",
+          "Conditions see only new messages, so custom checks keep their own state"
+        ],
+        "url": "https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html"
+      },
+      {
+        "n": "Claude Agent SDK limits",
+        "type": "Agent SDK · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "max_budget_usd for the whole query, plus sub-agent depth and concurrency caps set through environment variables.",
+        "ex": "Cap an audit run at USD 5 and turn off nested sub-agents.",
+        "pros": [
+          "Spend cap covers sub-agents",
+          "Clear result subtype when the budget is hit"
+        ],
+        "cons": [
+          "Budget is estimated spend",
+          "Limits need a recent SDK version"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "n": "OpenAI Agents SDK max_turns",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "max_turns on Runner.run bounds the whole agent loop, including handoffs.",
+        "ex": "Cap a triage run at 8 turns and catch MaxTurnsExceeded to hand the chat to a person.",
+        "pros": [
+          "One argument",
+          "A clear exception to handle"
+        ],
+        "cons": [
+          "Turns only: add your own token and time limits",
+          "No built-in repetition check"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/running_agents/"
+      },
+      {
+        "n": "LangGraph recursion limit",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "recursion_limit in the run config caps graph steps and raises GraphRecursionError.",
+        "ex": "Set a recursion limit of 40 in the run config for a reviewer loop.",
+        "pros": [
+          "Always on",
+          "Works with checkpoints to resume"
+        ],
+        "cons": [
+          "Steps, not tokens or time",
+          "Default is high, so set your own"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/graph-api"
+      },
+      {
+        "n": "MAST",
+        "type": "Research taxonomy and dataset",
+        "start": 1,
+        "prod": 2,
+        "best": "Labelling your own failed traces with 14 failure modes in 3 categories.",
+        "ex": "Tag 50 failed runs by mode and fix the most common category first.",
+        "pros": [
+          "Shared vocabulary for failures",
+          "Annotated traces across 7 frameworks"
+        ],
+        "cons": [
+          "Labelling takes effort",
+          "A taxonomy, not a runtime control"
+        ],
+        "url": "https://github.com/multi-agent-systems-failure-taxonomy/MAST"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Stop rules for an AutoGen team",
+        "tool": "OR-combined termination conditions"
+      },
+      {
+        "need": "Spend cap for Claude sub-agents",
+        "tool": "max_budget_usd"
+      },
+      {
+        "need": "Diagnosing past failures",
+        "tool": "Label traces with MAST"
+      }
+    ],
+    "goals": [
+      "Combine stop conditions so any one of them ends a run",
+      "Explain why a verifier is needed before “done” counts",
+      "Return partial results with a stop reason"
+    ]
+  },
+  "practice": {
+    "scenario": "A SaaS firm’s overnight coder and reviewer agents ping-ponged the same patch over a weekend and ran up USD 900. They now run with message, token and time caps combined with OR, a repetition check, and a verifier that runs the test suite before the reviewer may approve.",
+    "industries": [
+      {
+        "industry": "SaaS engineering",
+        "use": "Coder–reviewer loops with caps and a test-running verifier"
+      },
+      {
+        "industry": "Banking operations",
+        "use": "Reconciliation agents with per-run spend limits and a stop reason"
+      },
+      {
+        "industry": "Customer support",
+        "use": "Agent teams that must hand back to a human after a fixed number of turns"
+      }
+    ],
+    "analogy": "A cricket over. It ends after six legal balls, or earlier if the innings ends, whichever comes first; the umpire checks every appeal before the batter walks off.",
+    "library": {
+      "name": "AutoGen AgentChat",
+      "what": "Built-in termination conditions that combine with | (either) and & (both). AutoGen is in maintenance mode; the same pattern exists in Microsoft Agent Framework.",
+      "install": "pip install \"autogen-agentchat\" \"autogen-ext[openai]\""
+    },
+    "note": "Replace the model name with a current one. Termination conditions receive only the messages since their last call, so the repetition check keeps the previous patch itself.",
+    "samples": [
+      {
+        "file": "bounded_team.py",
+        "language": "python",
+        "code": "import asyncio, subprocess\nfrom autogen_agentchat.agents import AssistantAgent\nfrom autogen_agentchat.teams import RoundRobinGroupChat\nfrom autogen_agentchat.conditions import (\n    TextMentionTermination, MaxMessageTermination, TokenUsageTermination,\n    TimeoutTermination, FunctionalTermination)\nfrom autogen_ext.models.openai import OpenAIChatCompletionClient\n\ndef run_tests() -> str:\n    \"\"\"Run the test suite and report PASS or FAIL.\"\"\"\n    r = subprocess.run([\"pytest\", \"-q\"], capture_output=True, text=True)\n    return \"PASS\" if r.returncode == 0 else \"FAIL\\n\" + r.stdout[-2000:]\n\nmodel = OpenAIChatCompletionClient(model=\"gpt-4.1-mini\")\ncoder = AssistantAgent(\"coder\", model_client=model,\n                       system_message=\"Write the patch.\")\nreviewer = AssistantAgent(\"reviewer\", model_client=model, tools=[run_tests],\n                          system_message=\"Call run_tests. Say APPROVED only if it passes.\")\n\nlast = {}\ndef repeated(msgs) -> bool:                # called with new messages only\n    for m in msgs:\n        if m.source == \"coder\":\n            if last.get(\"coder\") == m.to_text():\n                return True                # same patch twice in a row\n            last[\"coder\"] = m.to_text()\n    return False\n\nstop = (TextMentionTermination(\"APPROVED\")\n        | MaxMessageTermination(30)\n        | TokenUsageTermination(max_total_token=100_000)\n        | TimeoutTermination(timeout_seconds=720)\n        | FunctionalTermination(repeated))\n\nteam = RoundRobinGroupChat([coder, reviewer], termination_condition=stop)\nresult = asyncio.run(team.run(task=\"Fix the failing invoice-rounding test\"))\nprint(result.stop_reason)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A coder–reviewer team uses 4k tokens per message. With OR-combined caps of 30 messages and 100k tokens, after how many messages does the run stop if nothing else stops it?",
+    "answer": "The token cap is reached at 100k ÷ 4k = 25 messages, before the message cap of 30. With OR, the first cap reached stops the run, so it stops at 25 messages.",
+    "expected": {
+      "value": 25,
+      "tolerance": 0,
+      "label": "messages ="
+    },
+    "interview": [
+      {
+        "question": "Why combine termination conditions with OR rather than AND?",
+        "answer": "OR stops the run when any one cap is reached, so each cap is a real limit. AND waits until all conditions hold at once, so a run whose agents never say the stop word will never end."
+      },
+      {
+        "question": "What are the three MAST failure categories?",
+        "answer": "System design issues (such as step repetition and unawareness of stopping conditions), inter-agent misalignment (such as ignoring another agent’s input or a reasoning–action mismatch) and task verification failures (such as stopping early or skipping checks)."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t rely on agents to say when they are done.",
+        "fix": "Add hard caps on messages, tokens and time, combined with OR."
+      },
+      {
+        "mistake": "Don’t accept “done” without a check.",
+        "fix": "Run a verifier, such as the test suite, and return partial results with a stop reason."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "mf01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team uses TextMentionTermination(\"TERMINATE\") & MaxMessageTermination(20). Neither agent ever says TERMINATE. What happens?",
+      "options": [
+        "It stops at 20 messages",
+        "It never stops on its own, because & needs both conditions",
+        "It stops at the first message",
+        "It raises an error at once"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "& waits for both conditions; without TERMINATE it never fires. Use | so either one stops the run."
+    },
+    {
+      "id": "mf02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Each message uses about 4k tokens. Caps of 30 messages and 100k tokens are combined with OR. After how many messages does the run stop, if nothing else stops it?",
+      "options": [
+        "30",
+        "25",
+        "55",
+        "100"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The token cap is reached at 100k ÷ 4k = 25 messages, before the message cap."
+    },
+    {
+      "id": "mf03",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which are categories in the MAST taxonomy of multi-agent failures? Select all that apply.",
+      "options": [
+        "System design issues",
+        "Inter-agent misalignment",
+        "GPU memory exhaustion",
+        "Prompt injection"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "MAST’s three categories are system design, inter-agent misalignment and task verification. Hardware and security issues are outside it."
+    },
+    {
+      "id": "mf04",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "According to MAST, which single failure mode is most common?",
+      "options": [
+        "Reasoning–action mismatch",
+        "Step repetition",
+        "Unawareness of stopping conditions",
+        "Premature termination"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Step repetition is the most common at about 15.7%, ahead of reasoning–action mismatch (13.2%) and unawareness of stopping conditions (12.4%)."
+    },
+    {
+      "id": "mf05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A coder–reviewer loop runs for 180 messages of about 5k tokens each. At USD 10 per million tokens, what does it cost?",
+      "options": [
+        "USD 0.90",
+        "USD 9.00",
+        "USD 90.00",
+        "USD 18.00"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "180 × 5k = 900k tokens; 900k × USD 10 per million = USD 9."
+    },
+    {
+      "id": "mf06",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A Claude Agent SDK research run reaches max_budget_usd. What happens?",
+      "options": [
+        "It keeps going and bills later",
+        "New sub-agents are refused and the query ends with an error_max_budget_usd result",
+        "Only background sub-agents keep running",
+        "The budget doubles automatically"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The SDK enforces the cap: it refuses new sub-agents, stops background ones and ends the query."
+    },
+    {
+      "id": "mf07",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank’s overnight reconciliation team needs stop rules. Which belong in the design? Select all that apply.",
+      "options": [
+        "An explicit stop signal that agents are told when to use",
+        "Caps on messages, tokens and time, combined with OR",
+        "A verifier that checks the result before it counts as done",
+        "Caps combined with AND so every limit is respected"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A stop signal, OR-combined caps and a verifier bound the run and make done mean checked. AND lets a run continue until every condition has fired."
+    },
+    {
+      "id": "mf08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A LangGraph agent loop exceeds its recursion limit. What happens?",
+      "options": [
+        "The graph silently stops and returns the last state",
+        "LangGraph raises GraphRecursionError",
+        "The limit resets and the loop continues",
+        "The graph switches to a smaller model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Reaching the recursion limit raises GraphRecursionError, which you can catch and handle."
+    },
+    {
+      "id": "mf09",
+      "kind": "single",
+      "industry": "Customer support",
+      "question": "Which OpenAI Agents SDK setting bounds the whole agent loop, including handoffs?",
+      "options": [
+        "temperature",
+        "max_turns on Runner.run",
+        "handoff_description",
+        "input_filter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "max_turns caps the loop; passing it raises MaxTurnsExceeded."
+    },
+    {
+      "id": "mf10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Messages take about 20 seconds each. A TimeoutTermination of 12 minutes corresponds to about how many messages?",
+      "options": [
+        "12",
+        "36",
+        "60",
+        "24"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "12 minutes = 720 seconds ÷ 20 = 36 messages."
+    },
+    {
+      "id": "mf11",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "You write a custom repetition check as an AutoGen FunctionalTermination. What must it do? Select all that apply.",
+      "options": [
+        "Compare each agent’s new message with that agent’s previous one",
+        "Keep its own record of earlier messages, because it receives only new ones",
+        "Reset the model’s temperature",
+        "Delete earlier messages from the chat"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Termination conditions see only messages since their last call, so a repetition check keeps its own state and compares."
+    },
+    {
+      "id": "mf12",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "After adding a 20-message cap, 12% of legitimate refactor runs are cut off before finishing. What is the best response?",
+      "options": [
+        "Remove all caps",
+        "Set the cap from the distribution of successful runs, for example just above the longest normal run, and return partial work when it fires",
+        "Combine the caps with AND",
+        "Lower the cap further"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Caps should bound failures, not normal work. Size them from real run lengths and return partial results with a reason."
+    },
+    {
+      "id": "mf13",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A reviewer agent approves patches without running the tests, and broken code ships. Which MAST category is this?",
+      "options": [
+        "System design issues",
+        "Task verification",
+        "Inter-agent misalignment",
+        "None; it is a model bug"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Skipping or weakening checks is a task-verification failure. Require a verifier, such as the test suite, before approval counts."
+    },
+    {
+      "id": "mf14",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Of 50 runs, 8 never stop and are killed at 240k tokens; the other 42 average 70k. What is the average tokens per run?",
+      "options": [
+        "70k",
+        "97.2k",
+        "155k",
+        "240k"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(8 × 240k + 42 × 70k) ÷ 50 = (1,920k + 2,940k) ÷ 50 = 97.2k."
+    },
+    {
+      "id": "mf15",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A cap fires before a catalogue-cleanup team finishes. What should the caller receive? Select all that apply.",
+      "options": [
+        "The partial result produced so far",
+        "The stop reason, such as which cap fired",
+        "The reviewer’s last APPROVED message, presented as final",
+        "An empty result, so no partial data is exposed"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Partial work plus the reason lets a person continue. Presenting an unchecked message as final, or returning nothing, hides the failure."
+    },
+    {
+      "id": "mf16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which AutoGen condition stops a team when prompt or completion tokens pass a limit?",
+      "options": [
+        "MaxMessageTermination",
+        "TokenUsageTermination",
+        "SourceMatchTermination",
+        "ExternalTermination"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "TokenUsageTermination watches token usage; MaxMessageTermination counts messages."
+    },
+    {
+      "id": "mf17",
+      "kind": "single",
+      "industry": "Research",
+      "question": "The MAST study reports κ = 0.88 for its annotations. What does that number measure?",
+      "options": [
+        "Model accuracy",
+        "Agreement between human annotators labelling the failures",
+        "The share of failed runs",
+        "Token efficiency"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cohen’s kappa measures inter-annotator agreement; 0.88 is strong agreement on the taxonomy."
+    },
+    {
+      "id": "mf18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A team combines “says DONE” AND MaxMessageTermination(30). An agent says DONE at message 12. When does the run stop?",
+      "options": [
+        "At message 12",
+        "At message 30, when both conditions have fired",
+        "Never",
+        "At message 42"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With AND, each condition must have fired; DONE fired at 12 and the message cap fires at 30, so the run wastes 18 messages."
+    },
+    {
+      "id": "mf19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which controls act on the team as a whole rather than on one agent’s prompt? Select all that apply.",
+      "options": [
+        "A cap on sub-agent nesting depth",
+        "A cap on concurrent sub-agents",
+        "A spend cap for the whole run",
+        "A shorter system prompt"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Depth, concurrency and team-wide spend caps bound the team. Prompt length is a single-agent control."
+    },
+    {
+      "id": "mf20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Adding up MAST’s per-mode shares, which category accounts for the largest share of failures?",
+      "options": [
+        "Task verification (about 24%)",
+        "System design issues (about 44%)",
+        "Inter-agent misalignment (about 32%)",
+        "They are equal"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "System design issues, such as step repetition and unawareness of stopping conditions, add up to about 44%."
+    }
+  ]
+}

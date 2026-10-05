@@ -1,0 +1,908 @@
+{
+  "id": "pii",
+  "moduleSlug": "guardrails",
+  "name": "PII Detection and Redaction",
+  "shortName": "PII redaction",
+  "question": "Which personal data must never reach the model or the logs?",
+  "summary": "Finds personal data in text before it reaches a model, a log or another system, and replaces it with typed placeholders such as &lt;IN_PAN_1&gt;. Detection combines patterns with checksums (PAN, Aadhaar, card and phone numbers) and a named-entity model for names and addresses. Reversible placeholders let the agent still work with the data, while the real values stay in a short-lived vault. In India this supports the purpose and retention duties of the DPDP Act, 2023.",
+  "useCases": [
+    "Support chats and tickets where customers paste PAN, Aadhaar, card or bank details",
+    "Any prompt sent to a hosted model, and every log or trace you keep",
+    "Training or evaluation data built from real conversations"
+  ],
+  "keyFacts": {
+    "label": "What it finds",
+    "items": [
+      {
+        "term": "Government IDs",
+        "detail": "PAN, Aadhaar (with the Verhoeff checksum), passport, voter ID"
+      },
+      {
+        "term": "Financial",
+        "detail": "card numbers (Luhn), bank accounts, IFSC, UPI IDs"
+      },
+      {
+        "term": "Contact",
+        "detail": "phone numbers, emails, addresses"
+      },
+      {
+        "term": "Names",
+        "detail": "found by a named-entity model, including Hindi and Hinglish text"
+      },
+      {
+        "term": "Placeholders",
+        "detail": "typed and consistent: the same value always gets the same tag"
+      },
+      {
+        "term": "Vault",
+        "detail": "real values stored briefly, encrypted, and deleted with the case"
+      }
+    ]
+  },
+  "steps": [
+    "Add recognizers for Indian identifiers with context words, and confirm matches with checksums",
+    "Normalise text first: spaces, dashes and Devanagari digits",
+    "Replace each value with a consistent typed placeholder and keep the mapping in a vault",
+    "Send only masked text to the model and the logs; restore values only where this user may see them"
+  ],
+  "pitfalls": [
+    "Regex without checksums masks order IDs and reference numbers by mistake",
+    "Irreversible redaction breaks tasks that need the value, such as updating a PAN",
+    "Logs, traces and evaluation sets are often forgotten and keep the raw data"
+  ],
+  "tools": [
+    "Microsoft Presidio",
+    "spaCy / IndicNER",
+    "Amazon Comprehend PII",
+    "Google Cloud Sensitive Data Protection",
+    "LLM Guard"
+  ],
+  "remember": "Detect with checksums, replace with placeholders, keep the real values short-lived.",
+  "caption": "Illustrative: Udaan Lend, a fictional NBFC, masks PAN, Aadhaar, phone and name in a Hinglish chat before the hosted model or the logs see them.",
+  "comparison": {
+    "scope": "Before the model and every log",
+    "cost": 1,
+    "needs": "Personal data leaking to models, logs and vendors",
+    "best": "Missed formats or over-masking"
+  },
+  "diagram": {
+    "file": "diagrams/pii.svg"
+  },
+  "lesson": {
+    "file": "redact.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import re",
+        "steps": []
+      },
+      {
+        "text": "from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "PAN = PatternRecognizer(supported_entity=\"IN_PAN\", context=[\"pan\", \"income tax\"],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    patterns=[Pattern(\"pan\", r\"\\b[A-Z]{3}[ABCFGHJLPT][A-Z]\\d{4}[A-Z]\\b\", 0.6)])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "AADHAAR = PatternRecognizer(supported_entity=\"IN_AADHAAR\", context=[\"aadhaar\", \"आधार\"],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    patterns=[Pattern(\"aadhaar\", r\"\\b[2-9]\\d{11}\\b\", 0.4)])",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "analyzer = AnalyzerEngine()     # names, phones, emails, cards are built in",
+        "steps": []
+      },
+      {
+        "text": "for rec in (PAN, AADHAAR):",
+        "steps": []
+      },
+      {
+        "text": "    analyzer.registry.add_recognizer(rec)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "DEVANAGARI = str.maketrans(\"०१२३४५६७८९\", \"0123456789\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "def normalise(text: str) -> str:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    text = text.translate(DEVANAGARI)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return re.sub(r\"(?<=\\d)[ -](?=\\d)\", \"\", text)   # 2345 6789 0124 → one number",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def pseudonymise(text: str, vault: dict) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    text = normalise(text)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    hits = analyzer.analyze(text=text, language=\"en\", entities=ENTITIES, score_threshold=0.5)",
+        "steps": []
+      },
+      {
+        "text": "    hits = [h for h in drop_overlaps(hits) if h.entity_type != \"IN_AADHAAR\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            or verhoeff_ok(text[h.start:h.end])]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    for h in sorted(hits, key=lambda h: h.start):       # number in reading order",
+        "steps": []
+      },
+      {
+        "text": "        vault.setdefault(text[h.start:h.end], f\"<{h.entity_type}_{len(vault) + 1}>\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    for h in sorted(hits, key=lambda h: h.start, reverse=True):   # replace from the right",
+        "steps": []
+      },
+      {
+        "text": "        text = text[:h.start] + vault[text[h.start:h.end]] + text[h.end:]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "vault = TicketVault(ticket=\"UL-5521\", ttl_days=30)   # encrypted, per ticket",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "masked = pseudonymise(chat, vault)",
+        "steps": []
+      },
+      {
+        "text": "reply = llm(masked)                     # the hosted model sees tags only",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "log.info(\"turn\", extra={\"text\": masked})   # so do logs and traces",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "send(restore(reply, vault, allowed={\"PERSON\"}))   # names back, IDs stay tags",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Teach the detector Indian IDs",
+        "text": "Presidio finds names, phones, emails and card numbers out of the box. Add recognizers for PAN and Aadhaar, with context words such as “pan” and “आधार” that raise the score when they appear nearby."
+      },
+      {
+        "title": "Normalise before matching",
+        "text": "Customers type “2345 6789 0124”, “2345-6789-0124” or Devanagari digits. Convert the digits and join the groups first, or the pattern never sees twelve digits in a row."
+      },
+      {
+        "title": "Confirm with a checksum",
+        "text": "Any twelve-digit order number looks like an Aadhaar number. The Verhoeff checksum rejects nine in ten random numbers; card numbers get the Luhn check inside Presidio."
+      },
+      {
+        "title": "Replace with consistent placeholders",
+        "text": "ABCPK1234F becomes &lt;IN_PAN_1&gt; every time it appears, so the model can still say “your PAN &lt;IN_PAN_1&gt; is updated” and reason about which ID is which."
+      },
+      {
+        "title": "Mask everywhere, restore narrowly",
+        "text": "The hosted model, the logs and the traces see only tags. The reply to this customer restores their name, while ID numbers stay masked even in the answer."
+      },
+      {
+        "title": "Keep the real values briefly",
+        "text": "The vault is encrypted, tied to ticket UL-5521 and deleted after 30 days, matching the purpose the data was collected for under the DPDP Act."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"8\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"25\" text-anchor=\"middle\">“PAN ABCPK1234F, आधार 2345 6789 0124”</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"63\" y=\"55\" text-anchor=\"middle\">IN_PAN</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx soft\" x=\"124\" y=\"40\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"179\" y=\"55\" text-anchor=\"middle\">IN_AADHAAR</text></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx soft\" x=\"240\" y=\"40\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"55\" text-anchor=\"middle\">PERSON · PHONE</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"70\" width=\"160\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"88\" y=\"85\" text-anchor=\"middle\">2345 6789 0124</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M170 81L184 81\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"186\" y=\"70\" width=\"166\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"269\" y=\"85\" text-anchor=\"middle\">234567890124</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"100\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"93\" y=\"115\" text-anchor=\"middle\">Aadhaar: Verhoeff ✓</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"182\" y=\"100\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"267\" y=\"115\" text-anchor=\"middle\">order 100200300400 ✗</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"130\" width=\"344\" height=\"26\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"147\" text-anchor=\"middle\">“PAN &lt;IN_PAN_1&gt;, आधार &lt;IN_AADHAAR_2&gt;”</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"164\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"63\" y=\"179\" text-anchor=\"middle\">model: tags</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"124\" y=\"164\" width=\"110\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"179\" y=\"179\" text-anchor=\"middle\">logs: tags</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"164\" width=\"112\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"296\" y=\"179\" text-anchor=\"middle\">reply: name only</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"196\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"212\" text-anchor=\"middle\">vault UL-5521 · encrypted · deleted after 30 days</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Personal data never reaches a hosted model, its logs or your traces",
+      "Placeholders keep the agent useful: it can still refer to “your PAN”",
+      "Checksums keep false masks low on order and reference numbers",
+      "A short-lived vault supports DPDP purpose and retention duties"
+    ],
+    "cons": [
+      "Every new ID format needs a recognizer and tests",
+      "Name detection in Hinglish and regional scripts is imperfect",
+      "The vault is now sensitive data you must secure and delete",
+      "Adds a few milliseconds, more with a named-entity model"
+    ],
+    "avoidWhen": [
+      "The data never leaves a system already approved to hold it and nothing is logged (still check the logs)",
+      "You need exact figures for analytics (aggregate first, then drop identifiers)"
+    ],
+    "tools": [
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source",
+        "what": "Detection with pattern and NER recognizers, custom entities and anonymisation",
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "name": "spaCy",
+        "type": "Open source",
+        "what": "Named-entity models, including multilingual pipelines, used by Presidio for names",
+        "url": "https://spacy.io"
+      },
+      {
+        "name": "LLM Guard",
+        "type": "Open source (Protect AI)",
+        "what": "An anonymise scanner with a vault that can restore values later",
+        "url": "https://github.com/protectai/llm-guard"
+      },
+      {
+        "name": "Amazon Comprehend PII",
+        "type": "Managed service (AWS)",
+        "what": "Detects and redacts PII entities in text",
+        "url": "https://docs.aws.amazon.com/comprehend/latest/dg/how-pii.html"
+      },
+      {
+        "name": "Google Cloud Sensitive Data Protection",
+        "type": "Managed service (Google)",
+        "what": "InfoType detectors, including India-specific ones, with de-identification",
+        "url": "https://cloud.google.com/sensitive-data-protection/docs"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Udaan Lend, a fictional NBFC, handles 1,000 Hinglish support chats a day. They hold 300 pieces of personal data: 180 ID numbers (PAN, Aadhaar, card and phone numbers) and 120 names or addresses. In 60 chats the agent must act on the customer's ID, such as updating a PAN. You decide how personal data is found and replaced.",
+    "controls": [
+      "Pick the detector: patterns only, patterns with checksums, or patterns, checksums and a name model.",
+      "Choose [REDACTED] or reversible typed placeholders.",
+      "Switch on normalisation and masking of logs and traces, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Personal data reaching the model",
+        "meaning": "Values the detector missed, sent to the hosted model."
+      },
+      {
+        "name": "Personal data in logs",
+        "meaning": "Raw values kept in logs and traces."
+      },
+      {
+        "name": "False masks",
+        "meaning": "Order and reference numbers hidden by mistake each day."
+      },
+      {
+        "name": "ID tasks finished",
+        "meaning": "Of the 60 chats where the agent must act on an ID."
+      },
+      {
+        "name": "Added latency",
+        "meaning": "A few milliseconds for patterns; more with a name model."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Checksums, raw text, [REDACTED], logs raw",
+        "expect": "156 of 300 values reach the model, all 300 sit in the logs, 4 false masks a day, and only 12 of 60 ID tasks can be done."
+      },
+      {
+        "k": "better",
+        "name": "Checksums, normalised, placeholders",
+        "expect": "129 values still reach the model, because no pattern finds names; 4 false masks; all 60 ID tasks done."
+      },
+      {
+        "k": "full",
+        "name": "Add the name model",
+        "expect": "21 values reach the model, logs match, 14 false masks, all 60 tasks done, +37 ms."
+      },
+      {
+        "k": "nolog",
+        "name": "Everything but the logs",
+        "expect": "The prompt is clean, but all 300 raw values are still in the logs."
+      }
+    ],
+    "missions": [
+      {
+        "k": "clean",
+        "text": "Get personal data reaching the model to 25 or fewer, keep the logs masked and false masks at 15 or fewer, and finish all 60 ID tasks.",
+        "hint": "Name model, normalisation, placeholders and masked logs."
+      },
+      {
+        "k": "noisy",
+        "text": "Show how patterns without checksums hide innocent numbers.",
+        "hint": "Choose patterns only: 45 false masks a day."
+      },
+      {
+        "k": "broke",
+        "text": "Show how plain redaction stops the agent from doing its job.",
+        "hint": "Choose [REDACTED] and turn normalisation on: fewer than 10 ID tasks can be done."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "PII detection with pattern, checksum and NER recognizers, custom entities such as IN_PAN, and anonymisation operators.",
+        "ex": "Custom PAN and Aadhaar recognizers with context words, confirmed by the Verhoeff checksum.",
+        "pros": [
+          "Extensible recognizers and context words",
+          "Runs inside your own network"
+        ],
+        "cons": [
+          "Name detection depends on the spaCy model",
+          "Needs tuning and tests for Indian formats"
+        ],
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "n": "LLM Guard",
+        "type": "Open source · Protect AI",
+        "start": 3,
+        "prod": 2,
+        "best": "An Anonymize input scanner with a vault, and a Deanonymize output scanner that restores values.",
+        "ex": "Mask the prompt, call the model, then restore the customer’s name in the reply.",
+        "pros": [
+          "Mask and restore built in",
+          "Many other scanners in one library"
+        ],
+        "cons": [
+          "Fewer India-specific formats out of the box",
+          "The vault is in memory by default"
+        ],
+        "url": "https://github.com/protectai/llm-guard"
+      },
+      {
+        "n": "spaCy",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Named-entity models for names and places, which Presidio uses under the hood.",
+        "ex": "A multilingual or fine-tuned model that finds names in Hinglish chats.",
+        "pros": [
+          "Fast and well documented",
+          "Can be fine-tuned on your own chats"
+        ],
+        "cons": [
+          "Off-the-shelf models miss many Indian names",
+          "Larger models add latency"
+        ],
+        "url": "https://spacy.io"
+      },
+      {
+        "n": "Amazon Comprehend PII",
+        "type": "Managed service · AWS",
+        "start": 3,
+        "prod": 3,
+        "best": "Managed detection and redaction of PII entities in text.",
+        "ex": "Redact call-centre transcripts before they are stored in a data lake.",
+        "pros": [
+          "No models to host",
+          "Batch and real-time APIs"
+        ],
+        "cons": [
+          "Limited India-specific entities; add your own checks",
+          "Text leaves your own systems"
+        ],
+        "url": "https://docs.aws.amazon.com/comprehend/latest/dg/how-pii.html"
+      },
+      {
+        "n": "Google Cloud Sensitive Data Protection",
+        "type": "Managed service · Google",
+        "start": 2,
+        "prod": 3,
+        "best": "InfoType detectors, including India-specific ones, with masking and tokenisation.",
+        "ex": "Tokenise PAN numbers in a warehouse table so analysts never see raw values.",
+        "pros": [
+          "Many built-in detectors",
+          "Reversible tokenisation options"
+        ],
+        "cons": [
+          "Tied to Google Cloud",
+          "Pricing by volume scanned"
+        ],
+        "url": "https://cloud.google.com/sensitive-data-protection/docs"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Self-hosted, customisable detection",
+        "tool": "Microsoft Presidio"
+      },
+      {
+        "need": "Mask and restore around an LLM call",
+        "tool": "LLM Guard"
+      },
+      {
+        "need": "Managed service on your cloud",
+        "tool": "Amazon Comprehend or Google Sensitive Data Protection"
+      }
+    ],
+    "goals": [
+      "Detect Indian identifiers with patterns, context and checksums",
+      "Choose reversible placeholders or redaction for a task",
+      "Explain why logs, traces and retention matter as much as the prompt"
+    ]
+  },
+  "practice": {
+    "scenario": "Udaan Lend, a fictional NBFC, runs a Hinglish support chat. Customers paste PAN and Aadhaar numbers, phone numbers and names. Before any text reaches the hosted model or the logs, Presidio with Indian recognizers finds them, checksums confirm the numbers, and each value becomes a typed placeholder such as &lt;IN_PAN_1&gt;. The real values sit in an encrypted vault tied to the ticket and are deleted after 30 days.",
+    "industries": [
+      {
+        "industry": "Lending and NBFCs",
+        "use": "PAN, Aadhaar and bank details masked before a hosted model or vendor sees them"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Patient names and phone numbers replaced in notes before summarisation"
+      },
+      {
+        "industry": "HR and recruiting",
+        "use": "CVs pseudonymised before screening, to limit exposure and bias"
+      }
+    ],
+    "analogy": "A bank's locker room. The clerk handles token numbers, not your jewellery; the valuables stay locked away and only the right key brings them back.",
+    "library": {
+      "name": "Microsoft Presidio",
+      "what": "Open-source PII detection with pattern, checksum and NER recognizers, plus custom entities. Recent versions also include IN_PAN and IN_AADHAAR recognizers; check which ones your version loads by default.",
+      "install": "pip install presidio-analyzer && python -m spacy download en_core_web_lg"
+    },
+    "note": "TicketVault, llm and send are stubs. Keep the vault encrypted, tied to one case, and delete it when the purpose ends.",
+    "samples": [
+      {
+        "file": "pseudonymise.py",
+        "language": "python",
+        "code": "import re\nfrom presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern\n\nD = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],\n     [4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],\n     [8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]]\nP = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],\n     [9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]]\n\ndef verhoeff_ok(num: str) -> bool:          # Aadhaar's last digit is a Verhoeff checksum\n    c = 0\n    for i, ch in enumerate(reversed(num)):\n        c = D[c][P[i % 8][int(ch)]]\n    return c == 0\n\nanalyzer = AnalyzerEngine()\nanalyzer.registry.add_recognizer(PatternRecognizer(supported_entity=\"IN_PAN\",\n    patterns=[Pattern(\"pan\", r\"\\b[A-Z]{3}[ABCFGHJLPT][A-Z]\\d{4}[A-Z]\\b\", 0.6)], context=[\"pan\"]))\nanalyzer.registry.add_recognizer(PatternRecognizer(supported_entity=\"IN_AADHAAR\",\n    patterns=[Pattern(\"aadhaar\", r\"\\b[2-9]\\d{11}\\b\", 0.4)], context=[\"aadhaar\", \"आधार\"]))\n\nENTITIES = [\"PERSON\", \"PHONE_NUMBER\", \"EMAIL_ADDRESS\", \"CREDIT_CARD\", \"IN_PAN\", \"IN_AADHAAR\"]\n\ndef pseudonymise(text: str, vault: dict) -> str:\n    text = text.translate(str.maketrans(\"०१२३४५६७८९\", \"0123456789\"))\n    text = re.sub(r\"(?<=\\d)[ -](?=\\d)\", \"\", text)\n    hits = [h for h in analyzer.analyze(text=text, language=\"en\", entities=ENTITIES, score_threshold=0.5)\n            if h.entity_type != \"IN_AADHAAR\" or verhoeff_ok(text[h.start:h.end])]\n    kept = []                                  # overlapping hits: keep the highest score\n    for h in sorted(hits, key=lambda h: -h.score):\n        if all(h.end <= k.start or h.start >= k.end for k in kept):\n            kept.append(h)\n    hits = kept\n    for h in sorted(hits, key=lambda h: h.start):                  # number in reading order\n        vault.setdefault(text[h.start:h.end], f\"<{h.entity_type}_{len(vault) + 1}>\")\n    for h in sorted(hits, key=lambda h: h.start, reverse=True):    # replace from the right\n        text = text[:h.start] + vault[text[h.start:h.end]] + text[h.end:]\n    return text\n\nvault = {}\nprint(pseudonymise(\"Mera PAN ABCPK1234F hai, aadhaar 2345 6789 0124. Priya Kulkarni\", vault))\n# Mera PAN <IN_PAN_1> hai, aadhaar <IN_AADHAAR_2>. <PERSON_3>"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Is 2345 6789 0124 a valid Aadhaar-format number under the Verhoeff check? Answer 1 for yes, 0 for no.",
+    "answer": "Yes (1). Run the Verhoeff algorithm from the right using its multiplication and permutation tables; the running check value ends at 0, so the last digit, 4, is a correct check digit. A random twelve-digit number passes only about one time in ten.",
+    "expected": {
+      "value": 1,
+      "tolerance": 0,
+      "label": "valid (1 = yes) ="
+    },
+    "interview": [
+      {
+        "question": "How would you keep customer PII out of a hosted LLM while still letting the agent do its job?",
+        "answer": "Detect PII before the call with patterns, checksums and a name model, and replace each value with a consistent typed placeholder. Keep the mapping in an encrypted, short-lived vault tied to the case. The model reasons over placeholders, tools that need the real value look it up from the vault on the server side, and the reply restores only what this user may see. Mask logs and traces the same way."
+      },
+      {
+        "question": "Your regex masks order numbers as Aadhaar numbers. What do you change?",
+        "answer": "Confirm matches with the Verhoeff checksum, add context words such as “aadhaar” to raise confidence, and set a score threshold. Build a labelled test set with real formats, spaced and Devanagari digits, and look-alike order numbers, and track recall and false masks per entity."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Masking the prompt but not the logs and traces",
+        "fix": "Apply the same redaction to every log, trace and evaluation set"
+      },
+      {
+        "mistake": "Replacing everything with [REDACTED]",
+        "fix": "Use typed, consistent placeholders so the agent can still refer to the value"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pi01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which string matches the PAN format: five letters, four digits, one letter, with the fourth letter showing the holder type?",
+      "options": [
+        "ABCPK1234F",
+        "ABC1234PKF",
+        "ABCPK12345",
+        "1234ABCPKF"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A PAN is five letters, four digits and a final letter. The fourth letter, here P, marks an individual."
+    },
+    {
+      "id": "pi02",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "A twelve-digit order number keeps getting masked as an Aadhaar number. What is the standard fix?",
+      "options": [
+        "Mask every twelve-digit number to be safe",
+        "Confirm matches with the Verhoeff checksum and use context words",
+        "Remove Aadhaar detection altogether",
+        "Ask customers not to type order numbers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Aadhaar numbers carry a Verhoeff check digit, so a checksum rejects most look-alike numbers; context words such as “aadhaar” raise confidence further."
+    },
+    {
+      "id": "pi03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "About 1 in 10 random twelve-digit numbers passes the Verhoeff check. 2,000 order numbers a day match the Aadhaar pattern. After adding the checksum, roughly how many are still masked by mistake?",
+      "options": [
+        "200",
+        "20",
+        "1,800",
+        "0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,000 × 1/10 = 200. Context words and a score threshold cut this further."
+    },
+    {
+      "id": "pi04",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why replace a value with &lt;PERSON_1&gt; rather than [REDACTED]?",
+      "options": [
+        "Placeholders are shorter",
+        "The agent can still refer to the value and tell different people apart",
+        "[REDACTED] is not allowed by law",
+        "Placeholders encrypt the value"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Consistent typed placeholders keep the text usable: the model can say “&lt;PERSON_1&gt; asked about &lt;PERSON_2&gt;’s policy” without seeing either name."
+    },
+    {
+      "id": "pi05",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Where must PII redaction apply, not only the prompt? Select all that apply.",
+      "options": [
+        "Application logs",
+        "Distributed traces and observability tools",
+        "Evaluation and fine-tuning datasets",
+        "The CSS files of the chat widget"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Logs, traces and datasets built from real conversations keep raw values for months. Styling files hold no customer data."
+    },
+    {
+      "id": "pi06",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A customer writes her Aadhaar number as “२३४५ ६७८९ ०१२४”. The detector misses it. What fixes this?",
+      "options": [
+        "A longer regex for each script",
+        "Normalise Devanagari digits and remove spaces before matching",
+        "A larger language model",
+        "Asking customers to type in English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Normalising digits and separators first lets one pattern cover every way the number is typed."
+    },
+    {
+      "id": "pi07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "1,000 chats a day hold 180 ID numbers and 120 names. The detector finds 95% of IDs and 90% of names. How many values reach the model each day?",
+      "options": [
+        "21",
+        "30",
+        "9",
+        "12"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Missed IDs: 180 × 5% = 9. Missed names: 120 × 10% = 12. Total 21."
+    },
+    {
+      "id": "pi08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which kind of detector is needed to find customer names in free text?",
+      "options": [
+        "A regular expression",
+        "A checksum",
+        "A named-entity recognition model",
+        "A JSON schema"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Names follow no fixed pattern, so a model that recognises entities in context is needed. Patterns and checksums suit IDs."
+    },
+    {
+      "id": "pi09",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which practices fit the DPDP Act’s purpose and retention ideas for a PII vault? Select all that apply.",
+      "options": [
+        "Tie the vault to one case or ticket",
+        "Delete it when the purpose ends",
+        "Encrypt it and restrict who can read it",
+        "Copy it to analytics so the data is not lost"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Personal data should be used for its stated purpose and kept only as long as needed. Copying it to analytics widens use beyond the purpose. This is an educational summary, not legal advice."
+    },
+    {
+      "id": "pi10",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A support agent needs to refund to the customer’s card, but the prompt holds only &lt;CREDIT_CARD_1&gt;. How should the refund tool get the real number?",
+      "options": [
+        "Ask the model to guess it",
+        "Look it up from the vault on the server side, inside the tool",
+        "Put the real number back into the prompt",
+        "Ask the customer to type it again every time"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The tool resolves the placeholder from the vault on the server side, so the real value never passes through the model."
+    },
+    {
+      "id": "pi11",
+      "kind": "single",
+      "industry": "HR tech",
+      "question": "A recruiting platform hashes candidate emails with SHA-256 before sending CVs to a model. What is the weakness?",
+      "options": [
+        "Hashes are too long for the prompt",
+        "Emails are guessable, so a hash can be reversed by trying likely values",
+        "SHA-256 is not supported in Python",
+        "Hashing changes the CV’s meaning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Low-entropy values such as emails and phone numbers can be recovered by hashing candidates. Use random placeholders with a vault, or a keyed hash."
+    },
+    {
+      "id": "pi12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Detection takes 2 ms with patterns and 35 ms more with a name model. 40,000 messages an hour pass through. How many extra CPU-seconds an hour does the name model add?",
+      "options": [
+        "1,400",
+        "140",
+        "35",
+        "14,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "40,000 × 0.035 s = 1,400 seconds an hour, about 0.4 of a CPU core on average."
+    },
+    {
+      "id": "pi13",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A Hinglish message reads “Mera naam Rohit Sharma hai, PAN ABCPR5678K”. What should a good detector return? Select all that apply.",
+      "options": [
+        "PERSON for Rohit Sharma",
+        "IN_PAN for ABCPR5678K",
+        "PERSON for “Mera naam”",
+        "Nothing, because the message is not in English"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "The name and the PAN are personal data. “Mera naam” means “my name” and is not an entity. Code-mixed text is common and must be covered."
+    },
+    {
+      "id": "pi14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinic masks names in the prompt but the model’s reply says “Dear Anita, your report…”. Where did the name come from?",
+      "options": [
+        "The model guessed it",
+        "An unmasked source such as a retrieved record or tool result",
+        "The placeholder decoded itself",
+        "The browser cache"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrieved documents and tool results are inputs too. Redact them before they enter the context, not only the user message."
+    },
+    {
+      "id": "pi15",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which is the safest place to restore real values in a reply?",
+      "options": [
+        "Before the reply is logged, so the logs are complete",
+        "After logging, only for fields this user may see, just before sending",
+        "Inside the model prompt",
+        "Never; show placeholders to customers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Restore at the edge, for this user only, after the masked reply has been logged."
+    },
+    {
+      "id": "pi16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A card number is written as “4111-1111-1111-1111”. The regex expects digits and spaces only. What happens?",
+      "options": [
+        "It is masked anyway",
+        "It slips through unless dashes are normalised or allowed in the pattern",
+        "The Luhn check fails",
+        "The model refuses to read it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Separators vary. Normalise them first or allow them in the pattern, and test each variant."
+    },
+    {
+      "id": "pi17",
+      "kind": "multi",
+      "industry": "Government services",
+      "question": "Which Indian identifiers have fixed formats that patterns can target? Select all that apply.",
+      "options": [
+        "PAN",
+        "Aadhaar",
+        "GSTIN",
+        "A person’s home address"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "PAN, Aadhaar and GSTIN follow fixed formats. Addresses vary and need a model."
+    },
+    {
+      "id": "pi18",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Your provider keeps request logs for 30 days. Which step reduces exposure the most?",
+      "options": [
+        "Redact PII before the request is sent",
+        "Ask the provider to delete logs every month",
+        "Shorten the system prompt",
+        "Use a larger model"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Data that never leaves your systems cannot be retained elsewhere. Contract terms help, but redaction removes the data."
+    },
+    {
+      "id": "pi19",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A test set has 400 real IDs. The detector masks 380 of them and also masks 60 non-IDs. What are recall and precision?",
+      "options": [
+        "Recall 0.95, precision 0.86",
+        "Recall 0.86, precision 0.95",
+        "Recall 0.95, precision 0.95",
+        "Recall 0.90, precision 0.86"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Recall = 380 ÷ 400 = 0.95. Precision = 380 ÷ (380 + 60) = 0.86."
+    },
+    {
+      "id": "pi20",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "A team says redaction is done because the chat prompt is clean. Evaluation data, however, is exported nightly from raw chats. What is the fix?",
+      "options": [
+        "Nothing: evaluation data is internal",
+        "Run the same redaction on the export before it is stored",
+        "Encrypt the export and keep raw values",
+        "Delete evaluation data"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Every copy of the data needs the same treatment. Redact before storing, so datasets never hold raw values."
+    }
+  ]
+}

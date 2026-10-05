@@ -1,0 +1,818 @@
+{
+  "id": "provenance",
+  "moduleSlug": "governance",
+  "name": "Content Provenance and Synthetic-Media Labelling",
+  "shortName": "Provenance and labels",
+  "question": "Can people tell that an image, video or voice was made by AI?",
+  "summary": "Generative tools that produce realistic images, video or voice increasingly have to mark their output. Three layers work together: a visible label or audio disclosure people notice, signed provenance metadata such as C2PA Content Credentials that records how the file was made, and an invisible watermark that can survive screenshots and re-encoding when metadata is stripped. In India, the IT Amendment Rules 2026 (notified 16 February, in force 20 February 2026) require intermediaries offering tools that create synthetically generated audio-visual content to label it prominently, embed permanent metadata or an identifier where feasible and not allow labels or metadata to be removed, with extra user-declaration duties for significant social media intermediaries. The EU AI Act adds transparency duties for synthetic content and deepfakes from August 2026. This is an educational summary, not legal advice; confirm scope and details with counsel.",
+  "useCases": [
+    "Tools that generate realistic images, video, voice or avatars",
+    "Marketing and media teams publishing AI-made assets",
+    "Platforms that host user uploads and must detect and label synthetic media"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Visible label",
+        "detail": "text or icon on images and video; spoken disclosure at the start of audio"
+      },
+      {
+        "term": "C2PA Content Credentials",
+        "detail": "signed manifest: tool, time, edits; verifiable, but often stripped on upload"
+      },
+      {
+        "term": "Watermark",
+        "detail": "invisible signal in pixels or audio; survives many edits; needs a detector"
+      },
+      {
+        "term": "Survival",
+        "detail": "share of assets still identifiable after sharing, cropping and re-encoding"
+      },
+      {
+        "term": "Lock",
+        "detail": "users cannot remove labels or metadata inside your tool"
+      },
+      {
+        "term": "Scope",
+        "detail": "audio-visual content that looks real; text-only and routine edits are treated differently"
+      }
+    ]
+  },
+  "steps": [
+    "Map which outputs are realistic synthetic media and where they are published",
+    "Add visible labels and audio disclosures by default, not as a user option",
+    "Sign C2PA manifests and add an invisible watermark; stop users removing them",
+    "Test survival after real sharing paths, and keep records for audits"
+  ],
+  "pitfalls": [
+    "Relying on metadata alone, which most sharing paths strip",
+    "A label the user can switch off in the export dialog",
+    "Labelling text chat output under rules meant for audio-visual deepfakes, while missing the voice clones"
+  ],
+  "tools": [
+    "C2PA / c2patool",
+    "Content Credentials (Adobe, OpenAI, others)",
+    "Google SynthID",
+    "Digimarc / Truepic",
+    "Pillow or FFmpeg for visible labels"
+  ],
+  "remember": "Label it, sign it, watermark it, and don’t let anyone strip it.",
+  "caption": "Illustrative: Rangmanch Studio, a fictional ad-tech company, generates images and Hindi voice ads for Indian brands.",
+  "comparison": {
+    "scope": "Generated images, video and audio",
+    "cost": 2,
+    "needs": "Labels, C2PA signing, watermarking",
+    "best": "Labels stripped or removable"
+  },
+  "diagram": {
+    "file": "diagrams/provenance.svg"
+  },
+  "lesson": {
+    "file": "label_and_sign.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json, subprocess",
+        "steps": []
+      },
+      {
+        "text": "from PIL import Image, ImageDraw, ImageFont",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def visible_label(src, dst, text=\"AI-generated · AI द्वारा निर्मित\"):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    im = Image.open(src).convert(\"RGB\")",
+        "steps": []
+      },
+      {
+        "text": "    d = ImageDraw.Draw(im)",
+        "steps": []
+      },
+      {
+        "text": "    font = ImageFont.truetype(\"NotoSansDevanagari-Regular.ttf\", im.width // 30)",
+        "steps": []
+      },
+      {
+        "text": "    d.rectangle([0, im.height - im.height // 12, im.width, im.height], fill=(0, 0, 0))",
+        "steps": []
+      },
+      {
+        "text": "    d.text((im.width // 40, im.height - im.height // 14), text, font=font, fill=\"white\")",
+        "steps": []
+      },
+      {
+        "text": "    im.save(dst, quality=92)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "manifest = {\"claim_generator\": \"rangmanch/2.4\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            \"assertions\": [{\"label\": \"c2pa.actions\", \"data\": {\"actions\": [",
+        "steps": []
+      },
+      {
+        "text": "                {\"action\": \"c2pa.created\",",
+        "steps": []
+      },
+      {
+        "text": "                 \"digitalSourceType\": \"http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia\"}]}}]}",
+        "steps": []
+      },
+      {
+        "text": "json.dump(manifest, open(\"manifest.json\", \"w\"))",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "visible_label(\"ad_raw.png\", \"ad_labelled.jpg\")",
+        "steps": []
+      },
+      {
+        "text": "embed_watermark(\"ad_labelled.jpg\", \"ad_marked.jpg\", asset_id=\"rm-2026-0917-0042\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "subprocess.run([\"c2patool\", \"ad_marked.jpg\", \"-m\", \"manifest.json\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                \"-o\", \"ad_final.jpg\"], check=True)",
+        "steps": []
+      },
+      {
+        "text": "# export dialog: no option to remove the label or credentials",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# weekly: re-share 50 assets via WhatsApp and Instagram, check survival",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Know what is in scope",
+        "text": "Rangmanch Studio, a fictional ad-tech company, makes realistic product images, avatar videos and Hindi voice ads. These are synthetic audio-visual content; its text captions are treated separately."
+      },
+      {
+        "title": "Add a visible label",
+        "text": "Every image gets a clear “AI-generated · AI द्वारा निर्मित” band, and every voice ad starts with a spoken disclosure. The label is on by default."
+      },
+      {
+        "title": "Sign provenance metadata",
+        "text": "A C2PA manifest records that the asset was created by a trained algorithm, by which tool and when, signed with the company’s certificate."
+      },
+      {
+        "title": "Add an invisible watermark",
+        "text": "A watermark tied to the asset id survives screenshots and re-encoding that strip metadata. The watermark call stands for whichever watermarking SDK is used."
+      },
+      {
+        "title": "Lock it in the tool",
+        "text": "The export dialog has no option to remove the label or credentials, as the Indian rules expect of tools that create such content."
+      },
+      {
+        "title": "Test the real sharing path",
+        "text": "Each week 50 assets are shared through messaging and social apps. Labels survive 70% of the time, C2PA metadata rarely does, and with the watermark about 96% stay identifiable."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"24\" text-anchor=\"middle\">images</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"8\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"24\" text-anchor=\"middle\">avatar video</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"240\" y=\"8\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"24\" text-anchor=\"middle\">Hindi voice</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"56\" text-anchor=\"middle\">AI-generated · AI द्वारा निर्मित</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"72\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"87\" text-anchor=\"middle\">C2PA: trainedAlgorithmicMedia · signed</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"117\" text-anchor=\"middle\">watermark ↔ asset id rm-2026-0917-0042</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"132\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"147\" text-anchor=\"middle\">export: no “remove label” option</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"178\" text-anchor=\"middle\">label only 70%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"178\" text-anchor=\"middle\">all layers 96%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Viewers can tell AI-made media from real footage",
+      "Helps meet Indian IT Rules and EU AI Act transparency duties",
+      "Signed metadata gives a verifiable record of origin",
+      "Watermarks survive when metadata is stripped"
+    ],
+    "cons": [
+      "Metadata is stripped by many sharing paths",
+      "Visible labels can be cropped",
+      "Watermark detection needs vendor tools",
+      "Rules and their scope are still being interpreted"
+    ],
+    "avoidWhen": [
+      "Metadata-only approaches for content shared on social media",
+      "Labels the user can turn off"
+    ],
+    "tools": [
+      {
+        "name": "C2PA",
+        "type": "Open standard",
+        "what": "Content Credentials specification and c2patool",
+        "url": "https://c2pa.org"
+      },
+      {
+        "name": "c2patool",
+        "type": "Open source",
+        "what": "Add and verify C2PA manifests from the command line",
+        "url": "https://github.com/contentauth/c2pa-rs"
+      },
+      {
+        "name": "SynthID",
+        "type": "Google DeepMind",
+        "what": "Invisible watermarking for AI images, audio, video and text",
+        "url": "https://github.com/google-deepmind/synthid-text"
+      },
+      {
+        "name": "Truepic",
+        "type": "Commercial",
+        "what": "Signing and verification of content provenance",
+        "url": "https://www.truepic.com"
+      },
+      {
+        "name": "FFmpeg",
+        "type": "Open source",
+        "what": "Burn visible labels into video and prefix audio disclosures",
+        "url": "https://ffmpeg.org"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Rangmanch Studio, a fictional ad-tech company, generates images and Hindi voice ads for Indian brands. Assets are shared through apps that crop, screenshot and re-encode. The requirement checks are an illustrative reading of the IT Amendment Rules 2026, not legal advice.",
+    "controls": [
+      "Choose the labelling: none, a visible label and audio disclosure, or visible label plus signed C2PA metadata.",
+      "Add an invisible watermark tied to the asset id.",
+      "Stop users removing labels or metadata in the tool."
+    ],
+    "outputs": [
+      {
+        "name": "Still identifiable",
+        "meaning": "Share of assets recognisable as AI-made after real sharing."
+      },
+      {
+        "name": "Requirements met",
+        "meaning": "Label, metadata or identifier, and not removable."
+      },
+      {
+        "name": "Extra cost",
+        "meaning": "₹ per 1,000 assets for signing and watermarking."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "No marking",
+        "expect": "0% identifiable, 0 of 3 requirements."
+      },
+      {
+        "k": "visible",
+        "name": "Visible label, locked",
+        "expect": "60% identifiable, 2 of 3."
+      },
+      {
+        "k": "c2pa",
+        "name": "Label + C2PA, locked",
+        "expect": "70%, 3 of 3, ₹20 per 1,000."
+      },
+      {
+        "k": "full",
+        "name": "Label + C2PA + watermark, locked",
+        "expect": "96%, 3 of 3, ₹80 per 1,000."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Meet all 3 requirements with at least 90% still identifiable after sharing.",
+        "hint": "Layers that survive stripping."
+      },
+      {
+        "k": "strip",
+        "text": "Show C2PA metadata without a watermark falling below 75% after sharing.",
+        "hint": "Apps strip metadata."
+      },
+      {
+        "k": "cheap",
+        "text": "Meet all 3 with 90% identifiable for ₹70 per 1,000 or less.",
+        "hint": "The watermark can serve as the identifier."
+      }
+    ],
+    "tools": [
+      {
+        "n": "C2PA / c2patool",
+        "type": "Open standard · open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Signed Content Credentials.",
+        "ex": "Sign every exported ad image.",
+        "pros": [
+          "Open standard",
+          "Verifiable"
+        ],
+        "cons": [
+          "Often stripped on upload"
+        ],
+        "url": "https://github.com/contentauth/c2pa-rs"
+      },
+      {
+        "n": "SynthID",
+        "type": "Google DeepMind",
+        "start": 2,
+        "prod": 3,
+        "best": "Invisible watermarks for generated media.",
+        "ex": "Watermark images from a Gemini-based pipeline.",
+        "pros": [
+          "Survives edits",
+          "Detector available"
+        ],
+        "cons": [
+          "Tied to Google tooling"
+        ],
+        "url": "https://github.com/google-deepmind/synthid-text"
+      },
+      {
+        "n": "Truepic",
+        "type": "Commercial",
+        "start": 2,
+        "prod": 3,
+        "best": "Managed signing and verification.",
+        "ex": "Verify provenance of uploaded images.",
+        "pros": [
+          "Managed PKI",
+          "Verification UI"
+        ],
+        "cons": [
+          "Paid"
+        ],
+        "url": "https://www.truepic.com"
+      },
+      {
+        "n": "FFmpeg",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Visible labels and audio disclosures.",
+        "ex": "Burn a label into avatar videos.",
+        "pros": [
+          "Free",
+          "Scriptable"
+        ],
+        "cons": [
+          "Labels can be cropped"
+        ],
+        "url": "https://ffmpeg.org"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Minimum",
+        "tool": "Visible label + audio disclosure"
+      },
+      {
+        "need": "Traceable origin",
+        "tool": "Signed C2PA credentials"
+      },
+      {
+        "need": "Survives sharing",
+        "tool": "Add an invisible watermark"
+      }
+    ],
+    "goals": [
+      "Explain labels, C2PA metadata and watermarks",
+      "Summarise India’s 2026 SGI labelling duties",
+      "Test that marks survive real sharing"
+    ]
+  },
+  "practice": {
+    "scenario": "Rangmanch Studio, a fictional ad-tech company, generates product images, avatar videos and Hindi voice ads for Indian brands. After India’s IT Amendment Rules 2026 came into force on 20 February 2026, it labels every visual asset with “AI-generated · AI द्वारा निर्मित”, starts every voice ad with a spoken disclosure, signs C2PA Content Credentials, adds an invisible watermark tied to the asset id, and removes the option to strip them at export. In weekly tests through messaging and social apps, about 96% of assets stay identifiable as AI-made, against 70% with labels and metadata alone. This is an educational example, not legal advice.",
+    "industries": [
+      {
+        "industry": "Advertising",
+        "use": "AI-made product shots, avatars and voice ads"
+      },
+      {
+        "industry": "Media",
+        "use": "Newsrooms marking AI-assisted images and audio"
+      },
+      {
+        "industry": "Platforms",
+        "use": "Hosting uploads and detecting unlabelled synthetic media"
+      }
+    ],
+    "analogy": "A hallmark on gold jewellery: a visible stamp anyone can read, a certificate that travels with it, and a mark in the metal itself that an assayer can find even if the certificate is lost.",
+    "library": {
+      "name": "c2patool",
+      "what": "The Content Authenticity Initiative’s command-line tool adds and reads C2PA manifests on images, video and audio.",
+      "install": "cargo install c2patool  (or download a release binary)"
+    },
+    "note": "Without signing settings c2patool uses a test certificate; production signing needs your own certificate. Checking survival means re-downloading assets after sharing them through the real apps.",
+    "samples": [
+      {
+        "file": "check_credentials.py",
+        "language": "python",
+        "code": "import json, subprocess, pathlib\n\ndef credentials(path):\n    r = subprocess.run([\"c2patool\", str(path)], capture_output=True, text=True)\n    if r.returncode != 0 or not r.stdout.strip():\n        return None\n    return json.loads(r.stdout)\n\nfolder = pathlib.Path(\"reshared\")            # assets downloaded after sharing\nfiles = sorted(folder.glob(\"*.jpg\"))\nkept = [f.name for f in files if credentials(f)]\nprint(f\"C2PA credentials survived on {len(kept)} of {len(files)} re-shared files\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Visible labels plus metadata survive sharing on 70% of assets. An invisible watermark survives on 85% of the rest. What share stays identifiable overall, in percent?",
+    "answer": "Missing after labels: 30%. The watermark recovers 85% of those: 0.3 × 0.85 = 25.5%. Total 70 + 25.5 = 95.5%.",
+    "expected": {
+      "value": 95.5,
+      "tolerance": 0.5,
+      "label": "% ="
+    },
+    "interview": [
+      {
+        "question": "How would you mark AI-generated images and audio?",
+        "answer": "Add a visible label or spoken disclosure by default, sign C2PA Content Credentials, add an invisible watermark tied to an asset id, stop users removing them, and test survival through real sharing paths."
+      },
+      {
+        "question": "What do India’s 2026 IT Rules amendments require of generative tools?",
+        "answer": "In summary: intermediaries offering tools that create realistic synthetic audio-visual content must label it prominently, embed permanent metadata or an identifier where feasible, and not allow removal; significant social media intermediaries must also collect user declarations and verify them. Confirm details with counsel."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Relying on metadata alone",
+        "fix": "Add a watermark; many apps strip metadata"
+      },
+      {
+        "mistake": "Letting users switch labels off",
+        "fix": "Lock labels and credentials in the tool"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "pv01",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "Which three layers mark AI media?",
+      "options": [
+        "Visible label, C2PA metadata, invisible watermark",
+        "Font, colour, size",
+        "Hash, zip, encrypt",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "They complement each other."
+    },
+    {
+      "id": "pv02",
+      "kind": "single",
+      "industry": "Media",
+      "question": "What often happens to C2PA metadata when shared on social apps?",
+      "options": [
+        "It is stripped",
+        "It is enlarged",
+        "It becomes visible",
+        "It is translated"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Hence watermarks."
+    },
+    {
+      "id": "pv03",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "When did India’s IT Amendment Rules 2026 come into force?",
+      "options": [
+        "20 February 2026",
+        "1 January 2025",
+        "15 August 2027",
+        "They are only a draft"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Notified 16 February 2026."
+    },
+    {
+      "id": "pv04",
+      "kind": "multi",
+      "industry": "Platforms",
+      "question": "In summary, what do the Indian rules expect of tools that create synthetic audio-visual content? Select all that apply.",
+      "options": [
+        "Prominent labels",
+        "Metadata or an identifier where feasible",
+        "No removal of labels or metadata",
+        "A ban on all AI images"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Educational summary."
+    },
+    {
+      "id": "pv05",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "Labels 70% + watermark recovering 85% of the rest gives?",
+      "options": [
+        "85%",
+        "95.5%",
+        "100%",
+        "70%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "70 + 25.5."
+    },
+    {
+      "id": "pv06",
+      "kind": "single",
+      "industry": "Media",
+      "question": "Which survives a screenshot best?",
+      "options": [
+        "An invisible watermark",
+        "EXIF metadata",
+        "A C2PA manifest",
+        "File name"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Lives in the pixels."
+    },
+    {
+      "id": "pv07",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "How should an audio ad be marked?",
+      "options": [
+        "A spoken disclosure at the start",
+        "A hidden file name",
+        "Nothing",
+        "Only metadata"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Prefixed audio disclosure."
+    },
+    {
+      "id": "pv08",
+      "kind": "single",
+      "industry": "Platforms",
+      "question": "What extra duty do significant social media intermediaries have?",
+      "options": [
+        "Collect user declarations and verify them",
+        "Train their own models",
+        "Ban all uploads",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Declaration plus technical checks."
+    },
+    {
+      "id": "pv09",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "An export box lets users untick “add label”. Problem?",
+      "options": [
+        "Labels become removable",
+        "None",
+        "It is faster",
+        "It adds cost"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Lock it."
+    },
+    {
+      "id": "pv10",
+      "kind": "single",
+      "industry": "Media",
+      "question": "Which open standard defines Content Credentials?",
+      "options": [
+        "C2PA",
+        "MP3",
+        "HTTP",
+        "PNG"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Signed manifests."
+    },
+    {
+      "id": "pv11",
+      "kind": "multi",
+      "industry": "Advertising",
+      "question": "Why test survival after sharing? Select all that apply.",
+      "options": [
+        "Apps strip metadata",
+        "Crops remove labels",
+        "Re-encoding can weaken marks",
+        "It changes the model"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Real paths differ."
+    },
+    {
+      "id": "pv12",
+      "kind": "single",
+      "industry": "Platforms",
+      "question": "Which EU AI Act article covers transparency for synthetic content?",
+      "options": [
+        "Article 50",
+        "Article 5",
+        "Article 99",
+        "Article 1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "From August 2026."
+    },
+    {
+      "id": "pv13",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "Signing costs ₹20 and watermarking ₹60 per 1,000. For 50,000 assets?",
+      "options": [
+        "₹4,000",
+        "₹400",
+        "₹40,000",
+        "₹80"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "50 × ₹80."
+    },
+    {
+      "id": "pv14",
+      "kind": "single",
+      "industry": "Media",
+      "question": "Under the Indian rules, is text-only content treated the same as realistic audio-visual content?",
+      "options": [
+        "No, the SGI definition targets audio-visual content that looks real",
+        "Yes, identical",
+        "Only emails",
+        "Only code"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Educational summary."
+    },
+    {
+      "id": "pv15",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "A Hindi label reads “AI द्वारा निर्मित”. What does it mean?",
+      "options": [
+        "Made by AI",
+        "Free delivery",
+        "Sale ends today",
+        "Verified buyer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Bilingual labels reach more viewers."
+    },
+    {
+      "id": "pv16",
+      "kind": "single",
+      "industry": "Platforms",
+      "question": "What does a watermark detector need?",
+      "options": [
+        "Access to the vendor’s detection tool or key",
+        "Nothing",
+        "The original prompt",
+        "The user’s phone"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Detection is vendor-specific."
+    },
+    {
+      "id": "pv17",
+      "kind": "multi",
+      "industry": "Media",
+      "question": "Which are weaknesses of visible labels alone? Select all that apply.",
+      "options": [
+        "Can be cropped",
+        "Can be edited out",
+        "Not machine-readable",
+        "Always illegal"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Hence other layers."
+    },
+    {
+      "id": "pv18",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "Survival rises from 60% to 94% by adding a watermark to labels. Gain?",
+      "options": [
+        "34 points",
+        "24 points",
+        "94 points",
+        "6 points"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "94 − 60."
+    },
+    {
+      "id": "pv19",
+      "kind": "single",
+      "industry": "Platforms",
+      "question": "Deepfake imagery flagged under the 2026 rules must be taken down faster. The reduced timeline for non-consensual intimate imagery is?",
+      "options": [
+        "2 hours",
+        "72 hours",
+        "36 hours",
+        "7 days"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Down from 24 hours; educational summary."
+    },
+    {
+      "id": "pv20",
+      "kind": "single",
+      "industry": "Advertising",
+      "question": "Is this technique legal advice?",
+      "options": [
+        "No, an educational summary; confirm with counsel",
+        "Yes",
+        "Only for platforms",
+        "Only in the EU"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Scope depends on facts."
+    }
+  ]
+}

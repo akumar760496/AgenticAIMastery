@@ -1,0 +1,303 @@
+{
+  "slug": "tool-use",
+  "number": 8,
+  "techniqueOrder": [
+    "fcall",
+    "tooldesign",
+    "parallel",
+    "idempotency",
+    "mcp",
+    "a2a",
+    "toolsearch",
+    "toolauth",
+    "skills"
+  ],
+  "glossary": [
+    {
+      "term": "tool_choice",
+      "definition": "The request setting that decides whether the model may (auto), must (any, tool) or must not (none) call a tool."
+    },
+    {
+      "term": "JSON Schema",
+      "definition": "A standard vocabulary for describing JSON data; tools use it to define their input arguments."
+    },
+    {
+      "term": "tool_use_id",
+      "definition": "The id of one tool call; the result for that call must carry the same id."
+    },
+    {
+      "term": "is_error",
+      "definition": "A flag on a tool result saying the call failed, so the model can adjust instead of trusting the output."
+    },
+    {
+      "term": "critical path",
+      "definition": "The longest chain of calls that depend on each other; it sets the minimum wall-clock time."
+    },
+    {
+      "term": "idempotency key",
+      "definition": "A unique value sent with a write so the server performs it once and replays the result on retries."
+    },
+    {
+      "term": "exponential backoff",
+      "definition": "Waiting longer after each failed attempt, for example 0.5 s, 1 s, 2 s, up to a cap."
+    },
+    {
+      "term": "full jitter",
+      "definition": "Choosing a random wait between zero and the backoff value, so clients do not retry in step."
+    },
+    {
+      "term": "JSON-RPC",
+      "definition": "A lightweight remote-procedure-call format in JSON; MCP and one A2A binding use version 2.0."
+    },
+    {
+      "term": "Streamable HTTP",
+      "definition": "MCP’s remote transport: requests are HTTP POSTs to one endpoint; replies are JSON or a request-scoped event stream."
+    },
+    {
+      "term": "stdio",
+      "definition": "Standard input and output; MCP’s transport for a server running as a local process."
+    },
+    {
+      "term": "tool annotations",
+      "definition": "Hints such as readOnlyHint and destructiveHint that describe a tool’s behaviour; untrusted unless the server is trusted."
+    },
+    {
+      "term": "Agent Card",
+      "definition": "A JSON document an A2A agent publishes describing its identity, skills, capabilities and how to authenticate."
+    },
+    {
+      "term": "artifact",
+      "definition": "An output an A2A task returns, such as a document, an estimate or a booking reference."
+    },
+    {
+      "term": "deferred tool",
+      "definition": "A tool whose definition is sent with the request but hidden from the model until a tool search finds it."
+    },
+    {
+      "term": "tool reference",
+      "definition": "A search result that names a tool; the API expands it into the full tool definition so the model can call it."
+    },
+    {
+      "term": "tool search",
+      "definition": "A tool the model calls to find other tools by keyword or meaning, so large tool libraries need not be loaded in full."
+    },
+    {
+      "term": "PKCE",
+      "definition": "Proof Key for Code Exchange: the client sends a hash of a secret verifier when it starts sign-in and the verifier itself when it redeems the code, so a stolen authorization code is useless."
+    },
+    {
+      "term": "delegated token",
+      "definition": "An access token issued to an agent or app to act for one user, within the scopes that user consented to."
+    },
+    {
+      "term": "refresh token rotation",
+      "definition": "Issuing a new refresh token each time one is used and invalidating the old one, so a stolen refresh token is detected and stops working."
+    },
+    {
+      "term": "token vault",
+      "definition": "Encrypted storage for users’ access and refresh tokens, read by the tool layer at call time so secrets never enter the prompt."
+    },
+    {
+      "term": "progressive disclosure",
+      "definition": "Loading only a short description up front and the full instructions or files when they are needed."
+    },
+    {
+      "term": "agent skill",
+      "definition": "A packaged folder of instructions, scripts and references that an agent loads when a task matches its description."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: How to implement tool use",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use"
+    },
+    {
+      "id": "S2",
+      "title": "Anthropic: Strict tool use",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use"
+    },
+    {
+      "id": "S3",
+      "title": "OpenAI: Function calling guide",
+      "url": "https://developers.openai.com/api/docs/guides/function-calling"
+    },
+    {
+      "id": "S4",
+      "title": "Anthropic: Parallel tool use",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use"
+    },
+    {
+      "id": "S5",
+      "title": "Anthropic engineering: Writing effective tools for agents",
+      "url": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+    },
+    {
+      "id": "S6",
+      "title": "MCP specification 2026-07-28: Tools",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools"
+    },
+    {
+      "id": "S7",
+      "title": "Anthropic: Tool search tool",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+    },
+    {
+      "id": "S8",
+      "title": "BFCL: the Berkeley function-calling benchmark (paper)",
+      "url": "https://openreview.net/forum?id=2GmDdhBdDk"
+    },
+    {
+      "id": "S9",
+      "title": "BFCL v3: multi-turn and multi-step function calling",
+      "url": "https://gorilla.cs.berkeley.edu/blogs/13_bfcl_v3_multi_turn.html"
+    },
+    {
+      "id": "S10",
+      "title": "Stripe API: Idempotent requests",
+      "url": "https://docs.stripe.com/api/idempotent_requests"
+    },
+    {
+      "id": "S11",
+      "title": "IETF draft: The Idempotency-Key HTTP header field (-07)",
+      "url": "https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header-07"
+    },
+    {
+      "id": "S12",
+      "title": "AWS Architecture Blog: Exponential backoff and jitter",
+      "url": "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/"
+    },
+    {
+      "id": "S13",
+      "title": "Temporal: Activity definition",
+      "url": "https://docs.temporal.io/activity-definition"
+    },
+    {
+      "id": "S14",
+      "title": "MCP specification 2026-07-28: Key changes",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog"
+    },
+    {
+      "id": "S15",
+      "title": "MCP specification 2026-07-28: Transports",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports"
+    },
+    {
+      "id": "S16",
+      "title": "MCP specification 2026-07-28: Authorization",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization"
+    },
+    {
+      "id": "S17",
+      "title": "MCP specification 2026-07-28: Multi round-trip requests",
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr"
+    },
+    {
+      "id": "S18",
+      "title": "A2A protocol specification",
+      "url": "https://a2a-protocol.org/latest/specification/"
+    },
+    {
+      "id": "S19",
+      "title": "A2A and MCP",
+      "url": "https://a2a-protocol.org/latest/topics/a2a-and-mcp/"
+    },
+    {
+      "id": "S20",
+      "title": "Invariant Labs: Tool poisoning attacks on MCP",
+      "url": "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks"
+    },
+    {
+      "id": "S21",
+      "title": "Claude Docs: Tool search tool",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool"
+    },
+    {
+      "id": "S22",
+      "title": "Anthropic: Introducing advanced tool use",
+      "url": "https://www.anthropic.com/engineering/advanced-tool-use"
+    },
+    {
+      "id": "S23",
+      "title": "IETF RFC 7636: Proof Key for Code Exchange (PKCE)",
+      "url": "https://datatracker.ietf.org/doc/html/rfc7636"
+    },
+    {
+      "id": "S24",
+      "title": "IETF RFC 9700: Best Current Practice for OAuth 2.0 Security",
+      "url": "https://datatracker.ietf.org/doc/html/rfc9700"
+    },
+    {
+      "id": "S25",
+      "title": "IETF RFC 8693: OAuth 2.0 Token Exchange",
+      "url": "https://datatracker.ietf.org/doc/html/rfc8693"
+    },
+    {
+      "id": "S26",
+      "title": "MCP: Security best practices",
+      "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"
+    },
+    {
+      "id": "S27",
+      "title": "Anthropic: Agent Skills overview",
+      "url": "https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview"
+    },
+    {
+      "id": "S28",
+      "title": "Anthropic engineering: Equipping agents for the real world with Agent Skills",
+      "url": "https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills"
+    },
+    {
+      "id": "S29",
+      "title": "Claude Code: Skills",
+      "url": "https://code.claude.com/docs/en/skills"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "The model never calls tools, or calls them with malformed arguments",
+      "techniqueId": "fcall",
+      "advice": "Get the loop right: clear schemas, tool_choice auto, strict inputs, and results matched to call ids."
+    },
+    {
+      "symptom": "It picks the wrong tool, fills arguments badly or drowns in output",
+      "techniqueId": "tooldesign",
+      "advice": "Merge overlapping tools, write full descriptions, trim results and make errors actionable."
+    },
+    {
+      "symptom": "Independent lookups run one after another",
+      "techniqueId": "parallel",
+      "advice": "Run independent calls in one turn concurrently and return all results together."
+    },
+    {
+      "symptom": "A retry could charge, refund or email twice",
+      "techniqueId": "idempotency",
+      "advice": "Give each action one idempotency key, reuse it on every retry, and back off with jitter."
+    },
+    {
+      "symptom": "One set of tools should serve many apps and agents",
+      "techniqueId": "mcp",
+      "advice": "Expose them once as an MCP server; any MCP host can discover and call them."
+    },
+    {
+      "symptom": "A whole task must go to another organisation’s agent",
+      "techniqueId": "a2a",
+      "advice": "Delegate it over A2A: discover the Agent Card, send a task, track its states and collect artifacts."
+    },
+    {
+      "symptom": "The agent has hundreds of tools and keeps picking the wrong one",
+      "techniqueId": "toolsearch",
+      "advice": "Keep a few common tools loaded, defer the rest behind a search tool, and write descriptions that match how people ask."
+    },
+    {
+      "symptom": "The agent’s tools use one shared API key, or a token sits in the prompt",
+      "techniqueId": "toolauth",
+      "advice": "Give each user a delegated OAuth token with one scope per tool, keep it short-lived in a vault the model never sees, and log every call under the user."
+    },
+    {
+      "symptom": "The agent needs dozens of procedures and the prompt is huge",
+      "techniqueId": "skills",
+      "advice": "Package each procedure as a skill: short description up front, instructions and scripts loaded only when needed."
+    }
+  ]
+}

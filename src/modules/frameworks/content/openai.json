@@ -1,0 +1,826 @@
+{
+  "id": "openai",
+  "moduleSlug": "frameworks",
+  "name": "OpenAI Agents SDK",
+  "shortName": "OpenAI Agents",
+  "question": "How do I build agents that hand off to each other, with guardrails, quickly?",
+  "summary": "The OpenAI Agents SDK is a small set of primitives: agents with instructions and tools, a runner that executes the loop, handoffs that pass a conversation to a specialist agent, guardrails that run alongside and can stop a run, sessions for memory, and built-in tracing. Recent additions include sandbox agents, realtime voice agents and human approval. It works with other providers through LiteLLM but fits OpenAI models best.",
+  "useCases": [
+    "Triage-and-specialist designs",
+    "Teams already on OpenAI models",
+    "Fast prototypes that still need guardrails and traces"
+  ],
+  "keyFacts": {
+    "label": "Primitives",
+    "items": [
+      {
+        "term": "Agent",
+        "detail": "instructions, tools, handoffs"
+      },
+      {
+        "term": "Runner",
+        "detail": "run, run_sync, streaming"
+      },
+      {
+        "term": "Handoffs",
+        "detail": "transfer to a specialist agent"
+      },
+      {
+        "term": "Guardrails",
+        "detail": "input and output checks with tripwires"
+      },
+      {
+        "term": "Sessions",
+        "detail": "conversation memory, e.g. SQLite"
+      },
+      {
+        "term": "Tracing",
+        "detail": "on by default"
+      }
+    ]
+  },
+  "steps": [
+    "Define specialist agents with tools",
+    "Add a triage agent with handoffs",
+    "Add input and output guardrails",
+    "Use sessions and read the traces"
+  ],
+  "pitfalls": [
+    "Handoff chains that bounce between agents",
+    "Relying on guardrails as the only safety layer",
+    "Assuming non-OpenAI models behave identically"
+  ],
+  "tools": [
+    "openai-agents (Python)",
+    "@openai/agents (TypeScript)",
+    "LiteLLM adapter",
+    "Temporal integration for durability"
+  ],
+  "remember": "Triage, hand off, guard the edges, trace everything.",
+  "caption": "Python and TypeScript.",
+  "comparison": {
+    "scope": "Handoff-based agents",
+    "cost": 1,
+    "needs": "Python or TypeScript",
+    "best": "Provider coupling"
+  },
+  "diagram": {
+    "file": "diagrams/openai.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_openai.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "@function_tool",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "def get_transaction(utr: str) -> dict:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return bank.transactions.get(utr)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@input_guardrail",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "async def no_card_numbers(ctx, agent, user_input):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    found = bool(CARD.search(str(user_input)))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return GuardrailFunctionOutput(output_info={\"card\": found},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                                   tripwire_triggered=found)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "disputes = Agent(name=\"Disputes\", instructions=SYSTEM,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                 tools=[get_transaction, raise_dispute])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "triage = Agent(name=\"Triage\", model=\"gpt-5-mini\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "               handoffs=[disputes], input_guardrails=[no_card_numbers])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "session = SQLiteSession(\"customer-4471\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "result = Runner.run_sync(triage, QUESTION, session=session)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "print(result.final_output)                  # traces recorded by default",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Tools from functions",
+        "text": "function_tool turns a typed Python function and its docstring into a tool schema."
+      },
+      {
+        "title": "Triage hands off",
+        "text": "A cheap triage agent answers simple questions and hands failed payments to the Disputes agent, which then talks to the customer directly."
+      },
+      {
+        "title": "A guardrail with a tripwire",
+        "text": "The input guardrail runs alongside the agent. A pasted card number trips it and stops the run with an exception you catch."
+      },
+      {
+        "title": "Sessions remember",
+        "text": "SQLiteSession keeps the customer’s conversation, so the next message continues it."
+      },
+      {
+        "title": "Run the loop",
+        "text": "Runner executes the agents, tools and handoffs until there is a final output."
+      },
+      {
+        "title": "Read the traces",
+        "text": "Tracing is on by default. Here traces showed 30% of chats handed off, which set the specialist’s cost."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">@function_tool get_transaction</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"36\" width=\"130\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"73\" y=\"51\">Triage</text><text class=\"sb\" x=\"73\" y=\"66\">small model</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln acc\" d=\"M140 54L168 54\" marker-end=\"url(#arrA)\"/></g><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"170\" y=\"36\" width=\"182\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"261\" y=\"51\">Disputes</text><text class=\"sb\" x=\"261\" y=\"66\">tools</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"82\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"97\" text-anchor=\"middle\">card number → tripwire → run stops</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"112\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"127\" text-anchor=\"middle\">SQLiteSession(\"customer-4471\")</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"142\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"157\" text-anchor=\"middle\">Runner.run_sync(triage, …)</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"187\" style=\"text-anchor:end;--d:0s\">handed off</text><rect x=\"118\" y=\"177\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"177\" width=\"45\" height=\"13\" rx=\"3\" style=\"fill:var(--acc);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"187\" style=\"text-anchor:start;--d:0.2s\">30%</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"214\" style=\"text-anchor:middle;fill:var(--ink-2)\">₹23,000 a day vs ₹60,000 all-specialist</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Few concepts, quick to start",
+      "Handoffs and guardrails built in",
+      "Tracing on by default",
+      "Voice, sandbox and approval features"
+    ],
+    "cons": [
+      "Best with OpenAI models",
+      "Durability needs an integration",
+      "Guardrails are one layer, not a full safety design",
+      "Handoff chains can bounce"
+    ],
+    "avoidWhen": [
+      "Teams that must stay provider-neutral",
+      "Multi-day workflows without a durable backend"
+    ],
+    "tools": [
+      {
+        "name": "OpenAI Agents SDK (Python)",
+        "type": "Open source",
+        "what": "Agents, handoffs, guardrails, sessions",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "OpenAI Agents SDK (TypeScript)",
+        "type": "Open source",
+        "what": "The same primitives in TypeScript",
+        "url": "https://openai.github.io/openai-agents-js/"
+      },
+      {
+        "name": "OpenAI Traces dashboard",
+        "type": "Hosted",
+        "what": "View traces of agent runs",
+        "url": "https://platform.openai.com/traces"
+      },
+      {
+        "name": "LiteLLM adapter",
+        "type": "Open source",
+        "what": "Other providers",
+        "url": "https://openai.github.io/openai-agents-python/models/litellm/"
+      },
+      {
+        "name": "Temporal integration",
+        "type": "Open source",
+        "what": "Durable agent runs",
+        "url": "https://temporal.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional payments app wants a triage agent that hands disputes to a specialist, with guardrails and traces, and it already uses OpenAI models. Set the needs and see when the OpenAI Agents SDK comes out on top.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. OpenAI Agents SDK ranks 6 of 7."
+      },
+      {
+        "k": "proto",
+        "name": "Quick prototype on OpenAI",
+        "expect": "Top pick: OpenAI Agents SDK."
+      },
+      {
+        "k": "typed",
+        "name": "Typed outputs, quickly",
+        "expect": "Top pick: Pydantic AI. OpenAI Agents SDK ranks 7 of 7."
+      },
+      {
+        "k": "dotnet",
+        "name": ".NET shop on Azure",
+        "expect": "Top pick: CrewAI / MS Agent Framework. OpenAI Agents SDK is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make the OpenAI Agents SDK the top pick.",
+        "hint": "Speed of prototyping and provider commitment."
+      },
+      {
+        "k": "model",
+        "text": "Make it top while committed to OpenAI models.",
+        "hint": "Start from the prototype scenario."
+      },
+      {
+        "k": "out",
+        "text": "Find a constraint that rules it out.",
+        "hint": "Which languages does it support?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Agents, handoffs, guardrails, sessions, tracing.",
+        "ex": "Triage handing disputes to a specialist.",
+        "pros": [
+          "Few concepts",
+          "Tracing by default"
+        ],
+        "cons": [
+          "Best with OpenAI",
+          "Durability via integration"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "Agents SDK for TypeScript",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "The same primitives in TypeScript.",
+        "ex": "A Node.js support backend.",
+        "pros": [
+          "Parity with Python",
+          "Voice agents"
+        ],
+        "cons": [
+          "OpenAI-centric",
+          "Young"
+        ],
+        "url": "https://openai.github.io/openai-agents-js/"
+      },
+      {
+        "n": "LiteLLM adapter",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Run the SDK with other providers.",
+        "ex": "Try the triage agent on another model.",
+        "pros": [
+          "Keeps the SDK",
+          "Many providers"
+        ],
+        "cons": [
+          "Feature gaps",
+          "Less tested"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/models/litellm/"
+      },
+      {
+        "n": "Traces dashboard",
+        "type": "Hosted",
+        "start": 3,
+        "prod": 3,
+        "best": "View runs, handoffs and tool calls.",
+        "ex": "Measure the 30% handoff rate.",
+        "pros": [
+          "Zero setup",
+          "Readable"
+        ],
+        "cons": [
+          "Hosted by OpenAI",
+          "Export for other tools"
+        ],
+        "url": "https://platform.openai.com/traces"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Triage and specialists on OpenAI",
+        "tool": "OpenAI Agents SDK"
+      },
+      {
+        "need": "We must stay provider-neutral",
+        "tool": "Pydantic AI or LangGraph"
+      },
+      {
+        "need": "We need .NET",
+        "tool": "Microsoft Agent Framework"
+      }
+    ],
+    "goals": [
+      "See where handoff-based SDKs fit",
+      "Weigh provider commitment",
+      "Recognise language limits"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional payments app routes about 100,000 support chats a day. A triage agent on a small model answers simple questions and hands disputes to a specialist agent with the transaction tools. An input guardrail stops any chat where a customer pastes a full card number, and sessions keep each customer’s context. The built-in traces showed that 30% of chats were handed off, which set the cost of the specialist.",
+    "industries": [
+      {
+        "industry": "Payments",
+        "use": "Triage with handoffs to dispute and KYC specialists"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Order, refund and returns specialists"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Billing, plan and outage specialists"
+      }
+    ],
+    "analogy": "A bank branch’s enquiry desk: the first person answers simple questions and walks you to the right counter for the rest, and a guard at the door stops anything that should not come in.",
+    "library": {
+      "name": "OpenAI Agents SDK",
+      "what": "Agents, handoffs, guardrails, sessions and tracing in a small package; other providers through LiteLLM.",
+      "install": "pip install openai-agents"
+    },
+    "note": "A tripped guardrail raises an exception you should catch and answer politely. Model names are examples; check current ones.",
+    "samples": [
+      {
+        "file": "upi_agent_openai.py",
+        "language": "python",
+        "code": "import re\nfrom agents import (Agent, GuardrailFunctionOutput, Runner, SQLiteSession,\n                    function_tool, input_guardrail)\n\nCARD = re.compile(r\"\\b(?:\\d[ -]?){13,16}\\b\")\n\n@function_tool\ndef get_transaction(utr: str) -> dict:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return bank.transactions.get(utr)\n\n@function_tool\ndef raise_dispute(utr: str, reason: str) -> str:\n    \"\"\"Raise a dispute for a failed UPI debit. Needs human approval.\"\"\"\n    if not approvals.request(utr, reason):\n        return \"Rejected by reviewer.\"\n    return bank.disputes.create(utr, reason)\n\n@input_guardrail\nasync def no_card_numbers(ctx, agent, user_input) -> GuardrailFunctionOutput:\n    found = bool(CARD.search(str(user_input)))\n    return GuardrailFunctionOutput(output_info={\"card\": found}, tripwire_triggered=found)\n\ndisputes = Agent(name=\"Disputes\", instructions=SYSTEM,\n                 tools=[get_transaction, raise_dispute])\ntriage = Agent(name=\"Triage\", model=\"gpt-5-mini\",\n               instructions=\"Answer simple questions; hand failed payments to Disputes.\",\n               handoffs=[disputes], input_guardrails=[no_card_numbers])\n\nsession = SQLiteSession(\"customer-4471\")\nresult = Runner.run_sync(triage, QUESTION, session=session)\nprint(result.final_output)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A triage agent on a small model costs ₹0.05 per chat and handles 100,000 chats a day, handing off 30% to a specialist that costs ₹0.60 per chat. What is the daily cost, in ₹?",
+    "answer": "100,000 × ₹0.05 = ₹5,000 for triage, plus 30,000 × ₹0.60 = ₹18,000 for the specialist: ₹23,000 a day, against ₹60,000 if every chat went to the specialist. The handoff rate, visible in traces, drives the bill.",
+    "expected": {
+      "value": 23000,
+      "tolerance": 1,
+      "label": "₹ a day ="
+    },
+    "interview": [
+      {
+        "question": "What is the difference between a handoff and calling an agent as a tool?",
+        "answer": "A handoff transfers the conversation to another agent, which then talks to the user directly. Calling an agent as a tool keeps the first agent in charge; it gets the sub-agent’s result back and continues. Use handoffs for routing to specialists and agents-as-tools for sub-tasks."
+      },
+      {
+        "question": "What are guardrails in the OpenAI Agents SDK?",
+        "answer": "Checks that run on the input to the first agent or the output of the last, alongside the agent. If one trips, the run stops with an exception. They are useful for cheap policy checks, but they are one layer, not the whole safety design (Panel 2)."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Agents bouncing handoffs back and forth",
+        "fix": "Give each agent a clear remit and a limit"
+      },
+      {
+        "mistake": "Guardrails as the only safety layer",
+        "fix": "Combine with tool permissions and approval gates"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "oa01",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What is a handoff in the OpenAI Agents SDK?",
+      "options": [
+        "Transferring the conversation to another agent",
+        "Calling a REST API",
+        "Saving a session",
+        "Streaming output"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The specialist then answers."
+    },
+    {
+      "id": "oa02",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What happens when a guardrail’s tripwire triggers?",
+      "options": [
+        "The run stops with an exception",
+        "The run continues",
+        "The model is retrained",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Catch and respond politely."
+    },
+    {
+      "id": "oa03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What does a session provide?",
+      "options": [
+        "Conversation memory across turns",
+        "Model weights",
+        "A vector index",
+        "A UI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "For example SQLiteSession."
+    },
+    {
+      "id": "oa04",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Which component runs agents, tools and handoffs?",
+      "options": [
+        "Runner",
+        "Session",
+        "Guardrail",
+        "Trace"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Runner.run or run_sync."
+    },
+    {
+      "id": "oa05",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which are core primitives of the SDK? Select all that apply.",
+      "options": [
+        "Agents",
+        "Handoffs",
+        "Checkpointers with interrupt()",
+        "Crews"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Plus guardrails, sessions, tracing."
+    },
+    {
+      "id": "oa06",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Triage at ₹0.05 for 100,000 chats and 30% handed to a ₹0.60 specialist. Daily cost?",
+      "options": [
+        "₹5,000",
+        "₹23,000",
+        "₹60,000",
+        "₹65,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "₹5,000 + ₹18,000."
+    },
+    {
+      "id": "oa07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Is tracing on by default?",
+      "options": [
+        "Yes",
+        "No",
+        "Only in TypeScript",
+        "Only with LiteLLM"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Built-in tracing."
+    },
+    {
+      "id": "oa08",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How does the SDK use non-OpenAI models?",
+      "options": [
+        "Through adapters such as LiteLLM",
+        "It cannot",
+        "Only via fine-tuning",
+        "Through MCP only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Works, but fits OpenAI best."
+    },
+    {
+      "id": "oa09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Handoff or agent-as-tool: when should the first agent stay in charge?",
+      "options": [
+        "Agent-as-tool",
+        "Handoff",
+        "Both",
+        "Neither"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "It gets the result back."
+    },
+    {
+      "id": "oa10",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which recent capabilities has the SDK added? Select all that apply.",
+      "options": [
+        "Realtime voice agents",
+        "Human-in-the-loop approvals",
+        "Built-in Postgres checkpointer graphs",
+        "Role-based crews"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Also sandbox agents."
+    },
+    {
+      "id": "oa11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A guardrail’s tripwire is set to not found. What happens?",
+      "options": [
+        "Clean messages are blocked and card numbers pass",
+        "Everything works",
+        "All messages pass",
+        "All messages are blocked equally"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Inverted logic."
+    },
+    {
+      "id": "oa12",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Which languages does the SDK support?",
+      "options": [
+        "Python and TypeScript",
+        "Only Java",
+        "Only .NET",
+        "Only Go"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Two languages."
+    },
+    {
+      "id": "oa13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What is a risk of chains of handoffs?",
+      "options": [
+        "Agents bouncing a conversation back and forth",
+        "Too few tokens",
+        "No tracing",
+        "No tools"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Give each agent a clear remit."
+    },
+    {
+      "id": "oa14",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Are SDK guardrails a complete safety design?",
+      "options": [
+        "No, they are one layer alongside permissions and approvals",
+        "Yes",
+        "Only for voice",
+        "Only for images"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Panels 2 and 12."
+    },
+    {
+      "id": "oa15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What turns a Python function into a tool?",
+      "options": [
+        "@function_tool",
+        "@agent.tool",
+        "@tool from crewai",
+        "HookMatcher"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Schema from type hints and docstring."
+    },
+    {
+      "id": "oa16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "How do you get multi-day durability with the SDK?",
+      "options": [
+        "Through an integration such as Temporal",
+        "It is built in with checkpointers",
+        "It is impossible",
+        "With sessions alone"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Sessions keep memory, not durable workflows."
+    },
+    {
+      "id": "oa17",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which scenarios suit the OpenAI Agents SDK? Select all that apply.",
+      "options": [
+        "Triage and specialist agents on OpenAI models",
+        "A quick prototype with guardrails and traces",
+        "A .NET shop",
+        "A Claude-only workspace agent"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Its sweet spot."
+    },
+    {
+      "id": "oa18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What do input guardrails check?",
+      "options": [
+        "The input to the first agent",
+        "Every tool call",
+        "Model weights",
+        "The trace"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Output guardrails check the final output."
+    },
+    {
+      "id": "oa19",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Where did the example team learn its handoff rate?",
+      "options": [
+        "From the traces",
+        "From a survey",
+        "From model weights",
+        "From logs of another app"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tracing informs cost."
+    },
+    {
+      "id": "oa20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "When is the SDK ruled out in the chooser?",
+      "options": [
+        "When the team needs .NET, Java or Go",
+        "When using OpenAI",
+        "When prototyping fast",
+        "When using handoffs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Language constraint."
+    }
+  ]
+}

@@ -1,0 +1,840 @@
+{
+  "id": "adk",
+  "moduleSlug": "frameworks",
+  "name": "Google Agent Development Kit",
+  "shortName": "Google ADK",
+  "question": "How do I compose agents and workflows across languages, especially on Google Cloud?",
+  "summary": "Google’s Agent Development Kit builds LLM agents and composes them with workflow agents that run sub-agents in sequence, in parallel or in a loop, with graph workflows added in ADK 2.0. A runner and session service manage state and events. It supports Python, TypeScript, Go, Java and Kotlin, works with Gemini and other models, includes a web UI and evaluation tooling, speaks A2A, and deploys naturally to Cloud Run or Google’s agent runtime.",
+  "useCases": [
+    "Teams on Google Cloud or using Gemini",
+    "Java, Go or Kotlin shops",
+    "Multi-agent systems that talk A2A"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "LlmAgent",
+        "detail": "model, instruction, tools"
+      },
+      {
+        "term": "Workflow agents",
+        "detail": "Sequential, Parallel, Loop"
+      },
+      {
+        "term": "Runner",
+        "detail": "executes agents and events"
+      },
+      {
+        "term": "Sessions",
+        "detail": "state across turns"
+      },
+      {
+        "term": "adk web / eval",
+        "detail": "dev UI and evaluation"
+      },
+      {
+        "term": "A2A",
+        "detail": "agent-to-agent protocol"
+      }
+    ]
+  },
+  "steps": [
+    "Build an LlmAgent with tools",
+    "Compose steps with workflow agents",
+    "Test with adk web and adk eval",
+    "Deploy to Cloud Run or the managed runtime"
+  ],
+  "pitfalls": [
+    "Assuming every feature is equal across languages",
+    "Tying deployment to one cloud without meaning to",
+    "Nesting workflow agents deeper than needed"
+  ],
+  "tools": [
+    "google-adk (Python)",
+    "@google/adk (TypeScript)",
+    "ADK for Go and Java",
+    "Vertex AI / Gemini Enterprise agent runtime"
+  ],
+  "remember": "LLM agents inside workflow agents, in the language you already use.",
+  "caption": "Feature parity varies by language.",
+  "comparison": {
+    "scope": "Composed agents, many languages",
+    "cost": 2,
+    "needs": "Python, TS, Go, Java, Kotlin",
+    "best": "Cloud coupling"
+  },
+  "diagram": {
+    "file": "diagrams/adk.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_adk.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def get_transaction(utr: str) -> dict:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return bank.transactions.get(utr)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "agent = Agent(name=\"upi_disputes\", model=\"gemini-flash-latest\",",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "              instruction=SYSTEM,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "              tools=[get_transaction, raise_dispute])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "runner = Runner(agent=agent, app_name=\"support\",",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                session_service=InMemorySessionService())",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def ask(user_id, question):",
+        "steps": []
+      },
+      {
+        "text": "    session = await runner.session_service.create_session(",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        app_name=\"support\", user_id=user_id)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    message = types.Content(role=\"user\", parts=[types.Part(text=question)])",
+        "steps": []
+      },
+      {
+        "text": "    async for event in runner.run_async(user_id=user_id,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                                        session_id=session.id,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                                        new_message=message):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        if event.is_final_response():",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            return event.content.parts[0].text",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# compose: SequentialAgent([checks, ParallelAgent([...]), summary])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# test: adk eval · run: adk web · talk to other agents: A2A",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Plain functions become tools",
+        "text": "Type hints and the docstring describe the tool; no decorator needed."
+      },
+      {
+        "title": "An LLM agent",
+        "text": "Name, model, instruction and tools. Gemini by default; other models through adapters."
+      },
+      {
+        "title": "A runner and a session",
+        "text": "The runner executes the agent; the session service stores state and events per user. Use a persistent one in production."
+      },
+      {
+        "title": "Events stream back",
+        "text": "run_async yields events: model output, tool calls, results, and a final response."
+      },
+      {
+        "title": "Compose with workflow agents",
+        "text": "Sequential, parallel and loop agents arrange LLM agents into a pipeline: here, three checks run in parallel."
+      },
+      {
+        "title": "Test, run and connect",
+        "text": "adk eval tests behaviour, adk web gives a dev UI, and A2A lets these agents call agents in other frameworks."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"21\" text-anchor=\"middle\">def get_transaction(utr: str) -> dict</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"36\" width=\"344\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"50\">LlmAgent upi_disputes</text><text class=\"sb\" x=\"180\" y=\"65\">gemini + tools</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"80\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"95\" text-anchor=\"middle\">Runner</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"80\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"95\" text-anchor=\"middle\">SessionService</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"110\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"125\" text-anchor=\"middle\">events → is_final_response()</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"155\" style=\"text-anchor:end;--d:0s\">sequential</text><rect x=\"118\" y=\"145\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"145\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"155\" style=\"text-anchor:start;--d:0.2s\">15 s</text><text class=\"tl a\" x=\"112\" y=\"177\" style=\"text-anchor:end;--d:0.1s\">parallel</text><rect x=\"118\" y=\"167\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"167\" width=\"60\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"177\" style=\"text-anchor:start;--d:0.30000000000000004s\">6 s</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"196\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"211\" text-anchor=\"middle\">adk eval · adk web · A2A</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Five languages including Java and Go",
+      "Workflow agents for structure",
+      "Evaluation and dev UI built in",
+      "A2A and Google Cloud deployment"
+    ],
+    "cons": [
+      "Leans towards Google Cloud and Gemini",
+      "Feature parity varies by language",
+      "Another event model to learn",
+      "Younger than some alternatives"
+    ],
+    "avoidWhen": [
+      "Teams wanting the thinnest possible dependency",
+      "Workloads that must avoid any cloud coupling"
+    ],
+    "tools": [
+      {
+        "name": "Google ADK",
+        "type": "Open source",
+        "what": "Agents and workflow agents",
+        "url": "https://adk.dev"
+      },
+      {
+        "name": "ADK for Java",
+        "type": "Open source",
+        "what": "Java version",
+        "url": "https://github.com/google/adk-java"
+      },
+      {
+        "name": "ADK for Go",
+        "type": "Open source",
+        "what": "Go version",
+        "url": "https://github.com/google/adk-go"
+      },
+      {
+        "name": "A2A protocol",
+        "type": "Open standard",
+        "what": "Agent-to-agent communication",
+        "url": "https://a2a-protocol.org"
+      },
+      {
+        "name": "Google Cloud agent runtime",
+        "type": "Managed service",
+        "what": "Deploy and scale agents",
+        "url": "https://cloud.google.com/products/agent-builder"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional insurer with a Java back office on Google Cloud wants claims-intake agents with parallel checks. Set the needs and see when Google ADK is the best fit.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. Google ADK ranks 5 of 7."
+      },
+      {
+        "k": "java",
+        "name": "Java team on Google Cloud",
+        "expect": "Top pick: Google ADK."
+      },
+      {
+        "k": "bank",
+        "name": "Bank case with approvals",
+        "expect": "Top pick: LangGraph. Google ADK ranks 4 of 7."
+      },
+      {
+        "k": "dotnet",
+        "name": ".NET shop on Azure",
+        "expect": "Top pick: CrewAI / MS Agent Framework. Google ADK is ruled out."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make Google ADK the top pick.",
+        "hint": "Languages, cloud and multi-agent structure."
+      },
+      {
+        "k": "jvm",
+        "text": "Make it top for a Java or Go team.",
+        "hint": "Start from the Java scenario."
+      },
+      {
+        "k": "gcp",
+        "text": "Make it top for a Python team on Google Cloud.",
+        "hint": "Cloud alone may not be enough; what else does ADK do well?"
+      }
+    ],
+    "tools": [
+      {
+        "n": "Google ADK",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "LLM agents and workflow agents.",
+        "ex": "Claims intake with parallel checks.",
+        "pros": [
+          "Five languages",
+          "Eval and dev UI"
+        ],
+        "cons": [
+          "Google-leaning",
+          "Parity varies"
+        ],
+        "url": "https://adk.dev"
+      },
+      {
+        "n": "ADK for Java",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "ADK in Java.",
+        "ex": "Agents inside the insurer’s Java services.",
+        "pros": [
+          "Fits JVM shops",
+          "A2A support"
+        ],
+        "cons": [
+          "Fewer examples",
+          "Younger"
+        ],
+        "url": "https://github.com/google/adk-java"
+      },
+      {
+        "n": "A2A protocol",
+        "type": "Open standard",
+        "start": 2,
+        "prod": 3,
+        "best": "Agent-to-agent communication.",
+        "ex": "Call a partner’s agent built in another framework.",
+        "pros": [
+          "Cross-framework",
+          "Open governance"
+        ],
+        "cons": [
+          "Young standard",
+          "Security design needed"
+        ],
+        "url": "https://a2a-protocol.org"
+      },
+      {
+        "n": "Google Cloud agent runtime",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 3,
+        "best": "Deploy and scale ADK agents.",
+        "ex": "Host intake agents with sessions managed.",
+        "pros": [
+          "Managed",
+          "Integrated monitoring"
+        ],
+        "cons": [
+          "Cloud coupling",
+          "Cost"
+        ],
+        "url": "https://cloud.google.com/products/agent-builder"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We are a Java or Go shop",
+        "tool": "Google ADK"
+      },
+      {
+        "need": "We run on Google Cloud",
+        "tool": "Google ADK"
+      },
+      {
+        "need": "We need durable approvals in Python",
+        "tool": "Compare with LangGraph"
+      }
+    ],
+    "goals": [
+      "See where multi-language frameworks fit",
+      "Weigh cloud alignment",
+      "Compose agents with workflow agents"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional insurer with a Java back office and Google Cloud hosting built its claims-intake agents with ADK. A SequentialAgent runs document checks, then a ParallelAgent calls three verification agents at once, then a summary agent. The Java services expose agents over A2A, and the team tests changes with adk eval before deploying to Cloud Run.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Intake pipelines with parallel checks"
+      },
+      {
+        "industry": "Banking",
+        "use": "Java and Go shops adding agents to existing services"
+      },
+      {
+        "industry": "Retail",
+        "use": "Gemini-based assistants on Google Cloud"
+      }
+    ],
+    "analogy": "An assembly line with stations: some in a row, some side by side, one that repeats until the part passes inspection, and each station staffed by a skilled worker.",
+    "library": {
+      "name": "Google Agent Development Kit",
+      "what": "LLM agents plus sequential, parallel and loop workflow agents, in Python, TypeScript, Go, Java and Kotlin.",
+      "install": "pip install google-adk"
+    },
+    "note": "Swap InMemorySessionService for a persistent one in production. Other models are available through adapters; check current model names.",
+    "samples": [
+      {
+        "file": "upi_agent_adk.py",
+        "language": "python",
+        "code": "from google.adk.agents import Agent\nfrom google.adk.runners import Runner\nfrom google.adk.sessions import InMemorySessionService\nfrom google.genai import types\n\ndef get_transaction(utr: str) -> dict:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return bank.transactions.get(utr)\n\ndef raise_dispute(utr: str, reason: str) -> dict:\n    \"\"\"Raise a dispute for a failed UPI debit. Needs human approval.\"\"\"\n    if not approvals.request(utr, reason):\n        return {\"status\": \"rejected\"}\n    return {\"status\": \"raised\", \"reference\": bank.disputes.create(utr, reason)}\n\nagent = Agent(name=\"upi_disputes\", model=\"gemini-flash-latest\",\n              instruction=SYSTEM, tools=[get_transaction, raise_dispute])\n\nrunner = Runner(agent=agent, app_name=\"support\",\n                session_service=InMemorySessionService())\n\nasync def ask(user_id: str, question: str):\n    session = await runner.session_service.create_session(app_name=\"support\", user_id=user_id)\n    message = types.Content(role=\"user\", parts=[types.Part(text=question)])\n    async for event in runner.run_async(user_id=user_id, session_id=session.id,\n                                        new_message=message):\n        if event.is_final_response():\n            return event.content.parts[0].text"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Three independent verification checks take 4, 6 and 5 seconds. How many seconds does running them in a ParallelAgent save compared with a SequentialAgent?",
+    "answer": "Sequentially they take 4 + 6 + 5 = 15 seconds; in parallel the slowest decides, 6 seconds. That saves 9 seconds per case, provided the checks really are independent.",
+    "expected": {
+      "value": 9,
+      "tolerance": 0.1,
+      "label": "seconds ="
+    },
+    "interview": [
+      {
+        "question": "What are workflow agents in ADK?",
+        "answer": "Agents that orchestrate other agents without calling a model themselves: a SequentialAgent runs sub-agents in order, a ParallelAgent runs them at once, and a LoopAgent repeats until a condition is met. They give deterministic structure around LLM agents that decide within each step."
+      },
+      {
+        "question": "Why might a bank choose ADK?",
+        "answer": "If it runs on Google Cloud or uses Gemini, or its engineers work in Java or Go, since ADK supports Python, TypeScript, Go, Java and Kotlin. Built-in evaluation, a development UI and A2A support help too. Feature parity varies by language, so check the features you need in yours."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Parallel agents that share mutable state",
+        "fix": "Parallelise only independent checks"
+      },
+      {
+        "mistake": "Assuming identical features in every language",
+        "fix": "Check the docs for your language"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ad01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What are workflow agents in ADK?",
+      "options": [
+        "Agents that orchestrate sub-agents in sequence, in parallel or in a loop",
+        "Agents that call models only",
+        "Human reviewers",
+        "Databases"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Deterministic structure."
+    },
+    {
+      "id": "ad02",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which languages does ADK support?",
+      "options": [
+        "Python, TypeScript, Go, Java and Kotlin",
+        "Only Python",
+        "Only Go",
+        "Only .NET"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Five languages."
+    },
+    {
+      "id": "ad03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Checks of 4, 6 and 5 s run in a ParallelAgent. Total time?",
+      "options": [
+        "4 s",
+        "6 s",
+        "15 s",
+        "5 s"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The slowest decides."
+    },
+    {
+      "id": "ad04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What holds state between turns?",
+      "options": [
+        "The session service",
+        "The model",
+        "The tool",
+        "The prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Use a persistent one in production."
+    },
+    {
+      "id": "ad05",
+      "kind": "multi",
+      "industry": "Retail",
+      "question": "Which are built into ADK’s tooling? Select all that apply.",
+      "options": [
+        "A development web UI",
+        "An evaluation command",
+        "A credit bureau",
+        "A payment gateway"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "adk web and adk eval."
+    },
+    {
+      "id": "ad06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which protocol lets ADK agents call agents built elsewhere?",
+      "options": [
+        "A2A",
+        "SMTP",
+        "FTP",
+        "gRPC only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Agent-to-agent."
+    },
+    {
+      "id": "ad07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When is ADK a natural fit?",
+      "options": [
+        "Java or Go teams, or teams on Google Cloud",
+        "Only .NET teams",
+        "Claude-only workspace agents",
+        "No-code users"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Language and cloud alignment."
+    },
+    {
+      "id": "ad08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is wrong with putting dependent steps in a ParallelAgent?",
+      "options": [
+        "Later steps don’t get the earlier steps’ output",
+        "Nothing",
+        "It is slower",
+        "It costs more tokens only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Parallelise independent steps."
+    },
+    {
+      "id": "ad09",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Which model does ADK favour by default?",
+      "options": [
+        "Gemini, with others through adapters",
+        "Only local models",
+        "Only Claude",
+        "Only OpenAI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Model-agnostic, Gemini-first."
+    },
+    {
+      "id": "ad10",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are ADK workflow agents? Select all that apply.",
+      "options": [
+        "SequentialAgent",
+        "LoopAgent",
+        "HandoffAgent",
+        "CrewAgent"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "And ParallelAgent."
+    },
+    {
+      "id": "ad11",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does ADK 2.0 add, per its docs?",
+      "options": [
+        "Graph workflows",
+        "A new language model",
+        "Fine-tuning",
+        "A database"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Deterministic logic with AI reasoning."
+    },
+    {
+      "id": "ad12",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How do you know a run has finished?",
+      "options": [
+        "An event reports is_final_response()",
+        "The first event arrives",
+        "After 10 seconds",
+        "When CPU drops"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Events stream until final."
+    },
+    {
+      "id": "ad13",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Where do ADK agents deploy naturally?",
+      "options": [
+        "Cloud Run and Google’s managed agent runtime",
+        "Only on laptops",
+        "Only on Azure",
+        "Only on mainframes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Or any container platform."
+    },
+    {
+      "id": "ad14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Is feature parity guaranteed across ADK languages?",
+      "options": [
+        "No, check your language’s docs",
+        "Yes, always",
+        "Only Python has features",
+        "Only Go has features"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Parity varies."
+    },
+    {
+      "id": "ad15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How does a plain Python function become an ADK tool?",
+      "options": [
+        "Pass it in tools; type hints and docstring describe it",
+        "Rewrite it in YAML",
+        "Fine-tune the model",
+        "It cannot"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No decorator needed."
+    },
+    {
+      "id": "ad16",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Python team on Google Cloud with several agents needed. Likely top pick?",
+      "options": [
+        "Google ADK",
+        "AutoGen",
+        "Claude Agent SDK",
+        "A plain loop"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Cloud plus multi-agent."
+    },
+    {
+      "id": "ad17",
+      "kind": "multi",
+      "industry": "Retail",
+      "question": "Which are risks with ADK? Select all that apply.",
+      "options": [
+        "Coupling deployment to one cloud unintentionally",
+        "Assuming identical features in every language",
+        "No Python support",
+        "No tools"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Choose deliberately."
+    },
+    {
+      "id": "ad18",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What does a LoopAgent do?",
+      "options": [
+        "Repeats sub-agents until a condition is met",
+        "Runs once",
+        "Runs in parallel",
+        "Hands off to humans"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Iterate to done."
+    },
+    {
+      "id": "ad19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When is ADK ruled out in the chooser?",
+      "options": [
+        "When the team needs .NET",
+        "When the team uses Java",
+        "When on Google Cloud",
+        "When using Gemini"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No .NET version."
+    },
+    {
+      "id": "ad20",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which runs the agent and yields events?",
+      "options": [
+        "Runner",
+        "SessionService",
+        "LlmAgent",
+        "A2A"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "runner.run_async."
+    }
+  ]
+}

@@ -1,0 +1,804 @@
+{
+  "id": "sandbox",
+  "moduleSlug": "security",
+  "name": "Sandboxing and Egress Control",
+  "shortName": "Sandboxing",
+  "question": "If the agent runs code, what can that code touch?",
+  "summary": "Code written by a model, especially after reading untrusted content, must be treated as hostile. Run it in an isolated sandbox, such as a gVisor container or a Firecracker microVM, with no host secrets or mounts, CPU, memory and time limits, short-lived scoped credentials, and network access only through an egress proxy with an allowlist. Then a successful injection can only reach what the sandbox allows.",
+  "useCases": [
+    "Code interpreters and data-analysis tools",
+    "Coding agents that run tests, installs or scripts",
+    "Browser and computer-use agents"
+  ],
+  "keyFacts": {
+    "label": "Layers",
+    "items": [
+      {
+        "term": "Isolation",
+        "detail": "plain container (shared kernel) < gVisor (user-space kernel) < microVM (own kernel)"
+      },
+      {
+        "term": "Credentials",
+        "detail": "no host environment variables; short-lived tokens scoped to one task"
+      },
+      {
+        "term": "Network",
+        "detail": "none, or an egress proxy with a domain allowlist"
+      },
+      {
+        "term": "Limits",
+        "detail": "CPU, memory, disk and wall-clock time"
+      },
+      {
+        "term": "Ephemerality",
+        "detail": "a fresh sandbox per task, destroyed afterwards"
+      },
+      {
+        "term": "File system",
+        "detail": "no host mounts; read-only inputs, write-only outputs"
+      }
+    ]
+  },
+  "steps": [
+    "Run model-written code only inside an isolated sandbox",
+    "Strip host secrets; issue a scoped, short-lived token per task",
+    "Send all traffic through an allowlisting egress proxy",
+    "Set resource limits and destroy the sandbox after each task"
+  ],
+  "pitfalls": [
+    "Running generated code in the application’s own container",
+    "Passing the service’s environment variables into the sandbox",
+    "Open outbound network “because pip needs it”"
+  ],
+  "tools": [
+    "E2B",
+    "gVisor",
+    "Firecracker",
+    "Modal sandboxes",
+    "Docker with --network none"
+  ],
+  "remember": "Treat generated code as hostile. Isolate, starve, allowlist.",
+  "caption": "Illustrative: code in a microVM with a scoped token; the egress proxy allows pypi.org and blocks everything else.",
+  "comparison": {
+    "scope": "Code execution and browsing",
+    "cost": 3,
+    "needs": "Isolation infrastructure",
+    "best": "Secrets and hosts exposed to code"
+  },
+  "diagram": {
+    "file": "diagrams/sandbox.svg"
+  },
+  "lesson": {
+    "file": "run_untrusted.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import docker, pathlib, tempfile",
+        "steps": []
+      },
+      {
+        "text": "client = docker.from_env()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_untrusted(code: str, data_file: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    work = pathlib.Path(tempfile.mkdtemp())",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    (work / \"task.py\").write_text(code)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return client.containers.run(",
+        "steps": []
+      },
+      {
+        "text": "        \"python:3.12-slim\", [\"timeout\", \"30\", \"python\", \"/work/task.py\"],",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        runtime=\"runsc\",                     # gVisor user-space kernel",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        network_mode=\"none\",                 # or an allowlisting proxy",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        mem_limit=\"256m\", nano_cpus=1_000_000_000, pids_limit=64,",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        read_only=True, cap_drop=[\"ALL\"], user=\"65534:65534\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        environment={},                      # no host secrets",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        volumes={str(work): {\"bind\": \"/work\", \"mode\": \"ro\"},",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                 data_file: {\"bind\": \"/data/tx.csv\", \"mode\": \"ro\"}},",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        remove=True,                         # destroyed after the task",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    ).decode()",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "A fresh sandbox per task",
+        "text": "Every task gets a new working directory and a new container. Nothing written by one task survives to the next."
+      },
+      {
+        "title": "Isolate the kernel",
+        "text": "The gVisor runtime, runsc, intercepts system calls in a user-space kernel, so code that tries a kernel exploit hits gVisor instead of the host. A microVM would isolate further."
+      },
+      {
+        "title": "Cut the network",
+        "text": "network_mode none means injected code has no way to send data out. If installs are needed, route them through a proxy that allows only your package mirror."
+      },
+      {
+        "title": "Limit resources",
+        "text": "256 MB of memory, one CPU, 64 processes and a 30-second timeout stop crypto-mining and fork bombs."
+      },
+      {
+        "title": "No secrets, no writes",
+        "text": "An empty environment, all capabilities dropped, an unprivileged user and read-only mounts: there is nothing to steal and nowhere to hide."
+      },
+      {
+        "title": "Destroy it afterwards",
+        "text": "remove=True deletes the container when the task ends, so an attacker cannot leave anything behind for later."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"220\" height=\"134\" rx=\"8\"/><text class=\"sb\" x=\"18\" y=\"22\" style=\"text-anchor:start\">host</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"40\" y=\"98\" width=\"156\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"118\" y=\"113\" text-anchor=\"middle\">task.py (fresh)</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"22\" y=\"30\" width=\"192\" height=\"100\" rx=\"8\" style=\"fill:none\"/><text class=\"sb\" x=\"32\" y=\"46\" style=\"text-anchor:start\">gVisor (runsc)</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx fail\" x=\"248\" y=\"20\" width=\"104\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"300\" y=\"39\">Network</text><text class=\"sb\" x=\"300\" y=\"54\">none</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"248\" y=\"72\" width=\"104\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"300\" y=\"87\" text-anchor=\"middle\">attacker ✗</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"40\" y=\"56\" width=\"76\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"78\" y=\"70\" text-anchor=\"middle\">256 MB</text></g><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"120\" y=\"56\" width=\"76\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"158\" y=\"70\" text-anchor=\"middle\">30 s</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"248\" y=\"102\" width=\"104\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"117\" text-anchor=\"middle\">env: empty</text></g><text class=\"sb a\" x=\"8\" y=\"160\" style=\"text-anchor:start;--d:0.1s\">read-only mounts · no capabilities · unprivileged user</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"172\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"187\" text-anchor=\"middle\">task ends → container removed</text></g><g class=\"a\" style=\"--d:0.15s\"><text class=\"tag-t\" x=\"180\" y=\"216\" style=\"text-anchor:middle;fill:var(--ink-2)\">generated code is treated as hostile</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Contains injected or buggy code whatever it tries",
+      "Makes code tools safe enough to offer at all",
+      "Limits resource abuse",
+      "Ephemeral sandboxes leave nothing behind"
+    ],
+    "cons": [
+      "Start-up latency and infrastructure cost",
+      "Some tasks need network or credentials, which must be allowed carefully",
+      "Stronger isolation (microVMs) is more work to run",
+      "Debugging inside sandboxes is harder"
+    ],
+    "avoidWhen": [
+      "Running model-written code in the application’s own process or container",
+      "Passing host environment variables or long-lived keys into the sandbox"
+    ],
+    "tools": [
+      {
+        "name": "E2B",
+        "type": "Open source, cloud",
+        "what": "Hosted sandboxes for AI-generated code",
+        "url": "https://e2b.dev/docs"
+      },
+      {
+        "name": "gVisor",
+        "type": "Open source (Google)",
+        "what": "A user-space kernel runtime for containers",
+        "url": "https://gvisor.dev"
+      },
+      {
+        "name": "Firecracker",
+        "type": "Open source (AWS)",
+        "what": "Lightweight microVMs with their own kernel",
+        "url": "https://firecracker-microvm.github.io"
+      },
+      {
+        "name": "Modal sandboxes",
+        "type": "Commercial",
+        "what": "On-demand sandboxes with network controls",
+        "url": "https://modal.com/docs/guide/sandbox"
+      },
+      {
+        "name": "Docker",
+        "type": "Open source",
+        "what": "Containers with network, resource and capability limits",
+        "url": "https://docs.docker.com/engine/security/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A spending-analysis assistant writes Python. A prompt injection makes it write hostile code that tries to read secrets, send data out, mine crypto and escape to the host. The same tool must still install packages and read the customer’s transactions. Build the sandbox.",
+    "controls": [
+      "Choose the isolation: the app’s own process, a plain container, a gVisor container or a Firecracker microVM.",
+      "Choose the network (open, egress proxy or none) and the credentials (host variables, a scoped token or none).",
+      "Tick resource limits, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Hostile code tries to…",
+        "meaning": "Each of the four attacks: succeeds or blocked."
+      },
+      {
+        "name": "Real tasks",
+        "meaning": "Whether installing a package and reading this customer’s transactions still work."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "In the app process",
+        "expect": "All four attacks succeed; both tasks work."
+      },
+      {
+        "k": "container",
+        "name": "Plain container, open network",
+        "expect": "Only crypto-mining is blocked, by the limits; secrets and data still leave."
+      },
+      {
+        "k": "locked",
+        "name": "gVisor, no network, no credentials",
+        "expect": "All four attacks blocked, but neither task works."
+      },
+      {
+        "k": "useful",
+        "name": "MicroVM, egress proxy, scoped token",
+        "expect": "All four attacks blocked, and both tasks work."
+      }
+    ],
+    "missions": [
+      {
+        "k": "secrets",
+        "text": "Stop the code reading secrets while the bank API task still works.",
+        "hint": "Give it a scoped token instead of the host’s variables, outside the app process."
+      },
+      {
+        "k": "egress",
+        "text": "Stop data leaving while package installs still work.",
+        "hint": "Allow only the package mirror."
+      },
+      {
+        "k": "all",
+        "text": "Block all four attacks and keep both tasks working.",
+        "hint": "Strong isolation, an egress proxy, a scoped token and limits."
+      }
+    ],
+    "tools": [
+      {
+        "n": "E2B",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Hosted sandboxes built for AI-generated code.",
+        "ex": "Run each analysis in a fresh E2B sandbox and stream the output back.",
+        "pros": [
+          "Fast to adopt",
+          "Firecracker-based isolation"
+        ],
+        "cons": [
+          "Hosted by default",
+          "Costs per sandbox time"
+        ],
+        "url": "https://e2b.dev/docs"
+      },
+      {
+        "n": "gVisor",
+        "type": "Open source · Google",
+        "start": 2,
+        "prod": 3,
+        "best": "A user-space kernel runtime that hardens containers.",
+        "ex": "Run model-written code with Docker’s runsc runtime.",
+        "pros": [
+          "Drop-in container runtime",
+          "Much smaller host attack surface"
+        ],
+        "cons": [
+          "Some syscall overhead",
+          "Not every workload is compatible"
+        ],
+        "url": "https://gvisor.dev"
+      },
+      {
+        "n": "Firecracker",
+        "type": "Open source · AWS",
+        "start": 1,
+        "prod": 3,
+        "best": "MicroVMs with their own kernel that start in a fraction of a second.",
+        "ex": "Give every untrusted job its own microVM.",
+        "pros": [
+          "VM-level isolation",
+          "Fast start-up"
+        ],
+        "cons": [
+          "More to operate",
+          "Linux KVM hosts only"
+        ],
+        "url": "https://firecracker-microvm.github.io"
+      },
+      {
+        "n": "Modal sandboxes",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "On-demand sandboxes with network and resource controls.",
+        "ex": "Spin up a sandbox per request with outbound network blocked.",
+        "pros": [
+          "Managed",
+          "Simple API"
+        ],
+        "cons": [
+          "Vendor dependency",
+          "Costs at scale"
+        ],
+        "url": "https://modal.com/docs/guide/sandbox"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want it working today",
+        "tool": "E2B or Modal sandboxes"
+      },
+      {
+        "need": "I run my own Kubernetes",
+        "tool": "gVisor with network policies and an egress proxy"
+      },
+      {
+        "need": "The code may be actively hostile",
+        "tool": "Firecracker microVMs"
+      }
+    ],
+    "goals": [
+      "Treat generated code as hostile",
+      "Allow narrowly instead of blocking everything",
+      "Know the isolation ladder: container, gVisor, microVM"
+    ]
+  },
+  "practice": {
+    "scenario": "A fintech’s spending-analysis assistant writes Python to chart a customer’s transactions. The code used to run inside the API container, next to the service’s database credentials. Now each task runs in a fresh gVisor container with no network, 256 MB of memory, one CPU, a 30-second limit and only the transaction file mounted read-only.",
+    "industries": [
+      {
+        "industry": "Fintech",
+        "use": "Run model-written analysis code on transaction files in isolation"
+      },
+      {
+        "industry": "EdTech",
+        "use": "Execute student and model code in a coding tutor without host access"
+      },
+      {
+        "industry": "Data platforms",
+        "use": "Let an analytics agent run SQL and Python against a copy, never production"
+      }
+    ],
+    "analogy": "A bomb-disposal box. You assume what is inside might go off, so it is opened only where it cannot hurt anything else.",
+    "library": {
+      "name": "Docker SDK for Python + gVisor",
+      "what": "Start a throwaway container per task with gVisor’s runsc runtime, no network and strict limits.",
+      "install": "pip install docker"
+    },
+    "note": "If the code must install packages, route it through an egress proxy that allows only your package mirror instead of opening the network.",
+    "samples": [
+      {
+        "file": "run_untrusted.py",
+        "language": "python",
+        "code": "import docker, pathlib, tempfile\n\nclient = docker.from_env()\n\ndef run_untrusted(code: str, data_file: str) -> str:\n    work = pathlib.Path(tempfile.mkdtemp())\n    (work / \"task.py\").write_text(code)\n    return client.containers.run(\n        \"python:3.12-slim\", [\"timeout\", \"30\", \"python\", \"/work/task.py\"],\n        runtime=\"runsc\",                    # gVisor: a user-space kernel\n        network_mode=\"none\",                # no network at all\n        mem_limit=\"256m\", nano_cpus=1_000_000_000, pids_limit=64,\n        read_only=True, cap_drop=[\"ALL\"], user=\"65534:65534\",\n        environment={},                     # no host secrets\n        volumes={str(work): {\"bind\": \"/work\", \"mode\": \"ro\"},\n                 data_file: {\"bind\": \"/data/tx.csv\", \"mode\": \"ro\"}},\n        remove=True, stdout=True, stderr=True,\n    ).decode()"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Code tasks in your sandbox make 2,000 outbound requests in a day. 1,950 go to your package mirror, which the egress proxy allows; the rest go elsewhere and are blocked. What share of requests is blocked, in percent?",
+    "answer": "50 ÷ 2,000 = 2.5%. Each blocked request is worth reviewing: some are harmless, such as telemetry, but some may be injected code trying to send data out.",
+    "expected": {
+      "value": 2.5,
+      "tolerance": 0.01,
+      "label": "% blocked ="
+    },
+    "interview": [
+      {
+        "question": "Why is a plain container not always enough for untrusted code?",
+        "answer": "Containers share the host kernel, so a kernel vulnerability can let code escape. gVisor puts a user-space kernel in between, and a microVM such as Firecracker gives the code its own kernel, which is a much stronger boundary. The choice depends on how hostile the code may be."
+      },
+      {
+        "question": "What should a sandbox for agent code never contain?",
+        "answer": "Host secrets such as environment variables and credential files, host file-system mounts other than the specific inputs, and open network access. Give it a short-lived token scoped to the task, if any, and route network traffic through an allowlisting proxy."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Running generated code in the application container",
+        "fix": "Use a fresh, isolated sandbox per task"
+      },
+      {
+        "mistake": "Opening the network so package installs work",
+        "fix": "Allow only your package mirror through an egress proxy"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "sb01",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Where should model-written analysis code run?",
+      "options": [
+        "Inside the API server process",
+        "In an isolated sandbox with no host secrets",
+        "On a developer laptop",
+        "In the database"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Treat generated code as hostile and isolate it."
+    },
+    {
+      "id": "sb02",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Why is a plain container a weaker boundary than a microVM?",
+      "options": [
+        "Containers are slower",
+        "Containers share the host kernel, so a kernel exploit can escape",
+        "Containers cannot run Python",
+        "MicroVMs have no kernel"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "MicroVMs give code its own kernel."
+    },
+    {
+      "id": "sb03",
+      "kind": "single",
+      "industry": "Data platforms",
+      "question": "What does gVisor’s runsc runtime do?",
+      "options": [
+        "Encrypts traffic",
+        "Handles system calls in a user-space kernel, shielding the host kernel",
+        "Speeds up GPUs",
+        "Caches packages"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "gVisor narrows the host attack surface."
+    },
+    {
+      "id": "sb04",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Of 2,000 outbound requests from sandboxed code, 1,950 go to the package mirror (allowed) and the rest are blocked. What share is blocked?",
+      "options": [
+        "0.5%",
+        "2.5%",
+        "5%",
+        "25%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "50 ÷ 2,000 = 2.5%."
+    },
+    {
+      "id": "sb05",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which should never be passed into a sandbox for untrusted code? Select all that apply.",
+      "options": [
+        "The service’s environment variables",
+        "Long-lived cloud credentials",
+        "A read-only copy of the input file",
+        "A 15-minute token scoped to one task"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Host secrets and long-lived keys must stay out; scoped inputs are fine."
+    },
+    {
+      "id": "sb06",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Package installs fail because the sandbox has no network. What is the best fix?",
+      "options": [
+        "Open the network",
+        "Route traffic through an egress proxy that allows only the package mirror",
+        "Run code on the host",
+        "Disable the sandbox for installs"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Allow narrowly instead of opening everything."
+    },
+    {
+      "id": "sb07",
+      "kind": "single",
+      "industry": "Data platforms",
+      "question": "Hostile code starts a crypto miner inside the sandbox. What stops it?",
+      "options": [
+        "Network isolation",
+        "CPU, memory and time limits",
+        "Read-only mounts",
+        "Scanning the prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Resource limits end abuse quickly."
+    },
+    {
+      "id": "sb08",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Why destroy the sandbox after each task?",
+      "options": [
+        "To save disk only",
+        "So nothing an attacker leaves behind survives to a later task",
+        "To reset the model",
+        "To clear the cache"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Ephemeral sandboxes deny persistence."
+    },
+    {
+      "id": "sb09",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which settings harden a Docker-run sandbox? Select all that apply.",
+      "options": [
+        "network_mode none, or an egress proxy",
+        "cap_drop ALL and an unprivileged user",
+        "Mounting the host’s home directory read-write",
+        "Passing the Docker socket into the container"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Removing network, capabilities and privileges helps; host mounts and the Docker socket give escape routes."
+    },
+    {
+      "id": "sb10",
+      "kind": "single",
+      "industry": "Browser agents",
+      "question": "A browser agent runs in a sandbox with open internet. Which risk remains largest?",
+      "options": [
+        "Crypto-mining",
+        "Visited pages injecting instructions and data leaving through the browser",
+        "Disk usage",
+        "Slow rendering"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Browsing is untrusted input and an outbound channel at once."
+    },
+    {
+      "id": "sb11",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Which isolation is strongest for actively hostile code?",
+      "options": [
+        "Plain container",
+        "gVisor container",
+        "Firecracker microVM",
+        "The application process"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A microVM has its own kernel behind a hypervisor."
+    },
+    {
+      "id": "sb12",
+      "kind": "multi",
+      "industry": "Data platforms",
+      "question": "An analytics agent needs to query data. Which designs are safer? Select all that apply.",
+      "options": [
+        "Query a read-only replica or copy, never production",
+        "Use a short-lived credential scoped to that dataset",
+        "Use the admin connection string",
+        "Allow any SQL, including writes, on production"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Read-only, scoped access limits damage."
+    },
+    {
+      "id": "sb13",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Which ASI entry covers an agent or sandbox boundary failing so that arbitrary code runs?",
+      "options": [
+        "ASI02",
+        "ASI05",
+        "ASI07",
+        "ASI09"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "ASI05 is unexpected code execution."
+    },
+    {
+      "id": "sb14",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Which hosted service offers sandboxes built for AI-generated code?",
+      "options": [
+        "E2B",
+        "Presidio",
+        "MLflow",
+        "Evidently"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "E2B provides isolated sandboxes for model-written code."
+    },
+    {
+      "id": "sb15",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A code sandbox must install packages and call one internal API. Which configuration fits? Select all that apply.",
+      "options": [
+        "An egress proxy allowing only the package mirror and that API",
+        "A scoped, short-lived token for the API",
+        "Open internet for simplicity",
+        "The service’s own API keys"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Narrow egress plus a scoped token keeps both tasks working safely."
+    },
+    {
+      "id": "sb16",
+      "kind": "single",
+      "industry": "Data platforms",
+      "question": "Why mount inputs read-only?",
+      "options": [
+        "It is faster",
+        "Hostile code cannot tamper with or plant files in the inputs",
+        "It saves memory",
+        "It enables caching"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Read-only mounts prevent tampering."
+    },
+    {
+      "id": "sb17",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the main risk of running generated code in the application’s own container?",
+      "options": [
+        "Slower responses",
+        "The code can read the service’s secrets and reach everything the service can",
+        "Higher token cost",
+        "Worse answers"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It inherits every privilege of the application."
+    },
+    {
+      "id": "sb18",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "Which are typical resource limits for a code sandbox? Select all that apply.",
+      "options": [
+        "A wall-clock timeout",
+        "A memory cap",
+        "Unlimited processes",
+        "Unlimited disk"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Time and memory caps, plus process and disk limits, contain abuse."
+    },
+    {
+      "id": "sb19",
+      "kind": "single",
+      "industry": "Browser agents",
+      "question": "Which statement is correct about sandboxing and prompt injection?",
+      "options": [
+        "Sandboxing prevents injection",
+        "Sandboxing limits what injected code can reach, but does not stop the injection itself",
+        "Sandboxing replaces input filtering",
+        "Sandboxing only matters without a system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It contains damage; other layers prevent the steering."
+    },
+    {
+      "id": "sb20",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A red-team test shows sandboxed code can still reach an attacker’s server. Which fixes apply? Select all that apply.",
+      "options": [
+        "Route all traffic through an allowlisting proxy",
+        "Block direct outbound connections at the network layer",
+        "Increase the timeout",
+        "Give the sandbox more memory"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Egress must be forced through the allowlist."
+    }
+  ]
+}

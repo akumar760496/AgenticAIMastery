@@ -1,0 +1,791 @@
+{
+  "id": "euai",
+  "moduleSlug": "governance",
+  "name": "EU AI Act Risk Tiers",
+  "shortName": "EU AI Act",
+  "question": "Does the EU AI Act apply to us, and at what tier?",
+  "summary": "The EU AI Act classifies AI systems by risk. A few practices are prohibited; high-risk systems, including creditworthiness scoring of individuals and life and health insurance pricing, need risk management, data governance, logging, human oversight and conformity assessment; chatbots and generated content carry transparency duties; everything else is minimal risk. It reaches Indian firms whose systems are used in the EU or whose outputs are used there. The 2026 Digital Omnibus moved Annex III high-risk duties to 2 December 2027.",
+  "useCases": [
+    "Serving EU residents or EU clients",
+    "Credit, insurance or hiring decisions",
+    "Global banks and brokers with EU operations"
+  ],
+  "keyFacts": {
+    "label": "Tiers and dates",
+    "items": [
+      {
+        "term": "Prohibited",
+        "detail": "since 2 Feb 2025; fines up to €35m or 7% of turnover"
+      },
+      {
+        "term": "High-risk (Annex III)",
+        "detail": "from 2 Dec 2027; fines up to €15m or 3%"
+      },
+      {
+        "term": "Transparency",
+        "detail": "from 2 Aug 2026: say it is AI, label synthetic content"
+      },
+      {
+        "term": "Minimal",
+        "detail": "no new duties beyond AI literacy"
+      },
+      {
+        "term": "Provider",
+        "detail": "builds or places it on the market: most duties"
+      },
+      {
+        "term": "Deployer",
+        "detail": "uses it: oversight, logs, informing people"
+      }
+    ]
+  },
+  "steps": [
+    "Check territorial scope: are EU residents affected?",
+    "Classify each use case by tier",
+    "Work out whether you are provider or deployer",
+    "Map the duties and dates, and plan backwards from them"
+  ],
+  "pitfalls": [
+    "Assuming non-EU firms are exempt",
+    "Treating fraud detection as credit scoring: it is carved out",
+    "Missing the chatbot transparency duty that already applies"
+  ],
+  "tools": [
+    "EU AI Act Service Desk and compliance checker",
+    "Harmonised standards from CEN-CENELEC JTC 21 (in progress)",
+    "ISO/IEC 42001 as a management-system base",
+    "GRC tooling for technical documentation"
+  ],
+  "remember": "Scope first, then tier, then role, then dates.",
+  "caption": "Dates reflect Regulation (EU) 2026/1744 (Digital Omnibus), in force 27 July 2026. Not legal advice.",
+  "comparison": {
+    "scope": "Systems affecting the EU",
+    "cost": 3,
+    "needs": "Scope and tier analysis",
+    "best": "Assuming it does not apply"
+  },
+  "diagram": {
+    "file": "diagrams/euai.svg"
+  },
+  "lesson": {
+    "file": "classify.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def classify(use_case, affects_eu, role):",
+        "steps": []
+      },
+      {
+        "text": "    if not affects_eu:",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        return {\"tier\": \"out of scope\"}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if use_case in PROHIBITED:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return {\"tier\": \"prohibited\", \"since\": \"2025-02-02\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    if use_case in ANNEX_III:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        duties = (PROVIDER_DUTIES if role == \"provider\"",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                  else DEPLOYER_DUTIES)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return {\"tier\": \"high-risk\", \"from\": \"2027-12-02\",",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "                \"duties\": duties}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    if use_case in TRANSPARENCY:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "        return {\"tier\": \"transparency\", \"from\": \"2026-08-02\"}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {\"tier\": \"minimal\", \"duties\": [\"AI literacy\"]}",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "Scope first",
+        "text": "The Act reaches providers and deployers outside the EU when the system’s output is used in the EU. The fintech’s scoring of students in Germany is in scope; its Indian-only book is not."
+      },
+      {
+        "title": "A few practices are banned",
+        "text": "Manipulation, exploiting vulnerabilities, social scoring and emotion recognition at work have been prohibited since 2 February 2025."
+      },
+      {
+        "title": "High-risk: Annex III",
+        "text": "Creditworthiness scoring of individuals and life and health insurance pricing are high-risk. Fraud detection is carved out of the credit category."
+      },
+      {
+        "title": "Your role sets your duties",
+        "text": "A provider builds the system and carries the heaviest duties; a deployer uses it and must keep logs, oversee it and inform people."
+      },
+      {
+        "title": "Dates after the Omnibus",
+        "text": "Regulation (EU) 2026/1744, in force 27 July 2026, moved Annex III high-risk duties to 2 December 2027. Plan backwards from that date."
+      },
+      {
+        "title": "Chatbots: say it is AI",
+        "text": "Transparency duties apply from 2 August 2026: people must know they are dealing with AI, and synthetic content must be labelled."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"21\" text-anchor=\"middle\">students in Germany: in</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"6\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"21\" text-anchor=\"middle\">Indian book: out</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"36\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"51\" text-anchor=\"middle\">prohibited · since 2 Feb 2025</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"64\" width=\"220\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"118\" y=\"79\" text-anchor=\"middle\">credit scoring: high-risk</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx pass\" x=\"234\" y=\"64\" width=\"118\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"293\" y=\"79\" text-anchor=\"middle\">fraud: not</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"94\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"109\" text-anchor=\"middle\">provider: most duties</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"94\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"109\" text-anchor=\"middle\">deployer: oversight, logs</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"139\" style=\"text-anchor:end;--d:0s\">originally</text><rect x=\"118\" y=\"129\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"129\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--soft);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"139\" style=\"text-anchor:start;--d:0.2s\">2 Aug 2026</text><text class=\"tl a\" x=\"112\" y=\"161\" style=\"text-anchor:end;--d:0.1s\">after Omnibus</text><rect x=\"118\" y=\"151\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"151\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"161\" style=\"text-anchor:start;--d:0.30000000000000004s\">2 Dec 2027</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"182\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"197\" text-anchor=\"middle\">chatbot: “You are chatting with an AI assistant”</text></g><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"226\" style=\"text-anchor:middle;fill:var(--ink-2)\">fines up to €35m or 7% for prohibited practices</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Early clarity on whether EU rules apply",
+      "Tiering avoids over-engineering low-risk systems",
+      "High-risk duties overlap with good practice",
+      "Credibility with EU partners"
+    ],
+    "cons": [
+      "Legal analysis needed for edge cases",
+      "Harmonised standards still being finalised",
+      "Provider duties are substantial",
+      "Two regimes to run in parallel with Indian rules"
+    ],
+    "avoidWhen": [
+      "Systems with no EU users or outputs",
+      "Treating every chatbot as high-risk"
+    ],
+    "tools": [
+      {
+        "name": "EU AI Act text and Omnibus",
+        "type": "Official text",
+        "what": "Regulation (EU) 2024/1689 and 2026/1744",
+        "url": "https://eur-lex.europa.eu"
+      },
+      {
+        "name": "EU AI Act Compliance Checker",
+        "type": "Web tool",
+        "what": "Questionnaire suggesting likely obligations",
+        "url": "https://artificialintelligenceact.eu/assessment/eu-ai-act-compliance-checker/"
+      },
+      {
+        "name": "European Commission AI Act pages",
+        "type": "Official guidance",
+        "what": "Guidelines, FAQs and the AI Office",
+        "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai"
+      },
+      {
+        "name": "CEN-CENELEC JTC 21",
+        "type": "Standards body",
+        "what": "Harmonised standards for the Act",
+        "url": "https://www.cencenelec.eu"
+      },
+      {
+        "name": "ISO/IEC 42001",
+        "type": "Standard",
+        "what": "Management system base for high-risk duties",
+        "url": "https://www.iso.org/standard/81230.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An Indian fintech wants to know which of its systems the EU AI Act touches, now that it lends to Indian students in Germany and serves some EU clients. Pick a use case, whether its output affects people in the EU, and your role, and see the tier, the date, the maximum fine and your duties.",
+    "controls": [
+      "Choose the AI use case.",
+      "Choose provider (you built it) or deployer (you use a vendor’s system).",
+      "Tick whether its output affects people in the EU, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Tier",
+        "meaning": "Prohibited, high-risk, transparency, minimal or out of scope."
+      },
+      {
+        "name": "Applies from",
+        "meaning": "The date the duties apply, after the Digital Omnibus."
+      },
+      {
+        "name": "Maximum fine",
+        "meaning": "The ceiling for breaching this tier’s duties."
+      },
+      {
+        "name": "Your duties",
+        "meaning": "The main duties for your role."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "EU chatbot, deployer",
+        "expect": "Transparency duties from 2 Aug 2026."
+      },
+      {
+        "k": "credit",
+        "name": "Credit scoring, provider",
+        "expect": "High-risk from 2 Dec 2027 with six provider duties."
+      },
+      {
+        "k": "fraud",
+        "name": "Fraud detection",
+        "expect": "Minimal risk: carved out of the credit-scoring category."
+      },
+      {
+        "k": "india",
+        "name": "No EU users",
+        "expect": "Out of scope for the Act; Indian rules still apply."
+      }
+    ],
+    "missions": [
+      {
+        "k": "ban",
+        "text": "Find a use case the Act prohibits.",
+        "hint": "Some practices are banned outright."
+      },
+      {
+        "k": "deployer",
+        "text": "Find a high-risk system where you are the deployer, and read your duties.",
+        "hint": "Using a vendor’s credit or insurance model."
+      },
+      {
+        "k": "out",
+        "text": "Show that a high-risk use case is out of scope when no one in the EU is affected.",
+        "hint": "Untick the EU box on a credit or insurance use."
+      }
+    ],
+    "tools": [
+      {
+        "n": "EU AI Act Compliance Checker",
+        "type": "Web tool",
+        "start": 3,
+        "prod": 2,
+        "best": "A questionnaire suggesting likely obligations.",
+        "ex": "Run each of the fintech’s systems through it before a legal review.",
+        "pros": [
+          "Quick",
+          "Free"
+        ],
+        "cons": [
+          "Not legal advice",
+          "May lag amendments"
+        ],
+        "url": "https://artificialintelligenceact.eu/assessment/eu-ai-act-compliance-checker/"
+      },
+      {
+        "n": "EUR-Lex texts",
+        "type": "Official text",
+        "start": 2,
+        "prod": 3,
+        "best": "The AI Act and the Digital Omnibus amending it.",
+        "ex": "Check Annex III wording for credit scoring and its fraud carve-out.",
+        "pros": [
+          "Authoritative",
+          "Consolidated versions"
+        ],
+        "cons": [
+          "Dense legal text",
+          "Needs interpretation"
+        ],
+        "url": "https://eur-lex.europa.eu"
+      },
+      {
+        "n": "European Commission AI Act pages",
+        "type": "Official guidance",
+        "start": 3,
+        "prod": 3,
+        "best": "Guidelines, FAQs and the AI Office’s materials.",
+        "ex": "Read the guidelines on prohibited practices and AI system definitions.",
+        "pros": [
+          "Official interpretation",
+          "Updated"
+        ],
+        "cons": [
+          "Guidance still growing",
+          "EU-centric examples"
+        ],
+        "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai"
+      },
+      {
+        "n": "ISO/IEC 42001",
+        "type": "Standard",
+        "start": 2,
+        "prod": 3,
+        "best": "A management-system base that supports high-risk duties.",
+        "ex": "Use its risk and documentation processes for the credit model.",
+        "pros": [
+          "Certifiable",
+          "Recognised internationally"
+        ],
+        "cons": [
+          "Not a presumption of conformity by itself",
+          "Cost of certification"
+        ],
+        "url": "https://www.iso.org/standard/81230.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We serve EU residents",
+        "tool": "Classify each system by tier and role"
+      },
+      {
+        "need": "Our credit model scores EU applicants",
+        "tool": "High-risk: plan for 2 Dec 2027"
+      },
+      {
+        "need": "We have a customer chatbot in the EU",
+        "tool": "Disclose it is AI from 2 Aug 2026"
+      }
+    ],
+    "goals": [
+      "Check territorial scope first",
+      "Classify systems into the four tiers",
+      "See how provider and deployer duties differ"
+    ]
+  },
+  "practice": {
+    "scenario": "An Indian fintech, fictional, offered a credit line to Indian students studying in Germany through a German partner. Its creditworthiness model now scored EU residents, which makes it a high-risk system under Annex III with the fintech as provider. Its support chatbot needed an AI disclosure from 2 August 2026, and its fraud model was carved out of the credit-scoring category. The team planned documentation, logging and human oversight back from 2 December 2027.",
+    "industries": [
+      {
+        "industry": "Cross-border lending",
+        "use": "Credit decisions about EU residents"
+      },
+      {
+        "industry": "Global broking",
+        "use": "Chatbots serving EU clients of an Indian platform"
+      },
+      {
+        "industry": "Insurtech",
+        "use": "Life and health insurance pricing for EU customers"
+      }
+    ],
+    "analogy": "Road rules by vehicle class: a bicycle, a car and a lorry all use the same roads, but the lorry needs a licence, inspections and a tachograph. Driving into another country, you follow its rules.",
+    "library": {
+      "name": "EU AI Act Compliance Checker",
+      "what": "An interactive questionnaire from the Future of Life Institute’s AI Act site that suggests your likely obligations; use it to structure a legal review, not replace one."
+    },
+    "note": "Categories are simplified; Annex III has exceptions, such as fraud detection. Dates reflect the Digital Omnibus in force from 27 July 2026.",
+    "samples": [
+      {
+        "file": "classify.py",
+        "language": "python",
+        "code": "PROHIBITED = {\"manipulation\", \"exploit_vulnerability\", \"social_scoring\",\n              \"workplace_emotion_recognition\", \"untargeted_face_scraping\"}\nANNEX_III = {\"creditworthiness\", \"life_health_insurance_pricing\", \"recruitment\",\n             \"education_access\", \"critical_infrastructure\"}\nTRANSPARENCY = {\"chatbot\", \"synthetic_content\", \"deepfake\"}\n\ndef classify(use_case: str, affects_eu: bool, role: str) -> dict:\n    if not affects_eu:\n        return {\"tier\": \"out of scope\", \"note\": \"check again if EU users are added\"}\n    if use_case in PROHIBITED:\n        return {\"tier\": \"prohibited\", \"since\": \"2025-02-02\", \"fine\": \"EUR 35m or 7%\"}\n    if use_case in ANNEX_III:\n        duties = ([\"risk management\", \"data governance\", \"technical documentation\",\n                   \"logging\", \"accuracy and robustness\", \"conformity assessment\"]\n                  if role == \"provider\" else\n                  [\"use as instructed\", \"human oversight\", \"keep logs\",\n                   \"inform affected people\", \"fundamental-rights impact assessment\"])\n        return {\"tier\": \"high-risk\", \"from\": \"2027-12-02\", \"duties\": duties}\n    if use_case in TRANSPARENCY:\n        return {\"tier\": \"transparency\", \"from\": \"2026-08-02\",\n                \"duties\": [\"tell people they are dealing with AI\", \"label synthetic content\"]}\n    return {\"tier\": \"minimal\", \"duties\": [\"AI literacy for staff\"]}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A high-risk provider breaches its obligations. The maximum fine is €15 million or 3% of worldwide annual turnover, whichever is higher. With a turnover of €800 million, what is the maximum fine, in € million?",
+    "answer": "3% of €800 million is €24 million, which is higher than €15 million, so the maximum is €24 million. For prohibited practices the ceiling rises to €35 million or 7%, which would be €56 million here.",
+    "expected": {
+      "value": 24,
+      "tolerance": 0.1,
+      "label": "€ million ="
+    },
+    "interview": [
+      {
+        "question": "Does the EU AI Act apply to an Indian company?",
+        "answer": "It can. It applies to providers placing AI systems on the EU market and to providers and deployers outside the EU when the system’s output is used in the EU. An Indian fintech scoring the creditworthiness of EU residents, or a broker serving EU clients through a chatbot, is in scope for those systems."
+      },
+      {
+        "question": "What changed with the Digital Omnibus?",
+        "answer": "Regulation (EU) 2026/1744, in force from 27 July 2026, moved the high-risk obligations for Annex III systems such as credit scoring to 2 December 2027 and for product-embedded systems to 2 August 2028. Prohibitions have applied since February 2025, and chatbot transparency duties still apply from 2 August 2026."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Assuming the Act stops at EU borders",
+        "fix": "Check whether outputs affect EU residents"
+      },
+      {
+        "mistake": "Ignoring provider versus deployer",
+        "fix": "Your duties depend on your role for each system"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "eu01",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Does the EU AI Act apply to an Indian company whose system scores EU residents’ creditworthiness?",
+      "options": [
+        "No, only EU companies",
+        "Yes, because the output is used in the EU",
+        "Only if it has an EU office",
+        "Only for images"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Territorial scope follows the output."
+    },
+    {
+      "id": "eu02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which tier is creditworthiness scoring of individuals?",
+      "options": [
+        "Prohibited",
+        "High-risk",
+        "Transparency only",
+        "Minimal"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Annex III high-risk."
+    },
+    {
+      "id": "eu03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Is fraud detection treated as high-risk credit scoring?",
+      "options": [
+        "Yes",
+        "No, it is carved out",
+        "Only above €1m",
+        "Only for banks"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Annex III excludes fraud detection."
+    },
+    {
+      "id": "eu04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "After the Digital Omnibus, when do Annex III high-risk obligations apply?",
+      "options": [
+        "2 August 2026",
+        "2 December 2027",
+        "2 August 2028",
+        "Already applied"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Moved to 2 December 2027."
+    },
+    {
+      "id": "eu05",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "Which are prohibited practices? Select all that apply.",
+      "options": [
+        "Emotion recognition of employees at work",
+        "Exploiting vulnerabilities to distort behaviour harmfully",
+        "A customer-support chatbot",
+        "A spam filter"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Both are banned; chatbots and spam filters are not."
+    },
+    {
+      "id": "eu06",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the maximum fine for prohibited practices?",
+      "options": [
+        "€7.5m or 1%",
+        "€15m or 3%",
+        "€35m or 7% of turnover",
+        "€1m"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The highest tier of fines."
+    },
+    {
+      "id": "eu07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A chatbot for EU clients: what applies from 2 August 2026?",
+      "options": [
+        "Conformity assessment",
+        "Telling people they are interacting with AI",
+        "Nothing",
+        "A ban"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Transparency duties."
+    },
+    {
+      "id": "eu08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "You use a vendor’s high-risk credit model. Your role?",
+      "options": [
+        "Provider",
+        "Deployer",
+        "Importer",
+        "Notified body"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Deployers use a system under their authority."
+    },
+    {
+      "id": "eu09",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which are provider duties for high-risk systems? Select all that apply.",
+      "options": [
+        "Risk management system",
+        "Technical documentation",
+        "Only a privacy notice",
+        "No logging"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Plus data governance, logging, robustness and conformity."
+    },
+    {
+      "id": "eu10",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When did the prohibitions start to apply?",
+      "options": [
+        "2 February 2025",
+        "2 August 2026",
+        "2 December 2027",
+        "2030"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "February 2025."
+    },
+    {
+      "id": "eu11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Is life and health insurance pricing for individuals high-risk?",
+      "options": [
+        "Yes, under Annex III",
+        "No",
+        "Only for companies",
+        "Only if automated fully"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Listed in Annex III."
+    },
+    {
+      "id": "eu12",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the maximum fine for breaching high-risk obligations?",
+      "options": [
+        "€35m or 7%",
+        "€15m or 3% of turnover",
+        "€500k",
+        "None"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The middle tier."
+    },
+    {
+      "id": "eu13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which deployers of high-risk systems must do a fundamental-rights impact assessment?",
+      "options": [
+        "All software firms",
+        "Public bodies and certain private deployers such as banks and insurers for credit and insurance",
+        "Only hospitals",
+        "Nobody"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Including credit and insurance use cases."
+    },
+    {
+      "id": "eu14",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "When did the Digital Omnibus enter into force?",
+      "options": [
+        "27 July 2026",
+        "1 January 2025",
+        "2 December 2027",
+        "It is still a proposal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Regulation (EU) 2026/1744, 27 July 2026."
+    },
+    {
+      "id": "eu15",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An internal coding assistant used by staff in India only. EU AI Act tier?",
+      "options": [
+        "High-risk",
+        "Out of scope",
+        "Prohibited",
+        "Transparency"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "No EU users or outputs."
+    },
+    {
+      "id": "eu16",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What duty applies to providers and deployers of all AI systems since February 2025?",
+      "options": [
+        "AI literacy for staff",
+        "Conformity assessment",
+        "Registration",
+        "Watermarking"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Article 4 AI literacy."
+    },
+    {
+      "id": "eu17",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are deployer duties for high-risk systems? Select all that apply.",
+      "options": [
+        "Assign human oversight",
+        "Keep automatically generated logs",
+        "Write the technical documentation",
+        "Run the conformity assessment"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Documentation and conformity are provider duties."
+    },
+    {
+      "id": "eu18",
+      "kind": "single",
+      "industry": "Insurtech",
+      "question": "What is the first question to ask about the EU AI Act?",
+      "options": [
+        "Which model is fastest",
+        "Are people in the EU affected?",
+        "What colour is the UI",
+        "Which cloud"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Scope first."
+    },
+    {
+      "id": "eu19",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Why does the provider or deployer distinction matter?",
+      "options": [
+        "It changes which duties apply",
+        "It doesn’t",
+        "Only for fines",
+        "Only for images"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Providers carry most duties."
+    },
+    {
+      "id": "eu20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which set of rules still applies to an Indian bank’s credit model with no EU users?",
+      "options": [
+        "None",
+        "Indian rules such as RBI guidance and DPDP",
+        "Only the EU AI Act",
+        "Only US rules"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Out of EU scope, not out of all regulation."
+    }
+  ]
+}

@@ -1,0 +1,815 @@
+{
+  "id": "repair",
+  "moduleSlug": "prompting",
+  "name": "Validation and Repair Loops",
+  "shortName": "Repair loops",
+  "question": "What happens when the output is wrong?",
+  "summary": "Validate every structured output against types and business rules, such as a GSTIN format, totals that match their line items, or dates in range. When validation fails, send the specific error back to the model and ask for a corrected output, at most once or twice, then fall back: a human queue, a partial result or a clear failure. Generic “try again” retries waste calls; specific errors fix most problems in one round.",
+  "useCases": [
+    "Outputs written to ledgers, CRMs or other systems of record",
+    "Extraction where some rules cannot be expressed in the schema",
+    "Pipelines that must never drop a record silently"
+  ],
+  "keyFacts": {
+    "label": "Loop design",
+    "items": [
+      {
+        "term": "Type validation",
+        "detail": "fields, types and enums, usually from the schema"
+      },
+      {
+        "term": "Business rules",
+        "detail": "checksums, sums, cross-field consistency, allowed ranges"
+      },
+      {
+        "term": "Specific feedback",
+        "detail": "the exact validation error goes back to the model"
+      },
+      {
+        "term": "Retry cap",
+        "detail": "one or two repairs, then stop"
+      },
+      {
+        "term": "Fallback",
+        "detail": "human queue or partial result; never a silent drop"
+      },
+      {
+        "term": "Monitoring",
+        "detail": "track failure types to fix the prompt or schema at the source"
+      }
+    ]
+  },
+  "steps": [
+    "Encode rules as validators on a Pydantic model",
+    "On failure, return the validation errors to the model and ask for a fix",
+    "Cap retries at one or two; log every failure",
+    "Route unrepairable records to a human queue and review failure types weekly"
+  ],
+  "pitfalls": [
+    "Checking only types, so rule violations flow into the ledger",
+    "Retrying with the same prompt and no error message",
+    "Unlimited retries that multiply cost on hard inputs"
+  ],
+  "tools": [
+    "Pydantic",
+    "Instructor",
+    "Guardrails AI",
+    "LangChain output parsers",
+    "Marvin"
+  ],
+  "remember": "Validate rules, return the exact error, retry twice, then hand over.",
+  "caption": "Illustrative: share of clean records after zero, one and three repair rounds with specific errors.",
+  "comparison": {
+    "scope": "Wrong values and rule violations",
+    "cost": 2,
+    "needs": "Validators and a fallback",
+    "best": "Silent errors in systems of record"
+  },
+  "diagram": {
+    "file": "diagrams/repair.svg"
+  },
+  "lesson": {
+    "file": "repair_loop.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from pydantic import ValidationError",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def extract_with_repair(text: str, max_repairs: int = 2):",
+        "steps": []
+      },
+      {
+        "text": "    messages = [{\"role\": \"user\", \"content\": f\"<invoice>{text}</invoice>\"}]",
+        "steps": []
+      },
+      {
+        "text": "    last_error = None",
+        "steps": []
+      },
+      {
+        "text": "    for attempt in range(max_repairs + 1):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        r = client.messages.parse(model=MODEL, max_tokens=1200,",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                                  messages=messages, output_format=InvoiceShape)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        try:",
+        "steps": []
+      },
+      {
+        "text": "            return Invoice.model_validate(r.parsed_output.model_dump())",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        except ValidationError as e:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            last_error = e",
+        "steps": []
+      },
+      {
+        "text": "            log_failure(text, e.errors())",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            messages += [{\"role\": \"assistant\", \"content\": r.content[0].text},",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                         {\"role\": \"user\", \"content\":",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                          f\"Fix these errors and return the whole invoice:\\n{e}\"}]",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    queue_for_human(text, reason=str(last_error))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return None",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "First attempt, strictly structured",
+        "text": "The model returns an object that matches the schema’s shape, as in the previous technique."
+      },
+      {
+        "title": "Validate the business rules",
+        "text": "Invoice adds validators: the GSTIN format and totals that match their items. 17% of first attempts fail one of them."
+      },
+      {
+        "title": "Send the exact error back",
+        "text": "The model sees its own answer and the specific message, such as “total 11,800 does not match items summing to 11,200”. Most are fixed in one round."
+      },
+      {
+        "title": "Cap the repairs",
+        "text": "At most two repairs. Hard inputs would otherwise loop and multiply the cost."
+      },
+      {
+        "title": "Hand over, never drop",
+        "text": "If it still fails, the invoice goes to a human queue with the reason. Nothing invalid reaches the ledger, and nothing disappears."
+      },
+      {
+        "title": "Log failure types",
+        "text": "Counting which rules fail most shows what to fix upstream: a clearer description, a schema change or a prompt rule."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"6\" width=\"110\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"63\" y=\"23\">Attempt 1</text><text class=\"sb\" x=\"63\" y=\"38\">schema-valid</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M120 26L136 26\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx acc\" x=\"138\" y=\"6\" width=\"110\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"193\" y=\"23\">Validators</text><text class=\"sb\" x=\"193\" y=\"38\">GSTIN, totals</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx fail\" x=\"256\" y=\"14\" width=\"96\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"304\" y=\"30\" text-anchor=\"middle\">17% fail</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln fail\" d=\"M193 48 C193 76,63 76,63 48\" marker-end=\"url(#arr)\" style=\"fill:none\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"40\" y=\"76\" width=\"280\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"91\" text-anchor=\"middle\">“total 11,800 ≠ items 11,200”</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"106\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"121\" text-anchor=\"middle\">max 2 repairs</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"184\" y=\"106\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"121\" text-anchor=\"middle\">still invalid → human</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"150\" style=\"text-anchor:start;--d:0s\">Clean records</text><text class=\"tl a\" x=\"112\" y=\"169\" style=\"text-anchor:end;--d:0.1s\">no repair</text><rect x=\"118\" y=\"159\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"159\" width=\"157.32\" height=\"13\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"169\" style=\"text-anchor:start;--d:0.30000000000000004s\">82.3%</text><text class=\"tl a\" x=\"112\" y=\"191\" style=\"text-anchor:end;--d:0.2s\">2 repairs</text><rect x=\"118\" y=\"181\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"181\" width=\"186.01\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"191\" style=\"text-anchor:start;--d:0.4s\">97.9%</text><g class=\"a\" style=\"--d:0.35s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--ink-2)\">top failure: totals (61%) → clarify line-item rules</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Catches rule violations the schema cannot express",
+      "Specific errors fix most outputs in one round",
+      "Nothing invalid reaches systems of record",
+      "Failure logs show what to fix upstream"
+    ],
+    "cons": [
+      "Each repair is another model call",
+      "Adds latency on failures",
+      "Validators need maintenance",
+      "Some inputs cannot be repaired at all"
+    ],
+    "avoidWhen": [
+      "Unlimited retries without an error message",
+      "Writing to a ledger before validation passes"
+    ],
+    "tools": [
+      {
+        "name": "Pydantic",
+        "type": "Open source",
+        "what": "Field and model validators",
+        "url": "https://docs.pydantic.dev/latest/concepts/validators/"
+      },
+      {
+        "name": "Instructor",
+        "type": "Open source",
+        "what": "Validation-driven re-asking with max_retries",
+        "url": "https://python.useinstructor.com"
+      },
+      {
+        "name": "Guardrails AI",
+        "type": "Open source",
+        "what": "Validators and corrective actions on outputs",
+        "url": "https://www.guardrailsai.com/docs"
+      },
+      {
+        "name": "Marvin",
+        "type": "Open source",
+        "what": "Typed extraction helpers",
+        "url": "https://www.askmarvin.ai"
+      },
+      {
+        "name": "LangChain output parsers",
+        "type": "Open source",
+        "what": "Retry and fixing parsers",
+        "url": "https://python.langchain.com/docs/how_to/output_parser_retry/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "The NBFC’s invoices now always match the schema, but 8% break a type check and 10% of the rest break a business rule, such as a total that does not match its items. Decide what to validate, how many repairs to allow, what feedback to give, and what happens to records that cannot be fixed.",
+    "controls": [
+      "Tick business-rule validation, beyond type checks.",
+      "Drag the number of repairs from 0 to 3, and choose generic or specific feedback.",
+      "Tick a human queue for unrepairable records, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Clean records",
+        "meaning": "Records that pass every check and reach the ledger correctly."
+      },
+      {
+        "name": "Silent errors reaching the ledger",
+        "meaning": "Records that break a rule nobody checked."
+      },
+      {
+        "name": "Human queue · Dropped",
+        "meaning": "Where unrepairable records end up."
+      },
+      {
+        "name": "Model calls per record",
+        "meaning": "Average calls including repairs, at ₹0.20 each."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Types only, no repairs",
+        "expect": "9.2% of records break a business rule and go straight into the ledger."
+      },
+      {
+        "k": "rules",
+        "name": "Rules, no repairs",
+        "expect": "Silent errors fall to 0.5%, but 17.2% of records are dropped."
+      },
+      {
+        "k": "generic",
+        "name": "Two generic retries, human queue",
+        "expect": "92.2% clean, 7.3% to humans, 1.28 calls a record."
+      },
+      {
+        "k": "specific",
+        "name": "Three repairs with specific errors",
+        "expect": "99.0% clean, 0.46% to humans, 1.24 calls a record."
+      }
+    ],
+    "missions": [
+      {
+        "k": "silent",
+        "text": "Keep silent errors reaching the ledger below 1%.",
+        "hint": "Types are not enough; check the business rules."
+      },
+      {
+        "k": "clean",
+        "text": "Reach 98% clean records with no more than 1.25 model calls per record.",
+        "hint": "Specific errors fix most failures in a round or two."
+      },
+      {
+        "k": "queue",
+        "text": "Drop nothing: send every unrepairable record to humans, keeping the queue under 1%.",
+        "hint": "Specific feedback and enough repairs keep the queue small."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Pydantic validators",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Field and model validators that express business rules.",
+        "ex": "A model validator that checks totals against line items.",
+        "pros": [
+          "Rules live with the schema",
+          "Readable error messages to send back"
+        ],
+        "cons": [
+          "Python only",
+          "Rules need tests too"
+        ],
+        "url": "https://docs.pydantic.dev/latest/concepts/validators/"
+      },
+      {
+        "n": "Instructor",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Re-asks the model with validation errors up to max_retries.",
+        "ex": "response_model=Invoice with max_retries=2 on an Anthropic client.",
+        "pros": [
+          "Very little code",
+          "Works across providers"
+        ],
+        "cons": [
+          "Hides the loop details",
+          "Retries still cost calls"
+        ],
+        "url": "https://python.useinstructor.com"
+      },
+      {
+        "n": "Guardrails AI",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Validators with corrective actions such as re-ask, fix or filter.",
+        "ex": "Re-ask on a failed GSTIN validator and filter unsafe text.",
+        "pros": [
+          "Library of validators",
+          "Configurable actions"
+        ],
+        "cons": [
+          "Another abstraction",
+          "Some validators need services"
+        ],
+        "url": "https://www.guardrailsai.com/docs"
+      },
+      {
+        "n": "LangChain output parsers",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Retry and output-fixing parsers around a chain.",
+        "ex": "A retry parser that resends the error with the original prompt.",
+        "pros": [
+          "Integrated in LangChain",
+          "Several retry strategies"
+        ],
+        "cons": [
+          "LangChain dependency",
+          "Less control over messages"
+        ],
+        "url": "https://python.langchain.com/docs/how_to/output_parser_retry/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want the least code",
+        "tool": "Instructor with Pydantic validators"
+      },
+      {
+        "need": "I need full control of the loop",
+        "tool": "Pydantic plus your own repair loop"
+      },
+      {
+        "need": "I need many ready validators",
+        "tool": "Guardrails AI"
+      }
+    ],
+    "goals": [
+      "Separate shape checks from business rules",
+      "See why specific feedback beats plain retries",
+      "Never drop or silently accept a bad record"
+    ]
+  },
+  "practice": {
+    "scenario": "The same NBFC found that 4% of schema-valid invoices still broke rules: totals that did not match their items, or GSTINs in the wrong format. Pydantic validators now check these rules. On failure the exact error goes back to the model for one or two repairs, and anything still invalid goes to a human queue instead of the ledger.",
+    "industries": [
+      {
+        "industry": "Lending (NBFC)",
+        "use": "Reject invoices whose totals or GSTINs fail checks before they reach the ledger"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Check that extracted policy dates and sums insured are consistent"
+      },
+      {
+        "industry": "Retail",
+        "use": "Validate product attributes against the catalogue before publishing"
+      }
+    ],
+    "analogy": "An accounts clerk who adds up every invoice before posting it, and sends it back to the vendor with the exact line that is wrong.",
+    "library": {
+      "name": "Instructor",
+      "what": "Wraps model clients so outputs are parsed into Pydantic models, and on validation failure re-asks the model with the error, up to max_retries.",
+      "install": "pip install instructor anthropic"
+    },
+    "note": "Catch the final validation exception and route the record to a human queue; never write a failed record to the ledger.",
+    "samples": [
+      {
+        "file": "validated_extract.py",
+        "language": "python",
+        "code": "import re\nimport instructor\nfrom anthropic import Anthropic\nfrom pydantic import BaseModel, model_validator, field_validator\n\nGSTIN = re.compile(r\"^\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$\")\n\nclass Invoice(BaseModel):\n    gstin: str\n    items: list[float]\n    total_inr: float\n\n    @field_validator(\"gstin\")\n    @classmethod\n    def gstin_format(cls, v):\n        if not GSTIN.match(v):\n            raise ValueError(f\"GSTIN {v!r} is not in the 15-character format\")\n        return v\n\n    @model_validator(mode=\"after\")\n    def total_matches(self):\n        if abs(sum(self.items) - self.total_inr) > 1:\n            raise ValueError(f\"total_inr {self.total_inr} != sum of items {sum(self.items)}\")\n        return self\n\nclient = instructor.from_anthropic(Anthropic())\n\ndef extract(text: str) -> Invoice:\n    return client.messages.create(\n        model=\"claude-sonnet-4-5-20250929\", max_tokens=800, max_retries=2,\n        response_model=Invoice,             # errors are sent back on each retry\n        messages=[{\"role\": \"user\", \"content\": f\"<invoice>{text}</invoice>\"}])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "17.2% of first outputs fail validation. Each repair with the specific error succeeds 70% of the time. With up to two repairs, what share of records still fails, in percent?",
+    "answer": "17.2% × 0.3 × 0.3 = 1.55%. One repair leaves 5.2%, two leave 1.55%, and a third would leave about 0.46%. Those go to a human queue rather than the ledger.",
+    "expected": {
+      "value": 1.55,
+      "tolerance": 0.02,
+      "label": "% still failing ="
+    },
+    "interview": [
+      {
+        "question": "Why send the validation error back rather than just retrying?",
+        "answer": "A plain retry repeats the same conditions, so the model often makes the same mistake. The specific error, such as “total 11,800 does not match items summing to 11,200”, tells it exactly what to fix, and most outputs are corrected in one round."
+      },
+      {
+        "question": "What should happen when repairs run out?",
+        "answer": "Stop and hand over: put the record in a human queue with the error, or return a partial result marked as incomplete. Never write an invalid record to a system of record, and never drop it silently. Track failure types to fix the prompt or schema at the source."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Retrying until it passes, with no cap",
+        "fix": "Cap repairs at one or two, then fall back"
+      },
+      {
+        "mistake": "Validating only types",
+        "fix": "Add business-rule validators: sums, checksums, dates"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "rp01",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "A schema-valid invoice has a total of 11,800 but items summing to 11,200. What catches this?",
+      "options": [
+        "The JSON schema",
+        "A business-rule validator in code",
+        "JSON mode",
+        "The system prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Cross-field rules need validators."
+    },
+    {
+      "id": "rp02",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "17.2% of first outputs fail validation and each repair with the specific error succeeds 70% of the time. After two repairs, what share still fails?",
+      "options": [
+        "0.46%",
+        "1.55%",
+        "5.16%",
+        "12%"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "17.2% × 0.3 × 0.3 ≈ 1.55%."
+    },
+    {
+      "id": "rp03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Why send the exact validation error back instead of “try again”?",
+      "options": [
+        "It is shorter",
+        "It tells the model exactly what to fix, so it succeeds more often",
+        "The API requires it",
+        "It avoids tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Specific feedback fixes most failures in one round."
+    },
+    {
+      "id": "rp04",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "What should happen after the final repair fails?",
+      "options": [
+        "Write the record anyway",
+        "Route it to a human queue or return a clear failure",
+        "Retry forever",
+        "Delete it silently"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Never post invalid records or drop them silently."
+    },
+    {
+      "id": "rp05",
+      "kind": "multi",
+      "industry": "Lending (NBFC)",
+      "question": "Which are business rules suitable for validators? Select all that apply.",
+      "options": [
+        "Totals equal the sum of line items",
+        "GSTIN follows the 15-character format",
+        "The model enjoyed the task",
+        "The prompt was long"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Checkable rules about the data belong in validators."
+    },
+    {
+      "id": "rp06",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Only types are validated. 10% of type-valid outputs break a business rule. What happens to them?",
+      "options": [
+        "They are repaired",
+        "They reach the system of record silently",
+        "They are dropped",
+        "They are sent to humans"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unchecked rules pass straight through."
+    },
+    {
+      "id": "rp07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which library re-asks the model with validation errors up to max_retries?",
+      "options": [
+        "Instructor",
+        "Jinja2",
+        "Evidently",
+        "gVisor"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Instructor wraps clients with validation-driven retries."
+    },
+    {
+      "id": "rp08",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "Why cap repairs at one or two?",
+      "options": [
+        "Models cannot repair more than twice",
+        "Hard inputs would otherwise multiply cost with little gain",
+        "The API limits retries",
+        "Caps improve accuracy"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Diminishing returns and cost make a cap sensible."
+    },
+    {
+      "id": "rp09",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "How should repair-loop failures be used over time? Select all that apply.",
+      "options": [
+        "Log them with their type",
+        "Fix frequent failure types at the source, such as schema or prompt",
+        "Hide them from dashboards",
+        "Increase retries until they vanish"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Failure logs guide upstream fixes."
+    },
+    {
+      "id": "rp10",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "With 17.2% failing first and 70% repair success, how many model calls per record do two repairs take on average?",
+      "options": [
+        "1.17",
+        "1.22",
+        "1.52",
+        "2.00"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1 + 0.172 + 0.172 × 0.3 ≈ 1.224."
+    },
+    {
+      "id": "rp11",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "A generic retry succeeds 35% of the time; a specific one 70%. After one repair on 1,000 failures, how many more are fixed by the specific one?",
+      "options": [
+        "35",
+        "350",
+        "700",
+        "1,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "700 − 350 = 350."
+    },
+    {
+      "id": "rp12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which make a repair message effective? Select all that apply.",
+      "options": [
+        "Include the model’s previous answer",
+        "Include the exact errors and ask for the whole corrected output",
+        "Only say “wrong”",
+        "Change the model mid-loop without telling it"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Context plus specific errors produce correct fixes."
+    },
+    {
+      "id": "rp13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A pipeline raises an exception on failed validation and moves on. What is the risk?",
+      "options": [
+        "Nothing",
+        "Records disappear without anyone knowing",
+        "Records are duplicated",
+        "Costs double"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Failures must be queued, not dropped."
+    },
+    {
+      "id": "rp14",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "In Pydantic, which decorator checks a rule that involves several fields?",
+      "options": [
+        "@model_validator",
+        "@property",
+        "@staticmethod",
+        "@dataclass"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Model validators see the whole object."
+    },
+    {
+      "id": "rp15",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "Which statements about repair loops are correct? Select all that apply.",
+      "options": [
+        "They add latency only on failures",
+        "Each repair is another model call",
+        "They guarantee 100% success",
+        "They replace the need for a schema"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "They cost calls and time on failures; they do not guarantee success."
+    },
+    {
+      "id": "rp16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which is a good fallback for a clinical-summary extraction that cannot be repaired?",
+      "options": [
+        "Post it with a guess",
+        "Mark it incomplete and route it to a clinician for review",
+        "Retry with a random seed forever",
+        "Drop it"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Humans handle the residue safely."
+    },
+    {
+      "id": "rp17",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "Business-rule validation is on, with no repairs and no human queue. What happens to the 17.2% that fail?",
+      "options": [
+        "They are posted",
+        "They are dropped with an exception",
+        "They are repaired",
+        "They are sent to humans"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without repairs or a queue they are lost."
+    },
+    {
+      "id": "rp18",
+      "kind": "multi",
+      "industry": "Retail",
+      "question": "Which tools help express validation rules? Select all that apply.",
+      "options": [
+        "Pydantic validators",
+        "Guardrails AI validators",
+        "Prompt caching",
+        "Canary releases"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Both provide validators on outputs."
+    },
+    {
+      "id": "rp19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Three repairs with specific errors bring clean records to 99%. What is the trade-off?",
+      "options": [
+        "No trade-off",
+        "More calls and latency on the failing records",
+        "Lower accuracy",
+        "More silent errors"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each repair costs a call and time."
+    },
+    {
+      "id": "rp20",
+      "kind": "single",
+      "industry": "Lending (NBFC)",
+      "question": "What should the validator’s error message look like?",
+      "options": [
+        "“Error.”",
+        "A precise statement of what failed and the values involved",
+        "A stack trace only",
+        "The whole prompt again"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Specific messages make repairs effective."
+    }
+  ]
+}

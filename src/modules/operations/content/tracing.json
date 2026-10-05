@@ -1,0 +1,944 @@
+{
+  "id": "tracing",
+  "moduleSlug": "operations",
+  "name": "OpenTelemetry GenAI Tracing",
+  "shortName": "Tracing",
+  "question": "Where did this run go wrong?",
+  "summary": "A trace records one request as a tree of spans: the agent invocation, every model call and every tool call, with timings, token counts, model versions and errors. The OpenTelemetry GenAI semantic conventions, still in Development status, standardise the span and attribute names, so any compatible backend can read them. When quality drops, traces let you group failures by any attribute and find what they share.",
+  "useCases": [
+    "Any agent in production: you cannot fix what you cannot see",
+    "Incidents where the cause could be the model, a tool, a prompt or the data",
+    "Cost and latency questions: tokens and time per step, per user, per release"
+  ],
+  "keyFacts": {
+    "label": "Conventions",
+    "items": [
+      {
+        "term": "Span names",
+        "detail": "invoke_agent {agent}, chat {model}, execute_tool {tool}"
+      },
+      {
+        "term": "Required",
+        "detail": "gen_ai.operation.name and gen_ai.provider.name"
+      },
+      {
+        "term": "Model",
+        "detail": "gen_ai.request.model (asked for) and gen_ai.response.model (actually served)"
+      },
+      {
+        "term": "Tokens",
+        "detail": "gen_ai.usage.input_tokens and gen_ai.usage.output_tokens"
+      },
+      {
+        "term": "Metrics",
+        "detail": "gen_ai.client.operation.duration and gen_ai.client.token.usage"
+      },
+      {
+        "term": "Content",
+        "detail": "prompts and outputs are not captured by default; opt in and redact personal data"
+      }
+    ]
+  },
+  "steps": [
+    "Set up an OpenTelemetry tracer provider and an OTLP exporter to your backend",
+    "Open one root span per request, with child spans for each model and tool call",
+    "Record the response model, token usage, finish reason and errors on each span",
+    "Query traces grouped by attribute when a metric moves"
+  ],
+  "pitfalls": [
+    "Logging only the requested model hides a silent provider-side change",
+    "Capturing full prompts can store customer personal data in your tracing backend",
+    "Sampling away errors: keep every failed trace, sample the successful ones"
+  ],
+  "tools": [
+    "OpenTelemetry SDK",
+    "Langfuse",
+    "Arize Phoenix",
+    "LangSmith",
+    "Datadog LLM Observability",
+    "Jaeger or Grafana Tempo"
+  ],
+  "remember": "One span per step. Record what was served, not just what was asked.",
+  "caption": "Illustrative incident: the provider moved an alias to a new snapshot overnight. Only gen_ai.response.model separates the failures.",
+  "comparison": {
+    "scope": "Why a run failed, which step, which version",
+    "cost": 2,
+    "needs": "Instrumentation and a backend",
+    "best": "Storing sensitive content in traces"
+  },
+  "diagram": {
+    "file": "diagrams/tracing.svg"
+  },
+  "lesson": {
+    "file": "trace_agent.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from opentelemetry import trace",
+        "steps": []
+      },
+      {
+        "text": "from opentelemetry.sdk.trace import TracerProvider",
+        "steps": []
+      },
+      {
+        "text": "from opentelemetry.sdk.trace.export import BatchSpanProcessor",
+        "steps": []
+      },
+      {
+        "text": "from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "provider = TracerProvider()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "trace.set_tracer_provider(provider)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "tracer = trace.get_tracer(\"claims-copilot\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run_agent(claim_id: str, text: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    with tracer.start_as_current_span(\"invoke_agent claims\") as root:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        root.set_attribute(\"gen_ai.operation.name\", \"invoke_agent\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        root.set_attribute(\"gen_ai.conversation.id\", claim_id)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        policy = call_tool(\"get_policy\", claim_id)",
+        "steps": []
+      },
+      {
+        "text": "        return call_model(text, policy)",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def call_tool(name: str, arg: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    with tracer.start_as_current_span(f\"execute_tool {name}\") as span:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.operation.name\", \"execute_tool\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.tool.name\", name)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        try:",
+        "steps": []
+      },
+      {
+        "text": "            return TOOLS[name](arg)",
+        "steps": []
+      },
+      {
+        "text": "        except Exception as e:",
+        "steps": []
+      },
+      {
+        "text": "            span.record_exception(e)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            span.set_status(trace.Status(trace.StatusCode.ERROR))",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            raise",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def call_model(text: str, policy: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    with tracer.start_as_current_span(\"chat alpha-latest\") as span:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.operation.name\", \"chat\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.provider.name\", \"alpha\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.request.model\", \"alpha-latest\")",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        r = client.messages.create(model=\"alpha-latest\", max_tokens=800,",
+        "steps": []
+      },
+      {
+        "text": "                                   messages=[{\"role\": \"user\", \"content\": text + policy}])",
+        "steps": []
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.response.model\", r.model)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.usage.input_tokens\", r.usage.input_tokens)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        span.set_attribute(\"gen_ai.usage.output_tokens\", r.usage.output_tokens)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return r.content[0].text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# In the backend: failure rate grouped by gen_ai.response.model",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Set up the tracer",
+        "text": "A tracer provider batches spans and exports them over OTLP to any compatible backend: Jaeger, Grafana Tempo, Langfuse, Phoenix or a vendor. Your code only talks to the OpenTelemetry API."
+      },
+      {
+        "title": "Open a root span per request",
+        "text": "Each claim gets one invoke_agent span. Every later span nests under it, so the whole run reads as one tree, and the conversation id ties it to the claim."
+      },
+      {
+        "title": "Wrap each model call",
+        "text": "A chat span carries the two required attributes, gen_ai.operation.name and gen_ai.provider.name, plus the model you asked for. The span name follows the convention: operation, then model."
+      },
+      {
+        "title": "Record what was served",
+        "text": "After the call, record the model that actually answered and the token counts. Here the request said alpha-latest, but the response says alpha-0918: the provider moved the alias."
+      },
+      {
+        "title": "Wrap each tool call",
+        "text": "An execute_tool span names the tool. If it throws, the exception and an ERROR status go on the span, so failures are searchable rather than buried in logs."
+      },
+      {
+        "title": "Group failures by attribute",
+        "text": "When success drops, group failed traces by each attribute in turn. Prompt, tool and region split evenly; gen_ai.response.model does not: 94% on the old snapshot, 84% on the new one."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"108\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"21\" text-anchor=\"middle\">TracerProvider</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M118 17L128 17\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"130\" y=\"6\" width=\"104\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"182\" y=\"21\" text-anchor=\"middle\">BatchSpanProc.</text></g><g class=\"a\" style=\"--d:0.2s\"><path class=\"ln \" d=\"M236 17L246 17\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"248\" y=\"6\" width=\"104\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"300\" y=\"21\" text-anchor=\"middle\">OTLP → backend</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"51\" style=\"text-anchor:end;--d:0s\">invoke_agent</text><rect x=\"118\" y=\"41\" width=\"234\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"41\" width=\"234\" height=\"13\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"73\" style=\"text-anchor:end;--d:0s\">chat</text><rect x=\"118\" y=\"63\" width=\"234\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"172\" y=\"63\" width=\"180\" height=\"13\" rx=\"3\" style=\"fill:var(--rule-strong);--d:0.1s\"/><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"106\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"120\" text-anchor=\"middle\">chat span: operation=chat · provider=alpha</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"132\" width=\"170\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"93\" y=\"147\" text-anchor=\"middle\">response.model alpha-0918</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"132\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"147\" text-anchor=\"middle\">in 3,120 · out 410 tok</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"95\" style=\"text-anchor:end;--d:0s\">execute_tool</text><rect x=\"118\" y=\"85\" width=\"234\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"85\" width=\"50\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.05s\"/><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx fail\" x=\"8\" y=\"160\" width=\"344\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"174\" text-anchor=\"middle\">execute_tool get_policy · status ERROR</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"198\" style=\"text-anchor:start;--d:0s\">Success by gen_ai.response.model</text><text class=\"tl a\" x=\"112\" y=\"215\" style=\"text-anchor:end;--d:0.1s\">alpha-0712</text><rect x=\"118\" y=\"205\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"205\" width=\"178.6\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"215\" style=\"text-anchor:start;--d:0.30000000000000004s\">94%</text><text class=\"tl a\" x=\"112\" y=\"235\" style=\"text-anchor:end;--d:0.2s\">alpha-0918</text><rect x=\"118\" y=\"225\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"225\" width=\"159.6\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.30000000000000004s\"/><text class=\"mono a\" x=\"314\" y=\"235\" style=\"text-anchor:start;--d:0.4s\">84%</text><g class=\"a\" style=\"--d:0.35s\"><text class=\"tag-t\" x=\"352\" y=\"254\" style=\"text-anchor:end;fill:var(--fail)\">alpha-0918 serves 80% of traffic</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Turns “it got worse” into a query over evidence",
+      "Per-step timings, tokens and costs for every run",
+      "Vendor-neutral: switch backends without re-instrumenting",
+      "Auto-instrumentation covers common SDKs with little code"
+    ],
+    "cons": [
+      "The GenAI conventions are still in Development, so names can change",
+      "Storage and backend costs grow with traffic",
+      "Content capture creates a privacy and retention burden",
+      "Custom agent steps still need manual spans"
+    ],
+    "avoidWhen": [
+      "A prototype with a handful of users, where printed logs are enough for now",
+      "Capturing full prompts and outputs of regulated data without redaction and access controls"
+    ],
+    "tools": [
+      {
+        "name": "OpenTelemetry SDK",
+        "type": "Open standard (CNCF)",
+        "what": "Vendor-neutral spans, metrics and GenAI conventions",
+        "url": "https://opentelemetry.io/docs/languages/python/"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source, cloud",
+        "what": "LLM traces, prompt management and evals in one place",
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "name": "Arize Phoenix",
+        "type": "Open source",
+        "what": "OpenInference and OTel tracing with evals, self-hostable",
+        "url": "https://arize.com/docs/phoenix"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial (LangChain)",
+        "what": "Tracing and evals, tight with LangChain and LangGraph",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "Datadog LLM Observability",
+        "type": "Commercial",
+        "what": "LLM traces alongside existing APM and infrastructure data",
+        "url": "https://docs.datadoghq.com/llm_observability/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "An Indian general insurer’s claims copilot summarises health claims for the claims desk. At 02:00 the share of summaries accepted without edits fell from 94% to 86%, and nobody deployed anything. You are on call. Decide what your spans record, group the failed traces by an attribute to find what they share, and choose a fix.",
+    "controls": [
+      "Choose whether spans record only the requested model or the full GenAI attributes, including the model that actually served each call.",
+      "Group the failed traces by prompt version, tool, region or gen_ai.response.model, and look for a group that differs.",
+      "Pick a fix, or load a scenario to see a blind guess and a traced diagnosis side by side."
+    ],
+    "outputs": [
+      {
+        "name": "Grouped by",
+        "meaning": "The attribute used to split the traces, with the success rate and traffic share of each group."
+      },
+      {
+        "name": "Cause found",
+        "meaning": "Whether the grouping isolates the failures, which needs the response model on the spans."
+      },
+      {
+        "name": "Success now",
+        "meaning": "Share of summaries accepted after the chosen fix."
+      },
+      {
+        "name": "Time to recovery",
+        "meaning": "12 minutes to alert, plus diagnosis (8 min with evidence, about an hour without), plus the fix."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Plain logs, no grouping",
+        "expect": "Success 86%, cause not found, not recovered."
+      },
+      {
+        "k": "guess",
+        "name": "Guess: group by region, restart pods",
+        "expect": "Every region sits near 86%; the restart changes nothing, so success stays at 86%."
+      },
+      {
+        "k": "found",
+        "name": "Full attributes, grouped by response model",
+        "expect": "alpha-0712 at 94% on 20% of traffic, alpha-0918 at 84% on 80%: cause found, no fix yet."
+      },
+      {
+        "k": "pinned",
+        "name": "Found and pinned",
+        "expect": "Pinning alpha-0712 restores 94%; recovery takes 25 min (12 + 8 + 5)."
+      }
+    ],
+    "missions": [
+      {
+        "k": "find",
+        "text": "Find the attribute that separates the failed traces.",
+        "hint": "Record the full GenAI attributes, then group by gen_ai.response.model."
+      },
+      {
+        "k": "restore",
+        "text": "Bring success back to 94%.",
+        "hint": "The provider moved the alias; pin the snapshot that still works."
+      },
+      {
+        "k": "fast",
+        "text": "Recover within 30 minutes of the incident starting.",
+        "hint": "Diagnosis is only quick when the traces show the cause: find it first, then pin."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenTelemetry SDK + GenAI instrumentation",
+        "type": "Open standard · CNCF",
+        "start": 2,
+        "prod": 3,
+        "best": "Vendor-neutral spans with the GenAI conventions, exported to any backend.",
+        "ex": "Auto-instrument the OpenAI client and add invoke_agent and execute_tool spans around your own code.",
+        "pros": [
+          "No lock-in: change backends freely",
+          "Same traces for services and agents"
+        ],
+        "cons": [
+          "GenAI conventions still in Development",
+          "You still run or buy a backend"
+        ],
+        "url": "https://opentelemetry.io/docs/languages/python/"
+      },
+      {
+        "n": "Langfuse",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "LLM-focused traces with prompts, scores and costs, self-hosted or managed.",
+        "ex": "Trace the claims copilot, link each trace to its prompt version and attach judge scores.",
+        "pros": [
+          "Accepts OpenTelemetry data",
+          "Prompt management and evals in one place"
+        ],
+        "cons": [
+          "Self-hosting needs databases and upkeep",
+          "Less suited to non-LLM services"
+        ],
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "n": "Arize Phoenix",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Local or self-hosted tracing and evals on OpenInference and OTel.",
+        "ex": "Run Phoenix on a laptop during an investigation and replay failing traces.",
+        "pros": [
+          "Quick to start locally",
+          "Evals and datasets built in"
+        ],
+        "cons": [
+          "Larger deployments need the commercial platform",
+          "Fewer alerting features"
+        ],
+        "url": "https://arize.com/docs/phoenix"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial · LangChain",
+        "start": 3,
+        "prod": 3,
+        "best": "Tracing and evaluation for LangChain and LangGraph apps.",
+        "ex": "Trace a LangGraph claims agent and filter runs by metadata such as model and release.",
+        "pros": [
+          "Deep LangGraph integration",
+          "Datasets and online evaluators"
+        ],
+        "cons": [
+          "Commercial service",
+          "Best fit within the LangChain stack"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "n": "Datadog LLM Observability",
+        "type": "Commercial",
+        "start": 2,
+        "prod": 3,
+        "best": "LLM spans next to existing APM, logs and infrastructure metrics.",
+        "ex": "Correlate a spike in failed summaries with a provider latency spike on the same dashboard.",
+        "pros": [
+          "One place for all telemetry",
+          "Mature alerting"
+        ],
+        "cons": [
+          "Cost grows with volume",
+          "Vendor lock-in"
+        ],
+        "url": "https://docs.datadoghq.com/llm_observability/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I want vendor-neutral traces that any backend can read",
+        "tool": "OpenTelemetry SDK with GenAI instrumentation"
+      },
+      {
+        "need": "I want LLM traces, prompts and evals in one open-source tool",
+        "tool": "Langfuse"
+      },
+      {
+        "need": "I already run Datadog for my services",
+        "tool": "Datadog LLM Observability"
+      }
+    ],
+    "goals": [
+      "Record the served model, tokens and errors on every span",
+      "Diagnose an incident by grouping traces, not by guessing",
+      "Understand why time to recovery depends on evidence"
+    ]
+  },
+  "practice": {
+    "scenario": "An Indian general insurer runs a health-claims copilot that summarises claims for the claims desk. One morning the share of summaries accepted without edits falls from 94% to 86%. Nobody deployed anything. Because every request is traced with OpenTelemetry GenAI spans, the on-call engineer groups the failed traces by gen_ai.response.model and sees that the provider’s alias now serves a new snapshot.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Trace each claim summary: model calls, policy lookups, document OCR, with the served model version"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "Trace an order-support agent through margin, RMS and exchange-status tools to find slow steps"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Trace a returns agent per order and break cost and latency down by step and by model"
+      }
+    ],
+    "analogy": "A flight data recorder. When something goes wrong you do not guess; you read what every system did, second by second.",
+    "library": {
+      "name": "OpenTelemetry Python SDK + GenAI instrumentation",
+      "what": "Vendor-neutral tracing. The opentelemetry-instrumentation-openai-v2 package emits GenAI spans for OpenAI calls automatically; you add spans for your own agent and tools.",
+      "install": "pip install opentelemetry-sdk opentelemetry-exporter-otlp opentelemetry-instrumentation-openai-v2"
+    },
+    "note": "Auto-instrumentation records gen_ai.request.model and gen_ai.response.model for you. Query your backend for failure rate grouped by gen_ai.response.model when quality moves.",
+    "samples": [
+      {
+        "file": "tracing_setup.py",
+        "language": "python",
+        "code": "import os\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter\nfrom opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor\nfrom openai import OpenAI\n\n# Opt in to the latest (still experimental) GenAI conventions; keep content capture off.\nos.environ.setdefault(\"OTEL_SEMCONV_STABILITY_OPT_IN\", \"gen_ai_latest_experimental\")\n\nprovider = TracerProvider()\nprovider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))  # OTEL_EXPORTER_OTLP_ENDPOINT\ntrace.set_tracer_provider(provider)\nOpenAIInstrumentor().instrument()              # emits a \"chat {model}\" span per call\n\ntracer = trace.get_tracer(\"claims-copilot\")\nclient = OpenAI()\n\ndef summarise(claim_id: str, text: str) -> str:\n    with tracer.start_as_current_span(\"invoke_agent claims-copilot\") as span:\n        span.set_attribute(\"gen_ai.operation.name\", \"invoke_agent\")\n        span.set_attribute(\"gen_ai.agent.name\", \"claims-copilot\")\n        span.set_attribute(\"gen_ai.conversation.id\", claim_id)\n        span.set_attribute(\"app.release\", \"cfg-7f3a\")       # your own release id\n        r = client.chat.completions.create(model=\"gpt-4o-2024-08-06\",\n                                           messages=[{\"role\": \"user\", \"content\": text}])\n        return r.choices[0].message.content"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A root span lasts 4.2 s. Its child spans run one after another: a chat span of 1.6 s, a tool span of 0.5 s and a second chat span of 1.7 s. How many seconds of the root span are not covered by any child span?",
+    "answer": "The children cover 1.6 + 0.5 + 1.7 = 3.8 s, so 4.2 − 3.8 = 0.4 s is spent in your own code between calls: parsing, validation or queueing. That gap is worth a span of its own if it grows.",
+    "expected": {
+      "value": 0.4,
+      "tolerance": 0.01,
+      "label": "seconds uncovered ="
+    },
+    "interview": [
+      {
+        "question": "Why record gen_ai.response.model as well as gen_ai.request.model?",
+        "answer": "The request says what you asked for; the response says which snapshot actually served it. When you call an alias, the provider can change the snapshot behind it, and only the response attribute reveals that. Grouping failures by it is often the fastest route to the cause of an overnight drop."
+      },
+      {
+        "question": "Should you capture full prompts and completions in traces?",
+        "answer": "Not by default. They can contain customer personal data, and the GenAI conventions leave content capture off unless you opt in. Capture content only where you need it, redact personal data first, restrict access, and keep metadata such as tokens, models and errors on every span."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Logging one line per request with no step structure",
+        "fix": "Emit a span per model call and tool call under one root span"
+      },
+      {
+        "mistake": "Sampling traces uniformly, so rare errors disappear",
+        "fix": "Keep every error trace and sample the successful ones"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tr01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims copilot’s success rate fell 8 points overnight with no deploy. Spans record only the model name sent in the request, the alias alpha-latest. Which attribute would most directly reveal a provider-side model change?",
+      "options": [
+        "gen_ai.request.model",
+        "gen_ai.response.model",
+        "gen_ai.operation.name",
+        "gen_ai.conversation.id"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The response model is the snapshot that actually served the call; the request only shows the alias you asked for."
+    },
+    {
+      "id": "tr02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank is adopting the OpenTelemetry GenAI conventions for its loan assistant. Which pair of attributes is required on a chat span?",
+      "options": [
+        "gen_ai.operation.name and gen_ai.provider.name",
+        "gen_ai.request.model and gen_ai.usage.input_tokens",
+        "gen_ai.response.id and gen_ai.conversation.id",
+        "gen_ai.system_instructions and gen_ai.output.messages"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Operation and provider are required; model and token attributes are recommended, and message content is opt-in."
+    },
+    {
+      "id": "tr03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Following the GenAI span naming convention, what should a chat call to a model named beta-2 be called?",
+      "options": [
+        "beta-2",
+        "llm.call",
+        "invoke_agent beta-2",
+        "chat beta-2"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Chat spans are named by operation then model: “chat {model}”. invoke_agent names the agent’s root span."
+    },
+    {
+      "id": "tr04",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "An order-support agent’s root span lasts 5.0 s. Its children run one after another: a chat span of 1.8 s, a tool span of 0.4 s and a chat span of 2.1 s. How much of the root span is not covered by child spans?",
+      "options": [
+        "0.3 s",
+        "0.7 s",
+        "1.1 s",
+        "2.9 s"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1.8 + 0.4 + 2.1 = 4.3 s, so 5.0 − 4.3 = 0.7 s is spent outside the recorded calls."
+    },
+    {
+      "id": "tr05",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "A returns agent is being instrumented. Which should be recorded on every model span by default? Select all that apply.",
+      "options": [
+        "Input and output token counts",
+        "The model that served the call",
+        "The full prompt, including the customer’s address",
+        "The whole conversation history as one attribute"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Tokens and the served model are cheap and essential. Prompt content can hold personal data and stays off unless you opt in with redaction."
+    },
+    {
+      "id": "tr06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital’s discharge-summary agent handles patient notes. The team wants traces for debugging. What is the best default for message content?",
+      "options": [
+        "Capture all prompts and outputs, since the backend is internal",
+        "Put the prompt text into span names for easy search",
+        "Keep content capture off, record metadata, and enable redacted content only where needed",
+        "Do not trace this agent at all"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Metadata such as models, tokens, timings and errors gives most of the debugging value without storing patient data."
+    },
+    {
+      "id": "tr07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom support agent produces 2 million traces a day, and storing them all is too expensive. Which sampling policy keeps the most diagnostic value?",
+      "options": [
+        "Keep every error trace and a sample of successful ones",
+        "Keep 1% of all traces, chosen uniformly",
+        "Keep only successful traces",
+        "Keep only traces from the first hour of each day"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Errors are rare and the most useful for diagnosis, so keep them all and sample the successful majority."
+    },
+    {
+      "id": "tr08",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A delivery agent’s failures are grouped by attribute. By served model: every group is near 90%. By tool: get_eta traces succeed 61%, all others 93%. What is the most likely cause?",
+      "options": [
+        "A provider model change",
+        "The get_eta tool or the API behind it",
+        "The prompt version",
+        "The customer’s region"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only the tool dimension splits the failures, which points at get_eta, not at the model."
+    },
+    {
+      "id": "tr09",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A rebooking agent’s seat-hold tool throws an exception. What should its execute_tool span record so the failure is searchable?",
+      "options": [
+        "Nothing; the stack trace in stdout is enough",
+        "A new root span for the error",
+        "The exception, plus an ERROR status on the span",
+        "The exception text in the span name"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Recording the exception and setting the status makes failed tool calls filterable in any trace backend."
+    },
+    {
+      "id": "tr10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A span records 3,000 input and 500 output tokens. Input costs $3 and output $15 per million tokens. What does this call cost?",
+      "options": [
+        "$0.0090",
+        "$0.0165",
+        "$0.0240",
+        "$0.0075"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "3,000 × $3/M = $0.009 and 500 × $15/M = $0.0075, so $0.0165 in total."
+    },
+    {
+      "id": "tr11",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Traces show success grouped by served model: alpha-0712 at 94% on 20% of traffic and alpha-0918 at 84% on 80%. Which statements are correct? Select all that apply.",
+      "options": [
+        "Overall success is 86%",
+        "Pinning alpha-0712 should restore about 94%",
+        "Rolling back the prompt is the most likely fix",
+        "Region is probably the cause"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "0.2 × 94 + 0.8 × 84 = 86%. The split is by served model, so pinning the old snapshot fixes it; prompt and region are not implicated."
+    },
+    {
+      "id": "tr12",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "A KYC agent’s trace shows a root span but no child spans, so nobody can tell which step is slow. What is missing?",
+      "options": [
+        "A larger sampling rate",
+        "Spans around each model call and tool call, nested under the root",
+        "A different trace backend",
+        "Longer span names"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Without child spans the trace has no step structure; each model and tool call needs its own span."
+    },
+    {
+      "id": "tr13",
+      "kind": "single",
+      "industry": "Retail",
+      "question": "Why use the standard gen_ai.* attribute names instead of inventing your own, such as llm_model?",
+      "options": [
+        "They make spans smaller",
+        "They are required for the model to work",
+        "Any compatible backend and tool can read and chart them without custom mapping",
+        "They encrypt the attribute values"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Standard names are what make traces portable across backends and dashboards."
+    },
+    {
+      "id": "tr14",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank wants to see where tokens go in its dispute agent. Which trace-based analyses help? Select all that apply.",
+      "options": [
+        "Sum input and output tokens per span name",
+        "Compare tokens per step across releases",
+        "Count spans per trace to find loops",
+        "Read only the final answer text"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Token attributes per span show which steps cost most, how releases change that, and whether runs loop; the final answer alone shows none of it."
+    },
+    {
+      "id": "tr15",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "The OpenTelemetry GenAI semantic conventions are in which status as of 2026?",
+      "options": [
+        "Stable, frozen since 2023",
+        "Deprecated",
+        "Development, so names can still change",
+        "Only a draft proposal with no implementations"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "They are widely implemented but still in Development, which is why instrumentations offer an opt-in for the latest version."
+    },
+    {
+      "id": "tr16",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "An agent calls a moving alias. The same request model appears on every span for months. What does that tell you about the snapshot that served each call?",
+      "options": [
+        "That it never changed",
+        "Nothing: only the response model shows the served snapshot",
+        "That the provider pinned it for you",
+        "That the alias is deprecated"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The request carries the alias name every time, whichever snapshot the provider actually used."
+    },
+    {
+      "id": "tr17",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "An on-call engineer must find the cause of a quality drop quickly. Which trace attributes are worth grouping by first? Select all that apply.",
+      "options": [
+        "Served model",
+        "Release or prompt version",
+        "Span start time in milliseconds",
+        "A random request id"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Model and release are the usual suspects for sudden drops; timestamps and random ids do not form meaningful groups."
+    },
+    {
+      "id": "tr18",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A payments agent’s p95 latency doubled. Traces show chat spans unchanged but execute_tool fraud_score spans went from 0.3 s to 2.4 s. Where should the fix start?",
+      "options": [
+        "The prompt",
+        "The fraud_score tool or its API",
+        "The model snapshot",
+        "The trace exporter"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The step whose duration changed is the tool call, so that is where the latency comes from."
+    },
+    {
+      "id": "tr19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A team exports spans synchronously after each model call, and request latency rose by 40 ms. What is the usual fix?",
+      "options": [
+        "Stop tracing model calls",
+        "Export only error spans",
+        "Use a batch span processor that exports in the background",
+        "Put all attributes in the span name"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A batch processor queues spans and exports them off the request path."
+    },
+    {
+      "id": "tr20",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A health-tech firm must trace an agent handling patient queries under India’s data protection rules. Which practices fit? Select all that apply.",
+      "options": [
+        "Redact personal data before any content is stored",
+        "Restrict access to traces that contain content",
+        "Keep traces with content forever for convenience",
+        "Send full prompts to a third-party backend by default"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Redaction and access control limit exposure; unlimited retention and default content export increase it."
+    }
+  ]
+}

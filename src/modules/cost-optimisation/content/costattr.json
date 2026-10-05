@@ -1,0 +1,828 @@
+{
+  "id": "costattr",
+  "moduleSlug": "cost-optimisation",
+  "name": "Cost Attribution and Budget Guards",
+  "shortName": "Cost attribution",
+  "question": "Which feature, customer or run is spending the money, and what stops a runaway?",
+  "summary": "The other techniques in this module lower the price of each call; this one makes spend visible and bounded. Every LLM call is tagged with who and what it serves (team, feature, customer, agent run, model), usually at a gateway, so the bill can be split by any tag and unit costs such as ₹ per invoice or per resolved ticket can be tracked. The same tags drive guards: a token or rupee budget per agent run that stops a looping agent, daily caps per customer or API key, alerts at a share of budget, and anomaly detection on spend per tag. Hard stops need care: a cap on a whole feature or on the account can halt real work for everyone.",
+  "useCases": [
+    "Agent products where one run can loop for hours",
+    "Multi-tenant SaaS with free tiers or usage-based pricing",
+    "Finance asking which features and customers the LLM bill belongs to"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Attribution",
+        "detail": "share of spend with team, feature, customer and run tags; aim above 95%"
+      },
+      {
+        "term": "Unit cost",
+        "detail": "₹ per business outcome: per invoice drafted, per ticket resolved"
+      },
+      {
+        "term": "Run budget",
+        "detail": "tokens, rupees or steps per agent run, with a graceful stop"
+      },
+      {
+        "term": "Customer caps",
+        "detail": "daily or monthly limits per tenant or API key"
+      },
+      {
+        "term": "Alerts and anomalies",
+        "detail": "alerts at 50/80/100% of budget; spikes by tag against a baseline"
+      },
+      {
+        "term": "False stops",
+        "detail": "legitimate work halted by caps set at too coarse a level"
+      }
+    ]
+  },
+  "steps": [
+    "Route all LLM calls through one gateway or SDK wrapper that requires tags",
+    "Report spend by feature, customer and run, and set unit-cost targets",
+    "Add per-run budgets and per-customer caps with clear user messages",
+    "Alert on budget thresholds and anomalies; review the top spenders weekly"
+  ],
+  "pitfalls": [
+    "Calls made directly to the provider that skip the gateway and its tags",
+    "A single account-wide hard cap that takes the whole product down",
+    "Budgets set in tokens while prices differ several-fold between models"
+  ],
+  "tools": [
+    "LiteLLM proxy (budgets, tags)",
+    "Langfuse",
+    "Helicone",
+    "Portkey",
+    "OpenTelemetry GenAI conventions",
+    "Cloud billing exports"
+  ],
+  "remember": "Tag every call; guard each run and each customer, not the whole account.",
+  "caption": "Illustrative: Vyapar Sathi, a fictional small-business SaaS, spends about ₹8,00,000 a month on LLM calls.",
+  "comparison": {
+    "scope": "Visibility and spend limits",
+    "cost": 2,
+    "needs": "Low–medium: tags + gateway",
+    "best": "Coarse hard caps halt real work"
+  },
+  "diagram": {
+    "file": "diagrams/costattr.svg"
+  },
+  "lesson": {
+    "file": "tagged_calls.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from openai import OpenAI",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "gw = OpenAI(base_url=\"https://llm-gw.internal/v1\", api_key=TEAM_VIRTUAL_KEY)   # LiteLLM proxy",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def call(messages, *, feature, customer, run):",
+        "steps": []
+      },
+      {
+        "text": "    run.check_budget()                               # raises before overspending",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    r = gw.chat.completions.create(",
+        "steps": []
+      },
+      {
+        "text": "        model=\"claude-sonnet-5\", messages=messages, user=customer,",
+        "steps": []
+      },
+      {
+        "text": "        extra_body={\"metadata\": {\"tags\": [f\"feature:{feature}\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                                           f\"customer:{customer}\", f\"run:{run.id}\"]}})",
+        "steps": []
+      },
+      {
+        "text": "    run.add(r.usage)                                 # ₹ from tokens × price",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return r",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class RunBudget:",
+        "steps": []
+      },
+      {
+        "text": "    def __init__(self, rid, max_inr=50): self.id, self.max, self.spent = rid, max_inr, 0.0",
+        "steps": []
+      },
+      {
+        "text": "    def add(self, u): self.spent += inr(u.prompt_tokens, u.completion_tokens)",
+        "steps": []
+      },
+      {
+        "text": "    def check_budget(self):",
+        "steps": []
+      },
+      {
+        "text": "        if self.spent >= self.max: raise BudgetExceeded(self.id)   # stop the loop",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "# per-customer cap: POST /key/generate {\"max_budget\": 500, \"budget_duration\": \"1d\"}",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# daily job: spend by tag → ₹ per invoice; alert at 80%; flag 3× spikes",
+        "steps": [
+          2,
+          5
+        ]
+      },
+      {
+        "text": "# weekly: review top 10 runs and customers",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Send every call through a gateway with tags",
+        "text": "Vyapar Sathi, a fictional small-business SaaS, routes all LLM calls through a LiteLLM proxy. Each call carries feature, customer and run tags, and calls without tags are rejected."
+      },
+      {
+        "title": "Report spend by tag",
+        "text": "The bill of about ₹8,00,000 a month splits into GST invoice drafting 46%, the support agent 31%, reconciliation runs 15% and one free-tier customer 8%. Invoice drafting costs ₹1.40 per invoice."
+      },
+      {
+        "title": "Budget each agent run",
+        "text": "A reconciliation run may spend ₹50. When a run loops, it stops with a clear message instead of running all night. Runaway loops had cost ₹1,20,000 a month."
+      },
+      {
+        "title": "Cap each customer",
+        "text": "Each customer key has a daily budget. A free-tier account that scripted thousands of requests had cost ₹80,000 a month; its cap now stops it at ₹500 a day."
+      },
+      {
+        "title": "Alert and detect spikes",
+        "text": "Alerts fire at 80% of a budget, and a daily job flags any tag whose spend is three times its usual level."
+      },
+      {
+        "title": "Review the top spenders",
+        "text": "Each week the team reads the ten most expensive runs and customers. Waste falls from ₹2,00,000 to about ₹14,000 a month, with about 40 real runs stopped early."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">gateway · tags: feature, customer, run</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"40\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"62\" y=\"56\" text-anchor=\"middle\">GST 46%</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"124\" y=\"40\" width=\"108\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"56\" text-anchor=\"middle\">support 31%</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"240\" y=\"40\" width=\"112\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"296\" y=\"56\" text-anchor=\"middle\">recon 15%</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"72\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"87\" text-anchor=\"middle\">run ≤ ₹50</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx pass\" x=\"184\" y=\"72\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"87\" text-anchor=\"middle\">loops: ₹1,20,000 → ₹6,000</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"117\" text-anchor=\"middle\">customer cap ₹500/day: ₹80,000 → ₹8,000</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"148\" text-anchor=\"middle\">alert at 80%</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx warn\" x=\"184\" y=\"132\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"148\" text-anchor=\"middle\">spike ≥ 3× baseline</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"164\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"180\" text-anchor=\"middle\">waste ₹2,00,000 → ₹14,000 a month</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Shows which features and customers the bill belongs to",
+      "Unit costs connect LLM spend to business value",
+      "Run budgets stop runaway agent loops",
+      "Customer caps protect free tiers and margins"
+    ],
+    "cons": [
+      "Every call must go through the gateway",
+      "Tag hygiene needs enforcement",
+      "Hard caps can stop legitimate work",
+      "Prices change, so rupee budgets need upkeep"
+    ],
+    "avoidWhen": [
+      "A single account-wide hard cap as the only guard",
+      "Token budgets that ignore model price differences"
+    ],
+    "tools": [
+      {
+        "name": "LiteLLM proxy",
+        "type": "Open source",
+        "what": "Virtual keys, budgets per key, team and user, spend by tag",
+        "url": "https://docs.litellm.ai/docs/proxy/users"
+      },
+      {
+        "name": "Langfuse",
+        "type": "Open source · cloud",
+        "what": "Traces with token and cost tracking by user, session and tag",
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "name": "Helicone",
+        "type": "Open source · cloud",
+        "what": "Gateway with custom properties and cost dashboards",
+        "url": "https://www.helicone.ai"
+      },
+      {
+        "name": "Portkey",
+        "type": "Gateway · cloud",
+        "what": "Budget limits, metadata and cost analytics",
+        "url": "https://portkey.ai"
+      },
+      {
+        "name": "OpenTelemetry GenAI",
+        "type": "Open standard",
+        "what": "Semantic conventions for model, token and cost attributes",
+        "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Vyapar Sathi, a fictional small-business SaaS, spends about ₹8,00,000 a month on LLM calls. Useful work is about ₹6,00,000; runaway agent loops add up to ₹1,20,000 and one scripted free-tier account up to ₹80,000.",
+    "controls": [
+      "Choose the tags on each call: none, feature only, or team, feature, customer and run id.",
+      "Choose the guards: none, alerts at 80%, or hard stops at the most specific tag available.",
+      "Flag spend spikes of 3× baseline by tag."
+    ],
+    "outputs": [
+      {
+        "name": "Spend attributed",
+        "meaning": "Share of the bill with owner tags."
+      },
+      {
+        "name": "Runaway loops",
+        "meaning": "₹ a month lost to looping runs."
+      },
+      {
+        "name": "Free-tier abuse",
+        "meaning": "₹ a month to the scripted account."
+      },
+      {
+        "name": "Monthly bill",
+        "meaning": "Useful work plus waste."
+      },
+      {
+        "name": "Legitimate runs stopped",
+        "meaning": "Real work halted by caps."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One provider bill",
+        "expect": "Nothing attributed, ₹2,00,000 waste, bill ₹8,00,000."
+      },
+      {
+        "k": "tagged",
+        "name": "Full tags, alerts",
+        "expect": "98% attributed, loops ₹45,000, abuse ₹80,000."
+      },
+      {
+        "k": "alerts",
+        "name": "Full tags, alerts, spike detection",
+        "expect": "Waste ₹57,000, no runs stopped."
+      },
+      {
+        "k": "guarded",
+        "name": "Full tags, hard stops, spikes",
+        "expect": "Waste ₹14,000, bill ₹6,14,000, 40 runs stopped."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Waste of ₹20,000 or less, 100 or fewer legitimate runs stopped, and 95% attributed.",
+        "hint": "Stops per run and per customer need those tags."
+      },
+      {
+        "k": "blind",
+        "text": "Show a hard cap stopping more than 1,000 legitimate runs.",
+        "hint": "Hard stops without run or customer tags."
+      },
+      {
+        "k": "alert",
+        "text": "Using alerts only, keep waste at ₹60,000 or less.",
+        "hint": "Full tags and spike detection."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LiteLLM proxy",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Budgets per key, team and user; spend by tag.",
+        "ex": "₹500 daily cap on each customer key.",
+        "pros": [
+          "OpenAI-compatible",
+          "Self-hosted"
+        ],
+        "cons": [
+          "A service to run"
+        ],
+        "url": "https://docs.litellm.ai/docs/proxy/users"
+      },
+      {
+        "n": "Langfuse",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Cost per trace, user, session and tag.",
+        "ex": "Cost per resolved ticket dashboard.",
+        "pros": [
+          "Traces and costs together",
+          "Self-host option"
+        ],
+        "cons": [
+          "Not a gateway"
+        ],
+        "url": "https://langfuse.com/docs"
+      },
+      {
+        "n": "Helicone",
+        "type": "Open source · cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "Gateway with custom properties.",
+        "ex": "Tag calls with feature and customer headers.",
+        "pros": [
+          "One-line setup",
+          "Dashboards"
+        ],
+        "cons": [
+          "Another hop"
+        ],
+        "url": "https://www.helicone.ai"
+      },
+      {
+        "n": "Portkey",
+        "type": "Gateway · cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Budgets and metadata across providers.",
+        "ex": "Budget limits per virtual key.",
+        "pros": [
+          "Many providers",
+          "Guardrails too"
+        ],
+        "cons": [
+          "Hosted service"
+        ],
+        "url": "https://portkey.ai"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "See where money goes",
+        "tool": "Gateway + tags"
+      },
+      {
+        "need": "Stop runaway loops",
+        "tool": "Per-run budgets"
+      },
+      {
+        "need": "Protect free tiers",
+        "tool": "Per-customer daily caps"
+      }
+    ],
+    "goals": [
+      "Attribute LLM spend to features, customers and runs",
+      "Set per-run and per-customer budgets",
+      "Avoid caps that halt legitimate work"
+    ]
+  },
+  "practice": {
+    "scenario": "Vyapar Sathi, a fictional small-business SaaS for GST invoicing and bookkeeping, spent about ₹8,00,000 a month on LLM calls and could not say where it went. It routes every call through a LiteLLM gateway with feature, customer and run tags, finds that runaway reconciliation loops cost ₹1,20,000 a month and one scripted free-tier account ₹80,000, and adds a ₹50 budget per run, a ₹500 daily cap per customer key, alerts at 80% and spike detection. Waste falls to about ₹14,000 a month and invoice drafting is tracked at ₹1.40 per invoice.",
+    "industries": [
+      {
+        "industry": "SaaS",
+        "use": "Spend per feature and per customer against pricing tiers"
+      },
+      {
+        "industry": "Banking",
+        "use": "Chargeback of LLM spend to business units"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Cost per resolved support ticket across agents"
+      }
+    ],
+    "analogy": "Giving each department its own electricity meter and fuse, instead of one meter for the building and one main switch that plunges everyone into darkness.",
+    "library": {
+      "name": "LiteLLM",
+      "what": "An OpenAI-compatible proxy with virtual keys, budgets per key, team or user, and spend tracking by tag.",
+      "install": "pip install \"litellm[proxy]\""
+    },
+    "note": "The proxy reads budgets from its database; set DATABASE_URL and a master key as in the LiteLLM docs. Prices per token are examples; load current prices for your models.",
+    "samples": [
+      {
+        "file": "run_budget.py",
+        "language": "python",
+        "code": "import litellm\n\nPRICE_INR = {\"claude-sonnet-5\": (0.25 / 1000, 1.25 / 1000)}   # (input, output) per token, example\n\nclass BudgetExceeded(Exception):\n    pass\n\nclass RunBudget:\n    def __init__(self, run_id, max_inr=50.0):\n        self.run_id, self.max_inr, self.spent = run_id, max_inr, 0.0\n\n    def call(self, model, messages, **tags):\n        if self.spent >= self.max_inr:\n            raise BudgetExceeded(f\"run {self.run_id} spent Rs {self.spent:.2f}\")\n        r = litellm.completion(model=model, messages=messages,\n                               metadata={\"tags\": [f\"{k}:{v}\" for k, v in tags.items()] + [f\"run:{self.run_id}\"]})\n        pin, pout = PRICE_INR[model]\n        self.spent += r.usage.prompt_tokens * pin + r.usage.completion_tokens * pout\n        return r\n\nbudget = RunBudget(\"recon-2026-09-27-0413\")\nreply = budget.call(\"claude-sonnet-5\", [{\"role\": \"user\", \"content\": \"Match these 40 UPI credits to invoices.\"}],\n                    feature=\"reconciliation\", customer=\"c-118\")\nprint(round(budget.spent, 2))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Invoice drafting spends ₹3,68,000 a month and drafts 2,62,857 invoices. What is the cost per invoice in ₹, to two decimals?",
+    "answer": "3,68,000 ÷ 2,62,857 ≈ ₹1.40 per invoice.",
+    "expected": {
+      "value": 1.4,
+      "tolerance": 0.02,
+      "label": "₹ ="
+    },
+    "interview": [
+      {
+        "question": "How would you find out where an LLM bill goes?",
+        "answer": "Route every call through a gateway or wrapper that requires tags for team, feature, customer and run, reject untagged calls, and report spend and unit cost by tag."
+      },
+      {
+        "question": "How do you stop a runaway agent loop from costing a fortune?",
+        "answer": "Give each run a token or rupee budget checked before every call, stop gracefully with a clear message, alert at a share of the budget, and flag spend spikes per tag."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "One account-wide hard cap",
+        "fix": "Cap per run and per customer instead"
+      },
+      {
+        "mistake": "Budgets in tokens across models with different prices",
+        "fix": "Budget in rupees using current prices"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "bg01",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What must every LLM call carry for cost attribution?",
+      "options": [
+        "Tags such as feature, customer and run",
+        "A bigger model",
+        "A longer prompt",
+        "A random seed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Tags let spend be split."
+    },
+    {
+      "id": "bg02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where is tagging easiest to enforce?",
+      "options": [
+        "At one gateway or SDK wrapper",
+        "In each prompt",
+        "At the provider",
+        "In the UI"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Reject untagged calls there."
+    },
+    {
+      "id": "bg03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "₹3,68,000 on 2,62,857 invoices is about?",
+      "options": [
+        "₹0.14",
+        "₹1.40",
+        "₹14",
+        "₹140"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Unit cost per invoice."
+    },
+    {
+      "id": "bg04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An agent run loops for hours. Best guard?",
+      "options": [
+        "A per-run budget checked before each call",
+        "A monthly invoice",
+        "Lower temperature",
+        "More GPUs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Stop the run, not the product."
+    },
+    {
+      "id": "bg05",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why is an account-wide hard cap risky?",
+      "options": [
+        "It halts every customer when one run misbehaves",
+        "It is too cheap",
+        "It needs tags",
+        "It is illegal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Coarse caps cause outages."
+    },
+    {
+      "id": "bg06",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are useful cost tags? Select all that apply.",
+      "options": [
+        "Team or business unit",
+        "Feature",
+        "Customer or tenant",
+        "Font colour"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus run id and model."
+    },
+    {
+      "id": "bg07",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Waste of ₹1,20,000 + ₹80,000 falls to ₹6,000 + ₹8,000. Monthly saving?",
+      "options": [
+        "₹1,86,000",
+        "₹2,00,000",
+        "₹14,000",
+        "₹1,00,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2,00,000 − 14,000."
+    },
+    {
+      "id": "bg08",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Why budget in rupees rather than tokens?",
+      "options": [
+        "Model prices differ several-fold",
+        "Tokens are secret",
+        "Rupees are faster",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A token on one model can cost 10× another."
+    },
+    {
+      "id": "bg09",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Spend on a tag jumps to 3× its baseline. What should happen?",
+      "options": [
+        "A spike alert",
+        "Nothing",
+        "Delete the tag",
+        "Raise the budget"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Anomaly detection by tag."
+    },
+    {
+      "id": "bg10",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A budget check placed after the call means?",
+      "options": [
+        "An over-budget run still makes one more paid call",
+        "It never stops",
+        "No difference",
+        "Faster calls"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Check before calling."
+    },
+    {
+      "id": "bg11",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which tools support budgets or cost by tag? Select all that apply.",
+      "options": [
+        "LiteLLM proxy",
+        "Langfuse",
+        "Portkey",
+        "A spreadsheet of prompts"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Gateways and tracing tools."
+    },
+    {
+      "id": "bg12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A customer key has a ₹500 daily cap. Most it can spend in a 30-day month?",
+      "options": [
+        "₹500",
+        "₹5,000",
+        "₹15,000",
+        "₹50,000"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "500 × 30."
+    },
+    {
+      "id": "bg13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Share of spend attributed rises from 0% to 98% of ₹8,00,000. Unattributed rupees remaining?",
+      "options": [
+        "₹16,000",
+        "₹1,60,000",
+        "₹8,000",
+        "₹0"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "2% of 8,00,000."
+    },
+    {
+      "id": "bg14",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which is a unit cost?",
+      "options": [
+        "₹ per resolved ticket",
+        "Total monthly bill",
+        "Tokens per second",
+        "GPU count"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Spend per business outcome."
+    },
+    {
+      "id": "bg15",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Calls made directly to the provider bypass the gateway. Effect?",
+      "options": [
+        "Their spend is unattributed and unguarded",
+        "They are free",
+        "They are faster and safer",
+        "No effect"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Enforce the gateway."
+    },
+    {
+      "id": "bg16",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which module-3 techniques lower the price per call?",
+      "options": [
+        "Routing, caching and batching",
+        "Cost attribution",
+        "Budget alerts",
+        "Tagging"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one makes spend visible and bounded."
+    },
+    {
+      "id": "bg17",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What should a user see when a run hits its budget? Select all that apply.",
+      "options": [
+        "A clear message",
+        "What was completed",
+        "How to continue or ask for help",
+        "A stack trace only"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Graceful stops."
+    },
+    {
+      "id": "bg18",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Hard stops without run or customer tags stop 5,000 real runs a month. Fix?",
+      "options": [
+        "Add run and customer tags so caps are specific",
+        "Remove all limits",
+        "Raise prices",
+        "Hide the errors"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Specific caps."
+    },
+    {
+      "id": "bg19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which standard defines attributes for model, tokens and cost in traces?",
+      "options": [
+        "OpenTelemetry GenAI semantic conventions",
+        "HTTP/2",
+        "PCI DSS",
+        "ISO 639"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Portable telemetry."
+    },
+    {
+      "id": "bg20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Alerts at 80% of a ₹50 run budget fire at?",
+      "options": [
+        "₹40",
+        "₹45",
+        "₹50",
+        "₹80"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.8 × 50."
+    }
+  ]
+}

@@ -1,0 +1,294 @@
+{
+  "slug": "prompting",
+  "number": 13,
+  "techniqueOrder": [
+    "sysprompt",
+    "fewshot",
+    "schema",
+    "repair",
+    "templates",
+    "reasonprompt",
+    "longctx",
+    "mlprompt"
+  ],
+  "glossary": [
+    {
+      "term": "system prompt",
+      "definition": "Standing instructions given to the model before the conversation: role, rules, tools and format."
+    },
+    {
+      "term": "few-shot prompting",
+      "definition": "Including a few input–output examples in the prompt to show the model what to do."
+    },
+    {
+      "term": "majority-label bias",
+      "definition": "A tendency to predict the label that appears most often in the examples."
+    },
+    {
+      "term": "recency bias",
+      "definition": "A tendency to copy the label of the last example shown."
+    },
+    {
+      "term": "JSON Schema",
+      "definition": "A standard way to describe the structure of JSON data: fields, types and constraints."
+    },
+    {
+      "term": "JSON mode",
+      "definition": "An API setting that guarantees syntactically valid JSON, without enforcing a schema."
+    },
+    {
+      "term": "structured outputs",
+      "definition": "An API mode where decoding is constrained so the output matches a given JSON Schema."
+    },
+    {
+      "term": "constrained decoding",
+      "definition": "Restricting which tokens the model can generate so the output follows a grammar or schema."
+    },
+    {
+      "term": "Pydantic",
+      "definition": "A Python library for defining data models with types and validators."
+    },
+    {
+      "term": "repair loop",
+      "definition": "Sending a validation error back to the model to get a corrected output, a limited number of times."
+    },
+    {
+      "term": "golden set",
+      "definition": "A curated set of real inputs with expected outputs or criteria, used to test prompt changes."
+    },
+    {
+      "term": "StrictUndefined",
+      "definition": "A Jinja2 setting that raises an error when a template variable is missing."
+    },
+    {
+      "term": "model tier",
+      "definition": "A size or capability level of model, such as small, medium or large, with matching price and speed."
+    },
+    {
+      "term": "compounding error",
+      "definition": "When each step’s errors carry into the next, so end-to-end accuracy is roughly the product of step accuracies."
+    },
+    {
+      "term": "reasoning effort",
+      "definition": "A per-request setting, such as low, medium or high, that tells a reasoning model roughly how much to think before answering."
+    },
+    {
+      "term": "thinking tokens",
+      "definition": "Tokens a reasoning model generates while working through a problem before its answer; billed as output tokens even when hidden or summarised."
+    },
+    {
+      "term": "prompt scaffold",
+      "definition": "Step-by-step instructions, such as “think step by step” and numbered procedures, that tell a model how to reason rather than what to achieve."
+    },
+    {
+      "term": "lost in the middle",
+      "definition": "The tendency of models to use information at the start or end of a long context more reliably than information in the middle."
+    },
+    {
+      "term": "quote-first prompting",
+      "definition": "Asking the model to extract the relevant passages before answering, so the answer rests on checkable quotes."
+    },
+    {
+      "term": "code-mixing",
+      "definition": "Switching between languages within one message, such as Hindi and English in Hinglish."
+    },
+    {
+      "term": "per-slice evaluation",
+      "definition": "Measuring accuracy separately for each group, such as each language, so a weak group is not hidden by the average."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: prompt engineering overview",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview"
+    },
+    {
+      "id": "S2",
+      "title": "OpenAI: prompt engineering guide",
+      "url": "https://platform.openai.com/docs/guides/prompt-engineering"
+    },
+    {
+      "id": "S3",
+      "title": "Anthropic: structured outputs",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/structured-outputs"
+    },
+    {
+      "id": "S4",
+      "title": "OpenAI: Structured Outputs",
+      "url": "https://developers.openai.com/api/docs/guides/structured-outputs"
+    },
+    {
+      "id": "S5",
+      "title": "JSON Schema",
+      "url": "https://json-schema.org"
+    },
+    {
+      "id": "S6",
+      "title": "Pydantic documentation",
+      "url": "https://docs.pydantic.dev"
+    },
+    {
+      "id": "S7",
+      "title": "Instructor documentation",
+      "url": "https://python.useinstructor.com"
+    },
+    {
+      "id": "S8",
+      "title": "Zhao et al.: Calibrate before use, improving few-shot performance (2021)",
+      "url": "https://arxiv.org/abs/2102.09690"
+    },
+    {
+      "id": "S9",
+      "title": "Lu et al.: Fantastically ordered prompts and where to find them (2021)",
+      "url": "https://arxiv.org/abs/2104.08786"
+    },
+    {
+      "id": "S10",
+      "title": "Min et al.: Rethinking the role of demonstrations (2022)",
+      "url": "https://arxiv.org/abs/2202.12837"
+    },
+    {
+      "id": "S11",
+      "title": "Tam et al.: Let me speak freely? Format restrictions and LLM performance (2024)",
+      "url": "https://arxiv.org/abs/2408.02442"
+    },
+    {
+      "id": "S12",
+      "title": "Liu et al.: Lost in the middle, how language models use long contexts (2023)",
+      "url": "https://arxiv.org/abs/2307.03172"
+    },
+    {
+      "id": "S13",
+      "title": "Outlines: structured generation",
+      "url": "https://github.com/dottxt-ai/outlines"
+    },
+    {
+      "id": "S14",
+      "title": "vLLM: structured outputs",
+      "url": "https://docs.vllm.ai/en/latest/features/structured_outputs/"
+    },
+    {
+      "id": "S15",
+      "title": "Jinja2 documentation",
+      "url": "https://jinja.palletsprojects.com"
+    },
+    {
+      "id": "S16",
+      "title": "promptfoo documentation",
+      "url": "https://www.promptfoo.dev/docs/intro/"
+    },
+    {
+      "id": "S17",
+      "title": "Chen et al.: FrugalGPT, using LLMs cheaply with better performance (2023)",
+      "url": "https://arxiv.org/abs/2305.05176"
+    },
+    {
+      "id": "S18",
+      "title": "Anthropic: prompt caching",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching"
+    },
+    {
+      "id": "S19",
+      "title": "Anthropic: extended thinking",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/extended-thinking"
+    },
+    {
+      "id": "S20",
+      "title": "Anthropic: extended thinking tips",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/extended-thinking-tips"
+    },
+    {
+      "id": "S21",
+      "title": "OpenAI: reasoning models",
+      "url": "https://platform.openai.com/docs/guides/reasoning"
+    },
+    {
+      "id": "S22",
+      "title": "OpenAI: reasoning best practices",
+      "url": "https://platform.openai.com/docs/guides/reasoning-best-practices"
+    },
+    {
+      "id": "S23",
+      "title": "Google: Gemini thinking",
+      "url": "https://ai.google.dev/gemini-api/docs/thinking"
+    },
+    {
+      "id": "S24",
+      "title": "Wei et al.: Chain-of-thought prompting elicits reasoning in large language models (2022)",
+      "url": "https://arxiv.org/abs/2201.11903"
+    },
+    {
+      "id": "S25",
+      "title": "Anthropic: Long context prompting tips",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/long-context-tips"
+    },
+    {
+      "id": "S26",
+      "title": "Lost in the Middle: How language models use long contexts (Liu et al., 2023)",
+      "url": "https://arxiv.org/abs/2307.03172"
+    },
+    {
+      "id": "S27",
+      "title": "Anthropic: Prompt caching",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/prompt-caching"
+    },
+    {
+      "id": "S28",
+      "title": "OpenAI: Structured outputs",
+      "url": "https://platform.openai.com/docs/guides/structured-outputs"
+    },
+    {
+      "id": "S29",
+      "title": "IndicTrans2 (AI4Bharat)",
+      "url": "https://github.com/AI4Bharat/IndicTrans2"
+    },
+    {
+      "id": "S30",
+      "title": "Anthropic: Multilingual support",
+      "url": "https://docs.claude.com/en/docs/build-with-claude/multilingual-support"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "The agent behaves inconsistently or ignores rules",
+      "techniqueId": "sysprompt",
+      "advice": "Rewrite the system prompt in sections, explain each rule, remove contradictions, and test."
+    },
+    {
+      "symptom": "It gets the format or subtle categories wrong",
+      "techniqueId": "fewshot",
+      "advice": "Add a few diverse, balanced examples, shuffled or retrieved per input, and measure per label."
+    },
+    {
+      "symptom": "Outputs sometimes fail to parse or miss fields",
+      "techniqueId": "schema",
+      "advice": "Use strict structured outputs with a JSON Schema or Pydantic model."
+    },
+    {
+      "symptom": "Outputs parse, but values break business rules",
+      "techniqueId": "repair",
+      "advice": "Validate rules in code, send the exact error back, retry at most twice, then hand over."
+    },
+    {
+      "symptom": "Prompt edits keep breaking things",
+      "techniqueId": "templates",
+      "advice": "Move prompts into templates with strict variables and run a golden-case suite in CI."
+    },
+    {
+      "symptom": "A reasoning model is slow and costly, and the prompt still says “think step by step”",
+      "techniqueId": "reasonprompt",
+      "advice": "Replace the scaffold with goals, constraints and checks, ask for the answer only, set effort per task, and route simple lookups to a non-reasoning model."
+    },
+    {
+      "symptom": "Questions span a 400-page file and answers miss the details",
+      "techniqueId": "longctx",
+      "advice": "Documents first with tags, question last, quotes before the answer, and a cached prefix."
+    },
+    {
+      "symptom": "Users write in Hindi and Hinglish and the JSON breaks",
+      "techniqueId": "mlprompt",
+      "advice": "English keys and enums, an explicit reply language, amount rules, code-mixed examples, per-slice tests."
+    }
+  ]
+}

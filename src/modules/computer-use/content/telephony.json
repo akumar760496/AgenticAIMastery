@@ -1,0 +1,835 @@
+{
+  "id": "telephony",
+  "moduleSlug": "computer-use",
+  "name": "Telephony and Contact-Centre Integration",
+  "shortName": "Telephony integration",
+  "question": "How does a voice agent plug into real phone lines and a contact centre?",
+  "summary": "A voice agent in a lab talks to a browser microphone; in production it must answer phone calls. Calls arrive over the public phone network or a SIP trunk from a provider such as Exotel, Plivo or Twilio, and the provider streams 8 kHz audio to the agent over a WebSocket or bridges it into a media server such as LiveKit. The agent needs call control (answer, hold, DTMF keypad input, hang up), a warm transfer that passes a summary to a human agent in the contact centre, call recording with consent, and logging into the CRM. In India, media routed through distant regions adds delay, and outbound calling must follow TRAI’s commercial-communication rules, including do-not-disturb preferences and designated number series. This is an educational summary; confirm current telecom rules. Latency budgets and speech models are covered by the Voice Agents and Speech in Indian Languages techniques.",
+  "useCases": [
+    "Inbound helplines moving from IVR menus to voice agents",
+    "Outbound reminders and collections calls",
+    "Contact centres that blend bots and human agents"
+  ],
+  "keyFacts": {
+    "label": "What to know",
+    "items": [
+      {
+        "term": "Connectivity",
+        "detail": "PSTN numbers or SIP trunks from a telephony provider"
+      },
+      {
+        "term": "Media stream",
+        "detail": "8 kHz μ-law audio over WebSocket, or a SIP bridge into a media server"
+      },
+      {
+        "term": "Call control",
+        "detail": "answer, hold, DTMF, transfer, hang-up, voicemail detection"
+      },
+      {
+        "term": "Warm transfer",
+        "detail": "hand the call and a summary to a human; the caller does not repeat"
+      },
+      {
+        "term": "Media region",
+        "detail": "keep media close to callers; a distant region adds hundreds of ms"
+      },
+      {
+        "term": "Compliance",
+        "detail": "recording consent, DND preferences, number series for commercial calls"
+      }
+    ]
+  },
+  "steps": [
+    "Pick a provider with Indian numbers and a media region near callers",
+    "Stream call audio to the voice agent and handle DTMF, hold and hang-up",
+    "Add warm transfer with a summary into the contact-centre queue",
+    "Log calls to the CRM, record with consent, and follow TRAI rules for outbound calls"
+  ],
+  "pitfalls": [
+    "Media bouncing through a US region, adding a quarter-second to every turn",
+    "Cold transfers where the caller repeats everything to the human",
+    "Outbound campaigns that ignore DND preferences"
+  ],
+  "tools": [
+    "Exotel",
+    "Plivo",
+    "Twilio Media Streams",
+    "LiveKit SIP",
+    "Pipecat",
+    "Amazon Connect / Genesys"
+  ],
+  "remember": "Stream the call close to the caller; transfer warm; respect the rules.",
+  "caption": "Illustrative: Dhan Seva, a fictional NBFC, answers 40,000 loan-status calls a month.",
+  "comparison": {
+    "scope": "Phone lines and contact-centre hand-offs",
+    "cost": 3,
+    "needs": "A telephony provider and call control",
+    "best": "Repeat-yourself transfers and slow media paths"
+  },
+  "diagram": {
+    "file": "diagrams/telephony.svg"
+  },
+  "lesson": {
+    "file": "phone_bridge.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "from fastapi import FastAPI, WebSocket",
+        "steps": []
+      },
+      {
+        "text": "app = FastAPI()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@app.post(\"/incoming\")                       # provider webhook on a call",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "def incoming():",
+        "steps": []
+      },
+      {
+        "text": "    return twiml_connect_stream(url=\"wss://voice.dhanseva.in/media\")",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "@app.websocket(\"/media\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "async def media(ws: WebSocket):",
+        "steps": []
+      },
+      {
+        "text": "    await ws.accept()",
+        "steps": []
+      },
+      {
+        "text": "    call = VoiceSession(stt=indic_stt, llm=agent, tts=hindi_tts,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "                        sample_rate=8000, codec=\"mulaw\")",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    async for msg in ws.iter_json():",
+        "steps": []
+      },
+      {
+        "text": "        if msg[\"event\"] == \"media\":",
+        "steps": []
+      },
+      {
+        "text": "            await call.feed(msg[\"media\"][\"payload\"])",
+        "steps": []
+      },
+      {
+        "text": "        elif msg[\"event\"] == \"dtmf\":",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            await call.on_keypress(msg[\"dtmf\"][\"digit\"])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        if call.wants_human:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            summary = call.summary()          # intent, loan id, verified",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            await transfer_warm(call.sid, queue=\"loans\", note=summary)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            break",
+        "steps": []
+      },
+      {
+        "text": "    crm.log_call(call.sid, call.transcript, consent=call.recording_ok)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "# media region: Mumbai; outbound: DND scrub + approved number series",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Answer the call",
+        "text": "Dhan Seva, a fictional NBFC, points its provider’s webhook at /incoming, which tells the provider to stream the call audio to the agent."
+      },
+      {
+        "title": "Stream the audio",
+        "text": "Audio arrives as 8 kHz μ-law frames over a WebSocket; the session runs speech-to-text, the agent and Hindi text-to-speech on the stream."
+      },
+      {
+        "title": "Handle the keypad",
+        "text": "Callers can still press keys: DTMF digits reach the agent, useful for entering a loan number or choosing a language."
+      },
+      {
+        "title": "Transfer warm",
+        "text": "When the caller wants a person or the agent is unsure, it hands the call to the loans queue with a summary: intent, loan id and whether the caller was verified."
+      },
+      {
+        "title": "Log and record with consent",
+        "text": "Every call is logged to the CRM with its transcript; recording happens only after the consent notice."
+      },
+      {
+        "title": "Keep media near callers",
+        "text": "With media in a Mumbai region, replies start in about 700 ms instead of 950 ms. Outbound calls are scrubbed against DND preferences and use the approved number series."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"8\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"24\" text-anchor=\"middle\">POST /incoming → connect stream</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"56\" text-anchor=\"middle\">8 kHz μ-law frames</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx acc\" x=\"184\" y=\"40\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"56\" text-anchor=\"middle\">STT → agent → TTS</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"72\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"87\" text-anchor=\"middle\">DTMF: “press 1 for Hindi”</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"102\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"117\" text-anchor=\"middle\">warm transfer: intent · loan id · verified</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"132\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"147\" text-anchor=\"middle\">CRM log · recording after consent</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"178\" text-anchor=\"middle\">Mumbai 700 ms</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"184\" y=\"162\" width=\"168\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"268\" y=\"178\" text-anchor=\"middle\">abroad 950 ms</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Voice agents reach callers on any phone",
+      "Warm transfers cut human handle time",
+      "Containment lowers cost per call",
+      "Keypad input still works for numbers and menus"
+    ],
+    "cons": [
+      "8 kHz audio lowers speech-recognition accuracy",
+      "Telephony, media and contact-centre integration work",
+      "Telecom and recording rules to follow",
+      "Extra latency if media travels far"
+    ],
+    "avoidWhen": [
+      "Replacing humans for sensitive calls without an easy transfer",
+      "Outbound calling without consent and DND checks"
+    ],
+    "tools": [
+      {
+        "name": "Exotel",
+        "type": "Commercial",
+        "what": "Indian cloud telephony with voice streaming",
+        "url": "https://exotel.com"
+      },
+      {
+        "name": "Plivo",
+        "type": "Commercial",
+        "what": "Voice APIs and audio streaming, Indian numbers",
+        "url": "https://www.plivo.com"
+      },
+      {
+        "name": "Twilio Media Streams",
+        "type": "Commercial",
+        "what": "Stream call audio over WebSocket",
+        "url": "https://www.twilio.com/docs/voice/media-streams"
+      },
+      {
+        "name": "LiveKit SIP",
+        "type": "Open source · cloud",
+        "what": "Bridge SIP calls into realtime voice agents",
+        "url": "https://docs.livekit.io/sip/"
+      },
+      {
+        "name": "Pipecat",
+        "type": "Open source",
+        "what": "Voice-agent pipelines with telephony transports",
+        "url": "https://github.com/pipecat-ai/pipecat"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Dhan Seva, a fictional NBFC, answers 40,000 loan-status calls a month. Telephony costs ₹2 a call, the voice agent ₹4, and a human ₹25 for a 5-minute call (illustrative).",
+    "controls": [
+      "Choose call handling: IVR menus or a voice agent, each falling back to a human.",
+      "Process call media in an Indian region.",
+      "Transfer warm, with a summary for the human."
+    ],
+    "outputs": [
+      {
+        "name": "Resolved without a human",
+        "meaning": "Share of calls finished on the call."
+      },
+      {
+        "name": "Reply latency",
+        "meaning": "Time from the caller finishing to the agent answering."
+      },
+      {
+        "name": "Human handle time",
+        "meaning": "Seconds per transferred call."
+      },
+      {
+        "name": "Cost per call",
+        "meaning": "Telephony, agent and human time."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "IVR menus",
+        "expect": "20% resolved, ₹22 a call."
+      },
+      {
+        "k": "abroad",
+        "name": "Voice agent, media abroad",
+        "expect": "950 ms replies, 47% resolved, ₹19.3."
+      },
+      {
+        "k": "india",
+        "name": "Voice agent, Indian region",
+        "expect": "700 ms, 55% resolved, ₹17.3."
+      },
+      {
+        "k": "warm",
+        "name": "Indian region + warm transfer",
+        "expect": "55% resolved, 190 s handle time, ₹13.1."
+      }
+    ],
+    "missions": [
+      {
+        "k": "best",
+        "text": "Resolve 55% with replies in 800 ms or less for ₹14 a call or less.",
+        "hint": "Near media and warm transfers."
+      },
+      {
+        "k": "abroad",
+        "text": "Show how a distant media region slows the agent past 800 ms.",
+        "hint": "Turn off the Indian region."
+      },
+      {
+        "k": "warm",
+        "text": "Get human handle time to 200 seconds or less.",
+        "hint": "Send a summary with the transfer."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Exotel",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Indian numbers and voice streaming.",
+        "ex": "Stream loan-status calls to the agent.",
+        "pros": [
+          "Indian presence",
+          "Contact-centre features"
+        ],
+        "cons": [
+          "Vendor APIs"
+        ],
+        "url": "https://exotel.com"
+      },
+      {
+        "n": "Plivo",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Voice APIs with audio streaming.",
+        "ex": "Outbound EMI reminders.",
+        "pros": [
+          "Simple APIs",
+          "Indian numbers"
+        ],
+        "cons": [
+          "Usage pricing"
+        ],
+        "url": "https://www.plivo.com"
+      },
+      {
+        "n": "LiveKit SIP",
+        "type": "Open source · cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "SIP into realtime agents.",
+        "ex": "Bridge a SIP trunk to the voice agent.",
+        "pros": [
+          "Open source",
+          "Low latency"
+        ],
+        "cons": [
+          "More setup"
+        ],
+        "url": "https://docs.livekit.io/sip/"
+      },
+      {
+        "n": "Pipecat",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Voice pipelines with telephony transports.",
+        "ex": "STT → LLM → TTS on a phone stream.",
+        "pros": [
+          "Flexible",
+          "Many providers"
+        ],
+        "cons": [
+          "You run it"
+        ],
+        "url": "https://github.com/pipecat-ai/pipecat"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Indian phone numbers",
+        "tool": "Exotel or Plivo"
+      },
+      {
+        "need": "SIP trunk into agents",
+        "tool": "LiveKit SIP"
+      },
+      {
+        "need": "Pipeline code",
+        "tool": "Pipecat"
+      }
+    ],
+    "goals": [
+      "Connect a voice agent to phone calls",
+      "Transfer warm with a summary",
+      "Keep media near callers and follow telecom rules"
+    ]
+  },
+  "practice": {
+    "scenario": "Dhan Seva, a fictional NBFC, gets 40,000 loan-status calls a month. Its IVR resolved 20% and every transfer made callers repeat themselves. It now answers with a voice agent over an Indian telephony provider’s media stream processed in Mumbai, handles keypad input, and transfers to the loans queue with a summary. 55% of calls are resolved on the call, replies start in about 700 ms, human handle time falls from 300 to 190 seconds, and cost per call drops from ₹22 to about ₹13.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Loan-status and EMI helplines"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claim-status calls in Hindi and regional languages"
+      },
+      {
+        "industry": "Telecom",
+        "use": "Recharge and plan queries"
+      }
+    ],
+    "analogy": "A receptionist who answers the phone, sorts most questions on the spot, and when handing over to a colleague says “this is Mr Sharma, loan 4471, already verified” instead of just putting the call through.",
+    "library": {
+      "name": "FastAPI",
+      "what": "A small FastAPI server receives the provider’s webhook and the audio WebSocket.",
+      "install": "pip install fastapi uvicorn"
+    },
+    "note": "Message fields follow Twilio Media Streams; Exotel and Plivo use similar JSON events. The voice session is a placeholder for your STT → agent → TTS pipeline (for example Pipecat).",
+    "samples": [
+      {
+        "file": "media_ws.py",
+        "language": "python",
+        "code": "import base64, json\nfrom fastapi import FastAPI, WebSocket\n\napp = FastAPI()\n\n@app.websocket(\"/media\")\nasync def media(ws: WebSocket):\n    await ws.accept()\n    frames = 0\n    async for raw in ws.iter_text():\n        msg = json.loads(raw)\n        if msg[\"event\"] == \"start\":\n            print(\"call\", msg[\"start\"][\"callSid\"])\n        elif msg[\"event\"] == \"media\":\n            audio = base64.b64decode(msg[\"media\"][\"payload\"])   # 8 kHz mu-law, 20 ms\n            frames += 1                                           # feed your STT here\n        elif msg[\"event\"] == \"stop\":\n            print(\"frames:\", frames, \"seconds:\", frames * 0.02)\n            break"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Media streams send 20 ms audio frames. How many frames arrive in a 3-minute call?",
+    "answer": "3 minutes = 180 s; 180 ÷ 0.02 = 9,000 frames.",
+    "expected": {
+      "value": 9000,
+      "tolerance": 10,
+      "label": "frames ="
+    },
+    "interview": [
+      {
+        "question": "How do you connect a voice agent to real phone calls?",
+        "answer": "Use a telephony provider with numbers or a SIP trunk, stream call audio (8 kHz μ-law) to the agent over a WebSocket or bridge SIP into a media server, handle DTMF, hold and hang-up, transfer warm to the contact centre with a summary, and log to the CRM."
+      },
+      {
+        "question": "What is a warm transfer?",
+        "answer": "Handing a call to a human along with context, such as intent, account and verification status, so the caller does not repeat themselves."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Processing media in a distant region",
+        "fix": "Keep media near callers"
+      },
+      {
+        "mistake": "Cold transfers",
+        "fix": "Pass a summary to the human"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tl01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "How does call audio usually reach a voice agent?",
+      "options": [
+        "A media stream over WebSocket or a SIP bridge",
+        "Email",
+        "A CSV file",
+        "SMS"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Streaming."
+    },
+    {
+      "id": "tl02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Typical phone audio is?",
+      "options": [
+        "8 kHz μ-law",
+        "96 kHz",
+        "4K video",
+        "MP3 at 320 kbps"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Telephone quality."
+    },
+    {
+      "id": "tl03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is DTMF?",
+      "options": [
+        "Keypad tones",
+        "A speech model",
+        "A codec for video",
+        "A CRM"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Press 1 for…"
+    },
+    {
+      "id": "tl04",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A warm transfer gives the human?",
+      "options": [
+        "A summary of the call",
+        "Nothing",
+        "The caller’s password",
+        "Only the phone number"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "No repetition."
+    },
+    {
+      "id": "tl05",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Media processed abroad adds about?",
+      "options": [
+        "250 ms per turn",
+        "0 ms",
+        "5 s",
+        "25 ms"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "700 → 950 ms."
+    },
+    {
+      "id": "tl06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Cost ₹2 + ₹4 + 45% × ₹25 × 190/300?",
+      "options": [
+        "About ₹13.1",
+        "₹31",
+        "₹6",
+        "₹22"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "6 + 7.1."
+    },
+    {
+      "id": "tl07",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "Which call controls does an agent need? Select all that apply.",
+      "options": [
+        "Hold",
+        "DTMF",
+        "Hang-up",
+        "Font size"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Plus transfer."
+    },
+    {
+      "id": "tl08",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Outbound calling must respect?",
+      "options": [
+        "DND preferences and telecom rules",
+        "Nothing",
+        "Only email rules",
+        "Only GST"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "TRAI regulations; confirm specifics."
+    },
+    {
+      "id": "tl09",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "20 ms frames in 3 minutes?",
+      "options": [
+        "9,000",
+        "180",
+        "900",
+        "90,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "180 ÷ 0.02."
+    },
+    {
+      "id": "tl10",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Why record only after a consent notice?",
+      "options": [
+        "Callers must be informed",
+        "It is faster",
+        "It saves storage",
+        "No reason"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Consent and privacy."
+    },
+    {
+      "id": "tl11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Containment rises from 20% to 55% on 40,000 calls. Fewer human calls?",
+      "options": [
+        "14,000",
+        "8,000",
+        "22,000",
+        "35,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "40,000 × 0.35."
+    },
+    {
+      "id": "tl12",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which are telephony providers? Select all that apply.",
+      "options": [
+        "Exotel",
+        "Plivo",
+        "Twilio",
+        "FAISS"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "FAISS is a vector library."
+    },
+    {
+      "id": "tl13",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "8 kHz audio mainly hurts?",
+      "options": [
+        "Speech-recognition accuracy",
+        "Disk space",
+        "GPU memory",
+        "CRM logging"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Less acoustic detail."
+    },
+    {
+      "id": "tl14",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Human handle time 300 s → 190 s saves per transferred call?",
+      "options": [
+        "110 s",
+        "190 s",
+        "490 s",
+        "30 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "300 − 190."
+    },
+    {
+      "id": "tl15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Where should call records and transcripts go?",
+      "options": [
+        "The CRM, with consent flags",
+        "A public bucket",
+        "Nowhere",
+        "Social media"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Traceable."
+    },
+    {
+      "id": "tl16",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which technique covers latency budgets for voice agents?",
+      "options": [
+        "Realtime Voice Agents",
+        "Telephony integration",
+        "GraphRAG",
+        "Secrets"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "This one is about phone lines."
+    },
+    {
+      "id": "tl17",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "LiveKit SIP is used to?",
+      "options": [
+        "Bridge SIP calls into realtime agents",
+        "Train speech models",
+        "Store vectors",
+        "Sign PDFs"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "SIP bridge."
+    },
+    {
+      "id": "tl18",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Replies above 800 ms tend to?",
+      "options": [
+        "Make callers hang up",
+        "Improve trust",
+        "Lower cost",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Containment drops."
+    },
+    {
+      "id": "tl19",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "What should a transfer summary include? Select all that apply.",
+      "options": [
+        "Intent",
+        "Account or loan id",
+        "Verification status",
+        "The model temperature"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "What the human needs."
+    },
+    {
+      "id": "tl20",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Is this legal advice on telecom rules?",
+      "options": [
+        "No, an educational summary; confirm current rules",
+        "Yes",
+        "Only for banks",
+        "Only for outbound"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Rules change."
+    }
+  ]
+}

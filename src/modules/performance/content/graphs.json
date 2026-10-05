@@ -1,0 +1,901 @@
+{
+  "id": "graphs",
+  "moduleSlug": "performance",
+  "name": "Agent Execution Graphs",
+  "shortName": "Parallel execution",
+  "question": "Which steps can run at the same time?",
+  "summary": "Model the agent’s work as a directed acyclic graph of steps with explicit dependencies, instead of a strictly sequential loop. Independent tool calls and sub-agents run in parallel, results join where needed, and the runtime can checkpoint, retry a failed node, or resume without redoing the rest.",
+  "useCases": [
+    "Tasks with several independent lookups or tool calls",
+    "Multi-agent systems with sub-agents working side by side",
+    "Long workflows that must survive failures and restarts"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Nodes & edges",
+        "detail": "steps and the data they depend on"
+      },
+      {
+        "term": "Fan-out",
+        "detail": "independent calls run concurrently"
+      },
+      {
+        "term": "Join",
+        "detail": "merge results before the next step"
+      },
+      {
+        "term": "Critical path",
+        "detail": "the longest chain sets total latency"
+      },
+      {
+        "term": "Checkpointing",
+        "detail": "resume from the last completed node"
+      }
+    ]
+  },
+  "steps": [
+    "Map the task’s steps and what each one needs as input",
+    "Run independent tool calls in parallel (parallel tool use or async)",
+    "Give every node a timeout and a retry policy",
+    "Measure the critical path and shorten that first"
+  ],
+  "pitfalls": [
+    "Hidden dependencies cause race conditions",
+    "Parallel calls can hit rate limits all at once",
+    "Static graphs are rigid, so allow dynamic planning where needed"
+  ],
+  "tools": [
+    "LangGraph",
+    "LlamaIndex Workflows",
+    "CrewAI Flows",
+    "Temporal",
+    "LLMCompiler (research)"
+  ],
+  "remember": "Parallel where independent, join where needed.",
+  "caption": "Total time is set by the critical path: A, then the slowest of B, C and D, then E.",
+  "comparison": {
+    "scope": "Agent runtime",
+    "cost": 2,
+    "needs": "End-to-end task latency",
+    "best": "Race conditions; rate limits"
+  },
+  "diagram": {
+    "file": "diagrams/graphs.svg"
+  },
+  "lesson": {
+    "file": "dag_runner.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import asyncio",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "DEPS = {\"A\": [], \"B\": [\"A\"], \"C\": [\"A\"], \"D\": [\"A\"],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        \"E\": [\"B\", \"C\", \"D\"]}",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "SECS = {\"A\": 1, \"B\": 3, \"C\": 2, \"D\": 4, \"E\": 1}",
+        "steps": [
+          1,
+          6
+        ]
+      },
+      {
+        "text": "limit = asyncio.Semaphore(3)        # cap concurrent calls",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "done = {}                           # checkpoint of finished nodes",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def run(name):",
+        "steps": []
+      },
+      {
+        "text": "    for attempt in range(3):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        try:",
+        "steps": []
+      },
+      {
+        "text": "            async with limit:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                return await asyncio.wait_for(TOOLS[name](done), timeout=10)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        except asyncio.TimeoutError:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "            await asyncio.sleep(2 ** attempt)    # back off, retry",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    raise RuntimeError(f\"{name} failed 3 times\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def execute():",
+        "steps": []
+      },
+      {
+        "text": "    pending = {n: d for n, d in DEPS.items() if n not in done}",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "    while pending:",
+        "steps": []
+      },
+      {
+        "text": "        ready = [n for n, d in pending.items() if all(x in done for x in d)]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        results = await asyncio.gather(*(run(n) for n in ready))",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      {
+        "text": "        for n, r in zip(ready, results):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            done[n] = r",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            del pending[n]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def finish(n):                      # earliest finish time of n",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return SECS[n] + max((finish(d) for d in DEPS[n]), default=0)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "print(finish(\"E\"), sum(SECS.values()))    # 6 vs 11 seconds",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Declare steps and dependencies",
+        "text": "Write the work as a graph: A fetches the application; B, C and D each need only A; E needs all three. Durations are 1, 3, 2, 4 and 1 s."
+      },
+      {
+        "title": "Find what is ready",
+        "text": "A node is ready when everything it depends on is done. After A finishes, B, C and D are all ready at once."
+      },
+      {
+        "title": "Fan out, with a cap",
+        "text": "Start every ready node together. A semaphore caps concurrent calls so a wide fan-out does not trip rate limits."
+      },
+      {
+        "title": "Time out, retry, checkpoint",
+        "text": "Each node has a timeout and retries with backoff. Finished nodes are checkpointed, so a restart resumes instead of redoing them."
+      },
+      {
+        "title": "Join before the next step",
+        "text": "E starts only when B, C and D have all returned, and it receives all three results."
+      },
+      {
+        "title": "Find the critical path",
+        "text": "Total time is set by the longest chain: A, D, E = 1 + 4 + 1 = 6 s, against 11 s in sequence. Only speeding up D would help further."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<path d=\"M60 62 L106 22\" class=\"ln a\" style=\"--d:0.2s\" marker-end=\"url(#arr)\"/><path d=\"M60 62 L106 62\" class=\"ln a\" style=\"--d:0.25s\" marker-end=\"url(#arr)\"/><path d=\"M60 62 L106 102\" class=\"ln a\" style=\"--d:0.30000000000000004s\" marker-end=\"url(#arr)\"/><path d=\"M160 22 L206 62\" class=\"ln a\" style=\"--d:0.35000000000000003s\" marker-end=\"url(#arr)\"/><path d=\"M160 62 L206 62\" class=\"ln a\" style=\"--d:0.4s\" marker-end=\"url(#arr)\"/><path d=\"M160 102 L206 62\" class=\"ln a\" style=\"--d:0.45s\" marker-end=\"url(#arr)\"/><g class=\"a\" style=\"--d:0s\"><rect class=\"bx \" x=\"8\" y=\"50\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"34\" y=\"66\" text-anchor=\"middle\">A · 1s</text></g><g class=\"a\" style=\"--d:0.06s\"><rect class=\"bx \" x=\"108\" y=\"10\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"134\" y=\"26\" text-anchor=\"middle\">B · 3s</text></g><g class=\"a\" style=\"--d:0.12s\"><rect class=\"bx \" x=\"108\" y=\"50\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"134\" y=\"66\" text-anchor=\"middle\">C · 2s</text></g><g class=\"a\" style=\"--d:0.18s\"><rect class=\"bx \" x=\"108\" y=\"90\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"134\" y=\"106\" text-anchor=\"middle\">D · 4s</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx \" x=\"208\" y=\"50\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"234\" y=\"66\" text-anchor=\"middle\">E · 1s</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<rect class=\"a\" x=\"104\" y=\"6\" width=\"60\" height=\"32\" rx=\"8\" style=\"fill:none;stroke:var(--accent);stroke-width:1.6;stroke-dasharray:4 3;--d:0s\"/><rect class=\"a\" x=\"104\" y=\"46\" width=\"60\" height=\"32\" rx=\"8\" style=\"fill:none;stroke:var(--accent);stroke-width:1.6;stroke-dasharray:4 3;--d:0.08s\"/><rect class=\"a\" x=\"104\" y=\"86\" width=\"60\" height=\"32\" rx=\"8\" style=\"fill:none;stroke:var(--accent);stroke-width:1.6;stroke-dasharray:4 3;--d:0.16s\"/><g class=\"a\" style=\"--d:0.3s\"><text class=\"tag-t\" x=\"134\" y=\"130\" style=\"fill:var(--accent)\">ready after A</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"266\" y=\"14\" width=\"88\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"29\" text-anchor=\"middle\">gather(B,C,D)</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"266\" y=\"40\" width=\"88\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"55\" text-anchor=\"middle\">cap = 3</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"266\" y=\"84\" width=\"88\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"99\" text-anchor=\"middle\">retry 1s, 2s</text></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"266\" y=\"110\" width=\"88\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"310\" y=\"125\" text-anchor=\"middle\">checkpoint</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<rect class=\"a\" x=\"206\" y=\"48\" width=\"56\" height=\"28\" rx=\"7\" style=\"fill:none;stroke:var(--pass);stroke-width:2;--d:0s\"/><g class=\"a\" style=\"--d:0.15s\"><text class=\"tag-t pass\" x=\"234\" y=\"94\">join</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"80\" y=\"170\" style=\"text-anchor:end;--d:0s\">Sequential</text><g class=\"a\" style=\"--d:0.05s\"><rect x=\"86\" y=\"158\" width=\"19\" height=\"16\" rx=\"3\" style=\"fill:var(--accent)\"/><text x=\"95.5\" y=\"170\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">A</text></g><g class=\"a\" style=\"--d:0.1s\"><rect x=\"107\" y=\"158\" width=\"61\" height=\"16\" rx=\"3\" style=\"fill:var(--warn)\"/><text x=\"137.5\" y=\"170\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">B</text></g><g class=\"a\" style=\"--d:0.15000000000000002s\"><rect x=\"170\" y=\"158\" width=\"40\" height=\"16\" rx=\"3\" style=\"fill:var(--warn)\"/><text x=\"190\" y=\"170\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">C</text></g><g class=\"a\" style=\"--d:0.2s\"><rect x=\"212\" y=\"158\" width=\"82\" height=\"16\" rx=\"3\" style=\"fill:var(--warn)\"/><text x=\"253\" y=\"170\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">D</text></g><g class=\"a\" style=\"--d:0.25s\"><rect x=\"296\" y=\"158\" width=\"19\" height=\"16\" rx=\"3\" style=\"fill:var(--accent)\"/><text x=\"305.5\" y=\"170\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">E</text></g><text class=\"mono l a\" x=\"323\" y=\"170\" style=\"--d:0.3s\">11 s</text><text class=\"tl a\" x=\"80\" y=\"214\" style=\"text-anchor:end;--d:0.35s\">Graph</text><g class=\"a\" style=\"--d:0.4s\"><rect x=\"86\" y=\"200\" width=\"19\" height=\"20\" rx=\"3\" style=\"fill:var(--accent);\"/><text x=\"95.5\" y=\"214\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">A</text></g><g class=\"a\" style=\"--d:0.45s\"><rect x=\"107\" y=\"194\" width=\"61\" height=\"10\" rx=\"3\" style=\"fill:var(--warn);opacity:.55\"/></g><g class=\"a\" style=\"--d:0.5s\"><rect x=\"107\" y=\"206\" width=\"40\" height=\"10\" rx=\"3\" style=\"fill:var(--warn);opacity:.55\"/></g><g class=\"a\" style=\"--d:0.55s\"><rect x=\"107\" y=\"218\" width=\"82\" height=\"10\" rx=\"3\" style=\"fill:var(--warn);\"/></g><g class=\"a\" style=\"--d:0.6000000000000001s\"><rect x=\"191\" y=\"200\" width=\"19\" height=\"20\" rx=\"3\" style=\"fill:var(--accent);\"/><text x=\"200.5\" y=\"214\" text-anchor=\"middle\" style=\"font:600 10px var(--sans);fill:var(--bg)\">E</text></g><text class=\"mono l a\" x=\"218\" y=\"214\" style=\"--d:0.7s\">6 s</text><text class=\"mono l a\" x=\"86\" y=\"244\" style=\"--d:0.75s\">critical path A → D → E</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "End-to-end time drops to the critical path",
+      "Checkpoints let failed runs resume instead of restarting",
+      "Dependencies become explicit and reviewable",
+      "Independent sub-agents can work side by side"
+    ],
+    "cons": [
+      "Undeclared dependencies cause race conditions",
+      "Parallel calls can hit rate limits together",
+      "Harder to debug than a straight sequence",
+      "Static graphs can be too rigid for open-ended tasks"
+    ],
+    "avoidWhen": [
+      "Every step depends on the one before it",
+      "The task is so open-ended that steps cannot be planned ahead"
+    ],
+    "tools": [
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Graphs with parallel branches, joins and checkpoints",
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "name": "LlamaIndex Workflows",
+        "type": "Open source",
+        "what": "Event-driven steps that can run concurrently",
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "name": "CrewAI Flows",
+        "type": "Open source",
+        "what": "Event-driven flows that coordinate crews and tasks",
+        "url": "https://docs.crewai.com"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source · cloud option",
+        "what": "Durable execution with retries for long workflows",
+        "url": "https://temporal.io"
+      },
+      {
+        "name": "Python asyncio",
+        "type": "Standard library",
+        "what": "gather, semaphores and timeouts for simple fan-out",
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      },
+      {
+        "name": "LLMCompiler",
+        "type": "Research code",
+        "what": "Plans parallel function calls as a DAG",
+        "url": "https://github.com/SqueezeAILab/LLMCompiler"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A loan-underwriting agent runs five steps: A fetches the application (1 s), B checks the credit bureau, C analyses bank statements, D verifies employment, and E makes the decision (1 s). In the basic version B, C and D each need only A. You can run the steps in sequence or as an execution graph, and see what happens with a hidden dependency and a failure.",
+    "controls": [
+      "Switch between sequential execution and a graph that runs independent steps in parallel.",
+      "Drag the durations of B, C and D, and say whether C needs B’s credit score.",
+      "Make D fail once, and choose whether finished steps are checkpointed."
+    ],
+    "outputs": [
+      {
+        "name": "Total time",
+        "meaning": "End-to-end seconds for the workflow."
+      },
+      {
+        "name": "Time vs a clean sequential run",
+        "meaning": "Total ÷ the sequential time with no failures."
+      },
+      {
+        "name": "Critical path",
+        "meaning": "The chain of steps that sets the total."
+      },
+      {
+        "name": "Result correct",
+        "meaning": "False when a step reads data that is not ready yet."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Sequential",
+        "expect": "Every step waits for the previous one: 1 + 3 + 2 + 4 + 1 = 11 s."
+      },
+      {
+        "k": "graph",
+        "name": "Execution graph",
+        "expect": "B, C and D run together after A: 1 + 4 + 1 = 6 s, a 1.83× speed-up. The critical path is A → D → E."
+      },
+      {
+        "k": "hidden",
+        "name": "Hidden dependency",
+        "expect": "C really needs B’s credit score, but the graph does not say so. Still 6 s, but the result is wrong."
+      },
+      {
+        "k": "retry",
+        "name": "Failure, no checkpoints",
+        "expect": "D fails once and the whole workflow restarts from A: 5 s lost, 11 s in total. With checkpoints it would be 10 s."
+      }
+    ],
+    "missions": [
+      {
+        "k": "six",
+        "text": "Finish in 6 s or less with a correct result.",
+        "hint": "Run in parallel with independent steps, or declare the dependency and shorten B and C."
+      },
+      {
+        "k": "bc",
+        "text": "Declare that C needs B, and make B → C the critical path with a correct result.",
+        "hint": "After declaring it, B and C run in series; make B + C longer than D."
+      },
+      {
+        "k": "retry",
+        "text": "D fails once: with checkpoints on, finish in under 9 s.",
+        "hint": "A retried D takes twice as long, so D itself must get shorter."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangGraph",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Stateful agent graphs with parallel branches, joins, checkpoints and resumable runs.",
+        "ex": "Fan out to three verification nodes after intake and join them in a decision node with a checkpointer.",
+        "pros": [
+          "Checkpointing and human-in-the-loop built in",
+          "Large community"
+        ],
+        "cons": [
+          "Graph concepts take time to learn",
+          "Best value inside the LangChain ecosystem"
+        ],
+        "url": "https://github.com/langchain-ai/langgraph"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · cloud option",
+        "start": 1,
+        "prod": 3,
+        "best": "Durable execution: long workflows that survive crashes, with retries and timeouts per activity.",
+        "ex": "A KYC workflow waits days for documents and resumes exactly where it stopped after a deploy.",
+        "pros": [
+          "Battle-tested durability",
+          "Retries and timeouts per activity"
+        ],
+        "cons": [
+          "A server to run or pay for",
+          "Not LLM-specific"
+        ],
+        "url": "https://temporal.io"
+      },
+      {
+        "n": "LlamaIndex Workflows",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Event-driven steps in Python that can run concurrently and collect results.",
+        "ex": "Emit three retrieval events at once and collect them before synthesizing an answer.",
+        "pros": [
+          "Lightweight and Pythonic",
+          "Good fit with LlamaIndex RAG"
+        ],
+        "cons": [
+          "Fewer durability features than Temporal",
+          "You design error handling yourself"
+        ],
+        "url": "https://docs.llamaindex.ai"
+      },
+      {
+        "n": "CrewAI Flows",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "Event-driven flows that coordinate multiple crews and tasks with shared state.",
+        "ex": "Start a research crew and a pricing crew in parallel, then merge their outputs in a final step.",
+        "pros": [
+          "Quick to prototype multi-agent work",
+          "Readable decorators"
+        ],
+        "cons": [
+          "Less control over low-level execution",
+          "Younger than general workflow engines"
+        ],
+        "url": "https://docs.crewai.com"
+      },
+      {
+        "n": "Python asyncio",
+        "type": "Standard library",
+        "start": 3,
+        "prod": 2,
+        "best": "Simple fan-out with gather, semaphores and timeouts, with no framework at all.",
+        "ex": "Call three bank APIs concurrently with a semaphore of 2 and a 10-second timeout each.",
+        "pros": [
+          "No dependencies",
+          "Full control"
+        ],
+        "cons": [
+          "No persistence or checkpoints",
+          "You build retries and observability"
+        ],
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Simple parallel tool calls",
+        "tool": "Python asyncio"
+      },
+      {
+        "need": "Agent graphs with checkpoints",
+        "tool": "LangGraph"
+      },
+      {
+        "need": "Long-running, crash-proof workflows",
+        "tool": "Temporal"
+      }
+    ],
+    "goals": [
+      "Identify independent steps and the critical path of an agent workflow",
+      "Calculate end-to-end time for sequential and graph execution",
+      "Explain how hidden dependencies and missing checkpoints cause failures"
+    ]
+  },
+  "practice": {
+    "scenario": "A loan-underwriting agent needs a credit-bureau check, a bank-statement analysis and employment verification. None depends on the others, so the workflow runs all three at once, and a final node makes the recommendation when all three are done.",
+    "industries": [
+      {
+        "industry": "Lending & insurance",
+        "use": "Run independent checks in parallel before a decision"
+      },
+      {
+        "industry": "Travel",
+        "use": "Search flights, hotels and visa rules at the same time"
+      },
+      {
+        "industry": "Research",
+        "use": "Fan out sub-questions to sub-agents and merge the answers"
+      }
+    ],
+    "analogy": "Cooking dinner on three burners: rice, dal and sabzi cook at once, and you serve when all three are ready.",
+    "library": {
+      "name": "LangGraph",
+      "what": "Graph-based agent runtime: parallel branches, joins, checkpoints and resumable runs.",
+      "install": "pip install langgraph"
+    },
+    "samples": [
+      {
+        "file": "underwrite.py",
+        "language": "python",
+        "code": "import operator\nfrom typing import Annotated, TypedDict\nfrom langgraph.graph import StateGraph, START, END\n\nclass State(TypedDict):\n    applicant_id: str\n    findings: Annotated[list, operator.add]     # parallel branches append here\n\ndef credit(s):     return {\"findings\": [bureau_check(s[\"applicant_id\"])]}\ndef statements(s): return {\"findings\": [analyze_statements(s[\"applicant_id\"])]}\ndef employment(s): return {\"findings\": [verify_employer(s[\"applicant_id\"])]}\ndef decide(s):     return {\"findings\": [underwrite(s[\"findings\"])]}\n\ng = StateGraph(State)\nfor name, fn in [(\"credit\", credit), (\"statements\", statements),\n                 (\"employment\", employment), (\"decide\", decide)]:\n    g.add_node(name, fn)\nfor n in (\"credit\", \"statements\", \"employment\"):\n    g.add_edge(START, n)                                        # fan out\ng.add_edge([\"credit\", \"statements\", \"employment\"], \"decide\")   # join: waits for all\ng.add_edge(\"decide\", END)\n\napp = g.compile()\napp.invoke({\"applicant_id\": \"A-1042\", \"findings\": []})"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A takes 1 s, then B (3 s), C (2 s) and D (4 s) can run in parallel, then E takes 1 s. What's the total time with an execution graph, in seconds?",
+    "answer": "Sequential: 1 + 3 + 2 + 4 + 1 = 11 s. Graph: 1 + max(3, 2, 4) + 1 = 6 s. D is on the critical path, so speeding up B or C changes nothing.",
+    "expected": {
+      "value": 6,
+      "tolerance": 0.1,
+      "label": "seconds ="
+    },
+    "interview": [
+      {
+        "question": "What is the critical path in an agent workflow?",
+        "answer": "The longest chain of dependent steps. It sets the minimum end-to-end time, so speeding up steps off the critical path doesn't reduce total latency."
+      },
+      {
+        "question": "How do you handle a failed branch in a parallel graph?",
+        "answer": "Give each node its own timeout and retry policy, checkpoint completed nodes so retries don't rerun them, and decide per join whether to continue with partial results or fail."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Parallelizing steps that share state",
+        "fix": "Make dependencies explicit and merge results with reducers"
+      },
+      {
+        "mistake": "Unlimited parallel fan-out",
+        "fix": "Cap concurrency to respect rate limits"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "eg01",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A trip agent searches flights (3 s), hotels (4 s) and visa rules (2 s), which are independent, then builds the itinerary (1 s). How long does it take as a graph?",
+      "options": [
+        "5 s",
+        "10 s",
+        "4 s",
+        "7 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "max(3, 4, 2) + 1 = 5 s, against 10 s in sequence."
+    },
+    {
+      "id": "eg02",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What is the critical path of an agent workflow?",
+      "options": [
+        "The longest chain of dependent steps, which sets the minimum total time",
+        "The step with the most tool calls",
+        "The first step",
+        "The step most likely to fail"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only shortening the critical path reduces total latency."
+    },
+    {
+      "id": "eg03",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "What should every node in an agent graph have? Select all that apply.",
+      "options": [
+        "A timeout",
+        "A retry policy",
+        "Declared inputs it depends on",
+        "A random start delay"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Explicit inputs, timeouts and retries make parallel execution safe and resumable."
+    },
+    {
+      "id": "eg04",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "After fanning out 50 product lookups at once, many fail with HTTP 429. What is the fix?",
+      "options": [
+        "Remove parallelism entirely",
+        "Cap concurrency, for example with a semaphore, and back off on 429s",
+        "Increase the timeout to 10 minutes",
+        "Retry immediately in a loop"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Parallelism multiplies the request rate; respect the API’s limits."
+    },
+    {
+      "id": "eg05",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A takes 2 s; B (5 s) and C (3 s) both need only A; D needs B and C and takes 1 s. Which change reduces total time?",
+      "options": [
+        "Speed up C to 1 s",
+        "Speed up B",
+        "Speed up nothing: it is already optimal",
+        "Run D before B"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Total = 2 + max(5, 3) + 1 = 8 s. B is on the critical path; C is not."
+    },
+    {
+      "id": "eg06",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "In a parallel graph, the fraud-score step sometimes reads an empty account profile. What is the likely cause?",
+      "options": [
+        "A hidden dependency: it needs the profile step’s output but the graph does not say so",
+        "The model is too small",
+        "The timeout is too long",
+        "Prefix caching"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Declare the dependency so the runtime orders the steps."
+    },
+    {
+      "id": "eg07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A 9-step claims workflow fails at step 7 and restarts from step 1 every time. What would help most?",
+      "options": [
+        "Checkpoint finished steps so a retry resumes at step 7",
+        "A bigger model",
+        "Running step 7 first",
+        "Removing retries"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Checkpoints turn a full rerun into a retry of the failed node."
+    },
+    {
+      "id": "eg08",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "In LangGraph, g.add_edge([\"credit\", \"statements\", \"employment\"], \"decide\") does what?",
+      "options": [
+        "Runs “decide” after all three nodes have finished",
+        "Runs “decide” three times",
+        "Runs the three nodes in sequence",
+        "Deletes the three nodes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A list of sources creates a join that waits for all of them."
+    },
+    {
+      "id": "eg09",
+      "kind": "multi",
+      "industry": "Research",
+      "question": "Which are good candidates for parallel execution? Select all that apply.",
+      "options": [
+        "Independent sub-questions of a research task",
+        "Searches across different sources",
+        "Two steps that update the same record",
+        "Fetching data for different customers"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Steps that write the same state conflict; they need ordering."
+    },
+    {
+      "id": "eg10",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "An agent makes 5 independent API calls of 1.5 s each, then a 0.5 s summary. How long does it take with all calls in parallel?",
+      "options": [
+        "2.0 s",
+        "8.0 s",
+        "1.5 s",
+        "7.5 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "1.5 + 0.5 = 2.0 s, against 5 × 1.5 + 0.5 = 8.0 s in sequence."
+    },
+    {
+      "id": "eg11",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "What does LLMCompiler do?",
+      "options": [
+        "Plans function calls as a dependency graph and executes independent ones in parallel",
+        "Compiles Python to C",
+        "Speeds up decoding",
+        "Caches prompts"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A planner produces a DAG of calls that an executor runs concurrently."
+    },
+    {
+      "id": "eg12",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A model API returns three tool calls in one response (parallel tool use). What should the application do?",
+      "options": [
+        "Execute them concurrently and return all results together",
+        "Execute only the first",
+        "Ask the model to choose one",
+        "Execute them one per turn"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The model has signalled they are independent, so run them at the same time."
+    },
+    {
+      "id": "eg13",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A prior-authorization workflow must wait up to three days for a doctor’s approval and survive deployments meanwhile. What fits best?",
+      "options": [
+        "An in-memory asyncio script",
+        "Durable execution with checkpoints, such as Temporal or a checkpointed LangGraph run",
+        "A longer timeout",
+        "Running it on a laptop"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Long waits need state that survives restarts."
+    },
+    {
+      "id": "eg14",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "What are the risks of parallelizing an agent’s tool calls? Select all that apply.",
+      "options": [
+        "Hitting rate limits all at once",
+        "Race conditions from undeclared dependencies",
+        "Harder debugging of interleaved steps",
+        "Guaranteed wrong answers"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "The risks are real but manageable; parallelism does not guarantee errors."
+    },
+    {
+      "id": "eg15",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Four independent bank API calls take 3 s each, and a semaphore allows 2 at a time. How long do they take?",
+      "options": [
+        "6 s",
+        "3 s",
+        "12 s",
+        "9 s"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Two waves of two calls: 2 × 3 = 6 s."
+    },
+    {
+      "id": "eg16",
+      "kind": "single",
+      "industry": "Research",
+      "question": "Tasks vary so much that no fixed graph fits them. What is a good approach?",
+      "options": [
+        "Force one static graph on every task",
+        "Let a planner build a graph per task, then execute it",
+        "Always run sequentially",
+        "Skip planning"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Dynamic planning keeps parallelism without a rigid structure."
+    },
+    {
+      "id": "eg17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "One of three optional enrichment calls times out before the join. What should the join do?",
+      "options": [
+        "Always fail the whole run",
+        "Decide per join: for an optional input, continue with partial results and record the gap",
+        "Wait forever",
+        "Retry the whole workflow from the start"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Required and optional inputs deserve different policies."
+    },
+    {
+      "id": "eg18",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A workflow takes 11 s sequentially and 6 s as a graph. What is the speed-up?",
+      "options": [
+        "1.83×",
+        "5×",
+        "0.55×",
+        "1.5×"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "11 ÷ 6 ≈ 1.83×."
+    },
+    {
+      "id": "eg19",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which help you decide what to optimize in an agent workflow? Select all that apply.",
+      "options": [
+        "Trace spans with each node’s duration",
+        "Computing the critical path",
+        "The average duration of all nodes",
+        "A timeline (Gantt) view of the run"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Averages hide which chain sets the total; traces and the critical path show it."
+    },
+    {
+      "id": "eg20",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "What should checkpointing let you do? Select all that apply.",
+      "options": [
+        "Resume after a crash without rerunning finished nodes",
+        "Retry only the node that failed",
+        "Inspect the state at each step when debugging",
+        "Skip validation of results"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Checkpoints store completed work and state; they are not a reason to skip checks."
+    }
+  ]
+}

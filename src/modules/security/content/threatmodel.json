@@ -1,0 +1,844 @@
+{
+  "id": "threatmodel",
+  "moduleSlug": "security",
+  "name": "Threat Modelling for Agents",
+  "shortName": "Threat model",
+  "question": "What can go wrong, and where can it come in?",
+  "summary": "List what the agent can read, what it can do and where its output can go, then map each capability to known risks: the OWASP Top 10 for LLM Applications (2025) and the OWASP Top 10 for Agentic Applications (2026). The quickest test is the lethal trifecta: an agent that combines private data, untrusted content and a way to communicate externally can be steered into leaking that data. Remove or gate one leg.",
+  "useCases": [
+    "Before an agent gets real data, real tools or real users",
+    "Whenever a new tool, data source or output channel is added",
+    "Security reviews and regulator questions in BFSI and healthcare"
+  ],
+  "keyFacts": {
+    "label": "Frameworks",
+    "items": [
+      {
+        "term": "OWASP LLM Top 10 (2025)",
+        "detail": "LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM06 Excessive Agency, LLM10 Unbounded Consumption and six more"
+      },
+      {
+        "term": "OWASP Agentic Top 10 (2026)",
+        "detail": "ASI01 Agent Goal Hijack to ASI10 Rogue Agents, published December 2025"
+      },
+      {
+        "term": "Lethal trifecta",
+        "detail": "private data + untrusted content + external communication"
+      },
+      {
+        "term": "Capability inventory",
+        "detail": "each tool, its scopes, and what it can change or send"
+      },
+      {
+        "term": "Trust boundaries",
+        "detail": "where untrusted text enters and where data leaves"
+      },
+      {
+        "term": "Residual risk",
+        "detail": "what remains after controls, owned by a named person"
+      }
+    ]
+  },
+  "steps": [
+    "Inventory data sources, tools, scopes and output channels",
+    "Mark every point where untrusted text enters the context",
+    "Map each capability to OWASP LLM and ASI risks",
+    "Remove or gate one leg of every trifecta, and record the residual risk"
+  ],
+  "pitfalls": [
+    "Treating prompt injection as solved by a better system prompt",
+    "Giving the agent the user’s full token when one scope would do",
+    "Forgetting that rendered output (links, images) is an outbound channel"
+  ],
+  "tools": [
+    "OWASP Top 10 for LLM Applications",
+    "OWASP Top 10 for Agentic Applications",
+    "MITRE ATLAS",
+    "STRIDE worksheets",
+    "Microsoft Threat Modeling Tool"
+  ],
+  "remember": "Private data, untrusted content, a way out: never all three unguarded.",
+  "caption": "The lethal trifecta, after Simon Willison: remove or gate any one leg.",
+  "comparison": {
+    "scope": "Everywhere: the map for the rest",
+    "cost": 1,
+    "needs": "A capability inventory",
+    "best": "Unmapped paths nobody tested"
+  },
+  "diagram": {
+    "file": "diagrams/threatmodel.svg"
+  },
+  "lesson": {
+    "file": "threat_model.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import yaml",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "INV = yaml.safe_load(open(\"agent_inventory.yaml\"))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "# data: [statements, payees]      untrusted: [pdfs, emails]",
+        "steps": []
+      },
+      {
+        "text": "# outbound: [markdown_images, email_tool]      actions: [transfer]",
+        "steps": []
+      },
+      {
+        "text": "UNTRUSTED = set(INV[\"untrusted\"])",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "OWASP = {\"untrusted\": [\"LLM01 Prompt Injection\", \"ASI01 Goal Hijack\"],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "         \"outbound\":  [\"LLM02 Sensitive Information Disclosure\"],",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "         \"actions\":   [\"LLM06 Excessive Agency\", \"ASI02 Tool Misuse\"]}",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def trifectas(inv):",
+        "steps": []
+      },
+      {
+        "text": "    open_out = [o for o in inv[\"outbound\"] if o not in inv.get(\"gates\", {})]",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "    return [(d, u, o) for d in inv[\"data\"] for u in UNTRUSTED for o in open_out]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "print(len(trifectas(INV)), \"ungated paths\")        # 2 × 2 × 2 = 8",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "INV[\"outbound\"].remove(\"markdown_images\")          # render text only",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "INV[\"gates\"] = {\"email_tool\": \"human_approval\"}",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "REGISTER = [{\"risk\": \"LLM01 via uploaded PDFs\", \"control\": \"separated reader\",",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "             \"residual\": \"low\", \"owner\": \"payments-platform\"}]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "assert not trifectas(INV), \"ungated trifecta paths remain\"",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Inventory every capability",
+        "text": "Write down what the agent can read, what it can do and every way output leaves: data sources, tools with their scopes, and channels, including how the chat renders replies."
+      },
+      {
+        "title": "Mark the trust boundaries",
+        "text": "Uploaded PDFs and forwarded emails can be written by anyone. Everything that enters from them is untrusted, whoever the user is."
+      },
+      {
+        "title": "Map capabilities to OWASP risks",
+        "text": "Untrusted inputs map to prompt injection (LLM01) and goal hijack (ASI01), outbound channels to information disclosure (LLM02), and actions to excessive agency (LLM06) and tool misuse (ASI02)."
+      },
+      {
+        "title": "Count the trifecta paths",
+        "text": "Each combination of private data, untrusted input and ungated outbound channel is a path for theft: 2 × 2 × 2 = 8 here."
+      },
+      {
+        "title": "Remove or gate one leg",
+        "text": "Rendering plain text only closes the image channel, and human approval gates the email tool. No ungated path remains."
+      },
+      {
+        "title": "Record the residual risk",
+        "text": "Each remaining risk gets a control, a residual rating and a named owner, and a CI check fails if a new ungated path appears."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"84\" y=\"22\" style=\"text-anchor:end;--d:0s\">data</text><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx \" x=\"90\" y=\"8\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"150\" y=\"23\" text-anchor=\"middle\">statements</text></g><g class=\"a\" style=\"--d:0.09s\"><rect class=\"bx \" x=\"218\" y=\"8\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"278\" y=\"23\" text-anchor=\"middle\">payees</text></g><text class=\"tl a\" x=\"84\" y=\"50\" style=\"text-anchor:end;--d:0.08s\">untrusted</text><g class=\"a\" style=\"--d:0.13s\"><rect class=\"bx \" x=\"90\" y=\"36\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"150\" y=\"51\" text-anchor=\"middle\">pdfs</text></g><g class=\"a\" style=\"--d:0.17s\"><rect class=\"bx \" x=\"218\" y=\"36\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"278\" y=\"51\" text-anchor=\"middle\">emails</text></g><text class=\"tl a\" x=\"84\" y=\"78\" style=\"text-anchor:end;--d:0.16s\">outbound</text><g class=\"a\" style=\"--d:0.21000000000000002s\"><rect class=\"bx \" x=\"90\" y=\"64\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"150\" y=\"79\" text-anchor=\"middle\">images</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx \" x=\"218\" y=\"64\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"278\" y=\"79\" text-anchor=\"middle\">email tool</text></g><text class=\"tl a\" x=\"84\" y=\"106\" style=\"text-anchor:end;--d:0.24s\">actions</text><g class=\"a\" style=\"--d:0.29s\"><rect class=\"bx soft\" x=\"90\" y=\"92\" width=\"120\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"150\" y=\"107\" text-anchor=\"middle\">transfer</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<rect class=\"a\" x=\"86\" y=\"32\" width=\"256\" height=\"28\" rx=\"8\" style=\"fill:none;stroke:var(--fail);stroke-dasharray:4 3;--d:0s\"/>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"124\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"139\" text-anchor=\"middle\">LLM01 · ASI01 · LLM02 · LLM06 · ASI02</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"152\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"167\" text-anchor=\"middle\">2 data × 2 untrusted × 2 outbound = 8 paths</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<path class=\"ln draw fail\" pathLength=\"1\" d=\"M92 75 L208 75\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"8\" y=\"180\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"195\" text-anchor=\"middle\">images off · email gated → 0 ungated paths</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"208\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"223\" text-anchor=\"middle\">register: risk · control · residual · owner</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Finds whole classes of attack before any code ships",
+      "Cheap: a document and a checklist",
+      "Gives security reviews and regulators a clear map",
+      "The trifecta test is fast and easy to explain"
+    ],
+    "cons": [
+      "Only as good as the inventory, which drifts",
+      "Does not prove controls work; testing does",
+      "Can become a one-off document nobody updates",
+      "Requires knowing current attack techniques"
+    ],
+    "avoidWhen": [
+      "Treating the threat model as a substitute for red teaming",
+      "Writing it once at design time and never updating it"
+    ],
+    "tools": [
+      {
+        "name": "OWASP Top 10 for LLM Applications",
+        "type": "Open standard",
+        "what": "The ten main LLM application risks (2025)",
+        "url": "https://genai.owasp.org/llm-top-10/"
+      },
+      {
+        "name": "OWASP Top 10 for Agentic Applications",
+        "type": "Open standard",
+        "what": "ASI01–ASI10 risks for autonomous agents (2026)",
+        "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/"
+      },
+      {
+        "name": "MITRE ATLAS",
+        "type": "Open knowledge base",
+        "what": "Adversary tactics and techniques against AI systems",
+        "url": "https://atlas.mitre.org"
+      },
+      {
+        "name": "Microsoft Threat Modeling Tool",
+        "type": "Free tool",
+        "what": "STRIDE-based data-flow diagrams",
+        "url": "https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool"
+      },
+      {
+        "name": "The lethal trifecta (Simon Willison)",
+        "type": "Article",
+        "what": "A quick test for data-theft risk in agents",
+        "url": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A private bank is about to launch a UPI assistant. Before it goes live, map it: switch its capabilities on and off, add gates, and see how many paths an attacker has to steal data or move money, which OWASP risks are in play, and how useful the agent still is.",
+    "controls": [
+      "Tick the capabilities the agent has: private data, untrusted inputs, outbound channels and the transfer action.",
+      "Tick gates: approval on outbound email, confirmation of transfers, a separated reader and data scoped to one customer.",
+      "Load a scenario to compare the worst case with two ways of fixing it."
+    ],
+    "outputs": [
+      {
+        "name": "Ungated trifecta paths",
+        "meaning": "Private data × untrusted inputs × open outbound channels. Each is a route for data theft."
+      },
+      {
+        "name": "Hijack paths to transfers",
+        "meaning": "Untrusted inputs that could trigger a transfer nobody confirmed."
+      },
+      {
+        "name": "Records at risk per incident",
+        "meaning": "500 with table-wide access, 1 when scoped to the current customer."
+      },
+      {
+        "name": "Usefulness",
+        "meaning": "Share of the full feature set kept, minus friction from gates."
+      },
+      {
+        "name": "Risks",
+        "meaning": "OWASP LLM and ASI entries that the current capabilities bring into play."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Draft design",
+        "expect": "1 trifecta path (statements, PDFs, rendered images) and 1 hijack path: critical, usefulness 70%."
+      },
+      {
+        "k": "full",
+        "name": "Every capability, no gates",
+        "expect": "4 trifecta paths and 2 hijack paths: critical, usefulness 100%."
+      },
+      {
+        "k": "gated",
+        "name": "Gated without separation",
+        "expect": "Images off, email approved, transfers confirmed, data scoped: 0 paths, usefulness 88%."
+      },
+      {
+        "k": "separated",
+        "name": "Separated reader",
+        "expect": "A quarantined reader removes every path at once: 0 paths, usefulness 95%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "useful",
+        "text": "Remove every trifecta and hijack path while keeping usefulness at 80% or more.",
+        "hint": "Break one leg of each trifecta rather than switching whole features off."
+      },
+      {
+        "k": "nosep",
+        "text": "Do it without the separated reader, keeping both the transfer and the email tool.",
+        "hint": "Close the silent channel, gate the email tool and confirm transfers."
+      },
+      {
+        "k": "worst",
+        "text": "Find the worst case: 4 ungated trifecta paths.",
+        "hint": "Every capability on, every gate off."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OWASP Top 10 for LLM Applications",
+        "type": "Open standard",
+        "start": 3,
+        "prod": 3,
+        "best": "The ten main risks of LLM applications, 2025 edition.",
+        "ex": "Map the assistant’s untrusted inputs to LLM01 and its transfer tool to LLM06.",
+        "pros": [
+          "Widely recognised by auditors",
+          "Free, with mitigations for each risk"
+        ],
+        "cons": [
+          "Not agent-specific in every entry",
+          "Needs your own capability inventory"
+        ],
+        "url": "https://genai.owasp.org/llm-top-10/"
+      },
+      {
+        "n": "OWASP Top 10 for Agentic Applications",
+        "type": "Open standard",
+        "start": 3,
+        "prod": 3,
+        "best": "ASI01–ASI10 risks for autonomous agents, published December 2025.",
+        "ex": "Check tool misuse (ASI02) and identity abuse (ASI03) for the transfer tool.",
+        "pros": [
+          "Built for agents and tools",
+          "Covers supply chain and memory"
+        ],
+        "cons": [
+          "New, so guidance is still maturing",
+          "Overlaps the LLM list"
+        ],
+        "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/"
+      },
+      {
+        "n": "MITRE ATLAS",
+        "type": "Open knowledge base",
+        "start": 2,
+        "prod": 3,
+        "best": "Adversary tactics and techniques against AI systems, with case studies.",
+        "ex": "Walk an attack chain from reconnaissance to exfiltration for the assistant.",
+        "pros": [
+          "Rich case studies",
+          "Links to ATT&CK for security teams"
+        ],
+        "cons": [
+          "Less prescriptive about fixes",
+          "Broad AI scope, not only agents"
+        ],
+        "url": "https://atlas.mitre.org"
+      },
+      {
+        "n": "Microsoft Threat Modeling Tool",
+        "type": "Free tool",
+        "start": 2,
+        "prod": 2,
+        "best": "STRIDE threat modelling on data-flow diagrams.",
+        "ex": "Draw the assistant’s data flows and let the tool list STRIDE threats per flow.",
+        "pros": [
+          "Structured and repeatable",
+          "Good for trust boundaries"
+        ],
+        "cons": [
+          "Windows only",
+          "Knows nothing about prompt injection by default"
+        ],
+        "url": "https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "I need a checklist auditors recognise",
+        "tool": "OWASP Top 10 for LLM Applications, plus the agentic list"
+      },
+      {
+        "need": "I want attack chains and case studies",
+        "tool": "MITRE ATLAS"
+      },
+      {
+        "need": "I want a five-minute sanity check",
+        "tool": "The lethal trifecta: private data, untrusted content, a way out"
+      }
+    ],
+    "goals": [
+      "Count attack paths from an inventory",
+      "Break a trifecta by gating one leg",
+      "See the trade-off between gates and usefulness"
+    ]
+  },
+  "practice": {
+    "scenario": "A private bank is about to launch a UPI assistant. It can read a customer’s statements and uploaded PDFs, search forwarded emails, look up payees, start transfers to saved beneficiaries, and reply in a chat that renders markdown. Before any code review, the security team inventories these capabilities as code, finds two lethal trifectas, and maps each capability to OWASP LLM and ASI risks.",
+    "industries": [
+      {
+        "industry": "Banking",
+        "use": "Inventory data, tools and channels for a payments assistant before launch"
+      },
+      {
+        "industry": "Healthcare",
+        "use": "Map a patient-portal agent’s record access and outbound messages to risks"
+      },
+      {
+        "industry": "SaaS",
+        "use": "Review a support agent that reads tickets from anyone and can email customers"
+      }
+    ],
+    "analogy": "Walking a new building with a fire officer: where can fire start, how does it spread, and where are the exits? You find the risks on paper before anyone moves in.",
+    "library": {
+      "name": "Threat model as code (Python + YAML)",
+      "what": "Keep the capability inventory in a reviewed file and check it automatically for trifectas on every change.",
+      "install": "pip install pyyaml"
+    },
+    "note": "Treat the inventory like code: a pull request that adds a tool or channel must update it, and the trifecta check runs in CI.",
+    "samples": [
+      {
+        "file": "threat_model.py",
+        "language": "python",
+        "code": "import yaml\n\nINVENTORY = yaml.safe_load(\"\"\"\ndata:      [statements, payees, balances]           # private data\nuntrusted: [uploaded_pdfs, forwarded_emails]        # anyone can write these\noutbound:  [markdown_images, email_tool]            # ways out\nactions:   [transfer_to_saved_payee]\ngates:     {email_tool: human_approval}\n\"\"\")\n\nOWASP = {\"untrusted\": [\"LLM01 Prompt Injection\", \"ASI01 Agent Goal Hijack\"],\n         \"outbound\":  [\"LLM02 Sensitive Information Disclosure\"],\n         \"actions\":   [\"LLM06 Excessive Agency\", \"ASI02 Tool Misuse\"]}\n\ndef trifectas(inv):\n    gated = set(inv.get(\"gates\", {}))\n    open_out = [o for o in inv[\"outbound\"] if o not in gated]\n    return [(d, u, o) for d in inv[\"data\"] for u in inv[\"untrusted\"] for o in open_out]\n\npaths = trifectas(INVENTORY)\nprint(f\"{len(paths)} ungated trifecta paths\")      # 3 × 2 × 1 = 6, all via markdown images\nfor part, risks in OWASP.items():\n    print(part, \"→\", \", \".join(risks))"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An agent can read 3 kinds of private data, takes in 2 kinds of untrusted content, and has 2 ungated ways to send data out. How many distinct (private data, untrusted content, outbound channel) trifecta paths does it have?",
+    "answer": "3 × 2 × 2 = 12 paths. Gating one outbound channel with approval halves them to 6; gating both removes them all, which is why controls on the way out are so effective.",
+    "expected": {
+      "value": 12,
+      "tolerance": 0,
+      "label": "paths ="
+    },
+    "interview": [
+      {
+        "question": "What is the lethal trifecta, and why does it matter?",
+        "answer": "It is the combination of access to private data, exposure to untrusted content and a way to communicate externally. If an agent has all three, instructions hidden in the untrusted content can make it send the private data out. Removing or gating any one leg breaks that path, which is more reliable than trying to detect every injection."
+      },
+      {
+        "question": "How do the two OWASP lists differ?",
+        "answer": "The Top 10 for LLM Applications (2025) covers risks of LLM-based applications in general, such as prompt injection, sensitive information disclosure and excessive agency. The Top 10 for Agentic Applications (2026) focuses on autonomous agents: goal hijack, tool misuse, identity and privilege abuse, supply chain, code execution, memory poisoning, inter-agent communication, cascading failures, human trust exploitation and rogue agents. Use both to cover an agent."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Threat modelling once at design time",
+        "fix": "Update the inventory whenever a tool, data source or channel changes"
+      },
+      {
+        "mistake": "Treating rendered output as harmless",
+        "fix": "List rendering (images, links) as an outbound channel"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "tm01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A UPI assistant reads customers’ statements, summarises PDFs they upload, and its chat renders images from any URL. Which risk pattern does this combination create?",
+      "options": [
+        "The lethal trifecta: private data, untrusted content and a way out",
+        "Unbounded consumption",
+        "Model denial of service",
+        "Training data poisoning"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Private data plus untrusted content plus an outbound channel lets injected text steal the data."
+    },
+    {
+      "id": "tm02",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Which OWASP LLM Top 10 (2025) entry covers an attacker’s instructions hidden in a document the model reads?",
+      "options": [
+        "LLM10 Unbounded Consumption",
+        "LLM01 Prompt Injection",
+        "LLM08 Vector and Embedding Weaknesses",
+        "LLM09 Misinformation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Indirect injection is a form of prompt injection, LLM01."
+    },
+    {
+      "id": "tm03",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "An agent can move money with the customer’s full session token even for read-only questions. Which OWASP LLM risk is this?",
+      "options": [
+        "LLM07 System Prompt Leakage",
+        "LLM04 Data and Model Poisoning",
+        "LLM06 Excessive Agency",
+        "LLM09 Misinformation"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "More permissions or autonomy than the task needs is excessive agency."
+    },
+    {
+      "id": "tm04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An agent has 3 private data sources, 2 untrusted inputs and 2 ungated outbound channels. How many trifecta paths?",
+      "options": [
+        "7",
+        "10",
+        "12",
+        "18"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "3 × 2 × 2 = 12."
+    },
+    {
+      "id": "tm05",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which of these count as outbound channels in a threat model? Select all that apply.",
+      "options": [
+        "Markdown images the chat client renders",
+        "An email-sending tool",
+        "The system prompt",
+        "The user’s own question"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Anything that can carry data to a destination outside, including rendering, is outbound; prompts and questions are inputs."
+    },
+    {
+      "id": "tm06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The OWASP Top 10 for Agentic Applications was published when?",
+      "options": [
+        "March 2023",
+        "December 2025",
+        "June 2024",
+        "It has not been published"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It was released in December 2025 as the 2026 edition."
+    },
+    {
+      "id": "tm07",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which ASI entry covers an attacker redirecting an agent’s objective or plan?",
+      "options": [
+        "ASI01 Agent Goal Hijack",
+        "ASI05 Unexpected Code Execution",
+        "ASI08 Cascading Failures",
+        "ASI10 Rogue Agents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Goal hijack is ASI01."
+    },
+    {
+      "id": "tm08",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "Which is the most reliable way to deal with a lethal trifecta?",
+      "options": [
+        "A stronger system prompt",
+        "A larger model",
+        "Remove or gate one of the three legs",
+        "Rate-limit the user"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Breaking any leg removes the path; prompts only lower the odds."
+    },
+    {
+      "id": "tm09",
+      "kind": "multi",
+      "industry": "Fintech",
+      "question": "A fintech adds a web-browsing tool to its account assistant. Which threat-model updates follow? Select all that apply.",
+      "options": [
+        "Web pages become a new untrusted input",
+        "The browsing tool may be a new outbound channel through URLs",
+        "Nothing changes because the tool is read-only",
+        "The model’s context window shrinks"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Reading web pages adds untrusted content, and fetching URLs can carry data out."
+    },
+    {
+      "id": "tm10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why should chat rendering be in the capability inventory?",
+      "options": [
+        "It affects latency",
+        "Rendered images and links are fetched by the client, so they can carry data out",
+        "Rendering changes the model’s answers",
+        "Regulators require screenshots"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "An image URL can leak data with no click."
+    },
+    {
+      "id": "tm11",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Which ASI entry covers third-party tools, frameworks and registries carrying exposure?",
+      "options": [
+        "ASI03 Identity and Privilege Abuse",
+        "ASI04 Agentic Supply Chain Vulnerabilities",
+        "ASI06 Memory and Context Poisoning",
+        "ASI09 Human-Agent Trust Exploitation"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Supply-chain exposure through components is ASI04."
+    },
+    {
+      "id": "tm12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which gates break the trifecta for a statement-reading assistant that renders images? Select all that apply.",
+      "options": [
+        "Render text only, with no untrusted images",
+        "A separated reader so untrusted text cannot steer the tool-using model",
+        "Asking the model politely to be careful",
+        "Adding more examples to the prompt"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Closing the channel or separating the reader removes the path; prompt changes do not."
+    },
+    {
+      "id": "tm13",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An agent writes customer notes to long-term memory, including text from uploaded documents. Which ASI risk is most relevant?",
+      "options": [
+        "ASI06 Memory and Context Poisoning",
+        "ASI07 Insecure Inter-Agent Communication",
+        "ASI08 Cascading Failures",
+        "ASI10 Rogue Agents"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Stored untrusted text can steer future sessions."
+    },
+    {
+      "id": "tm14",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A threat model was written at design time. Six months later, three tools have been added. What is the main problem?",
+      "options": [
+        "The model is outdated",
+        "The inventory no longer matches the agent, so new paths are unmapped",
+        "OWASP lists expire",
+        "Tools slow the agent down"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Update the inventory whenever capabilities change, ideally checked in CI."
+    },
+    {
+      "id": "tm15",
+      "kind": "multi",
+      "industry": "Government services",
+      "question": "Which belong in a residual-risk register entry? Select all that apply.",
+      "options": [
+        "The control applied",
+        "A named owner",
+        "The model’s temperature",
+        "The number of GPUs"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Risk, control, residual rating and owner make it actionable."
+    },
+    {
+      "id": "tm16",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An agent only reads public product pages and answers anonymous shoppers, with no personal data or tools. Which trifecta leg is missing?",
+      "options": [
+        "Untrusted content",
+        "External communication",
+        "Private data",
+        "None"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Without private data there is nothing to steal, though other risks such as misinformation remain."
+    },
+    {
+      "id": "tm17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which ASI entry covers an agent’s identity or permissions being misused or escalated?",
+      "options": [
+        "ASI02 Tool Misuse",
+        "ASI03 Identity and Privilege Abuse",
+        "ASI05 Unexpected Code Execution",
+        "ASI07 Insecure Inter-Agent Communication"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Identity and privilege abuse is ASI03."
+    },
+    {
+      "id": "tm18",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "A patient-portal agent can read records and send secure messages to any address. Which changes reduce risk most? Select all that apply.",
+      "options": [
+        "Restrict messages to the patient’s verified address",
+        "Scope record access to the current patient",
+        "Allow messages to any address but log them",
+        "Increase the model size"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Gating the outbound channel and scoping data shrink both the path and the blast radius."
+    },
+    {
+      "id": "tm19",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which resource describes adversary tactics and techniques against AI systems, with case studies?",
+      "options": [
+        "MITRE ATLAS",
+        "OpenTelemetry",
+        "MLflow",
+        "Temporal"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "ATLAS is MITRE’s knowledge base for AI threats."
+    },
+    {
+      "id": "tm20",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "What does the OWASP LLM entry LLM10 Unbounded Consumption cover?",
+      "options": [
+        "Prompt leakage",
+        "Excessive or uncontrolled use of resources, cost and inference",
+        "Poisoned embeddings",
+        "Hallucinated citations"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It covers resource exhaustion and cost abuse."
+    }
+  ]
+}

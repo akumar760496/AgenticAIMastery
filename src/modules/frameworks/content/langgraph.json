@@ -1,0 +1,816 @@
+{
+  "id": "langgraph",
+  "moduleSlug": "frameworks",
+  "name": "LangGraph",
+  "shortName": "LangGraph",
+  "question": "How do I build long-running agents that pause, resume and survive crashes?",
+  "summary": "LangGraph models an agent as a graph of nodes that read and write shared state. A checkpointer saves state after every step for each thread, so a run can pause for human approval with interrupt(), survive a crash, and resume hours later; you can also inspect and replay past steps. LangChain’s create_agent builds the common loop on top. It is the most explicit option for durable, controllable workflows, at the cost of more concepts to learn.",
+  "useCases": [
+    "Long-running cases with human approvals",
+    "Workflows needing precise control of each step",
+    "Teams that want replay and time-travel debugging"
+  ],
+  "keyFacts": {
+    "label": "Core ideas",
+    "items": [
+      {
+        "term": "StateGraph",
+        "detail": "nodes and edges over shared state"
+      },
+      {
+        "term": "Checkpointer",
+        "detail": "memory, SQLite or Postgres persistence"
+      },
+      {
+        "term": "thread_id",
+        "detail": "one saved history per case"
+      },
+      {
+        "term": "interrupt()",
+        "detail": "pause for a human; resume with Command"
+      },
+      {
+        "term": "create_agent",
+        "detail": "the standard tool loop, prebuilt"
+      },
+      {
+        "term": "LangSmith",
+        "detail": "tracing, evals and deployment (optional)"
+      }
+    ]
+  },
+  "steps": [
+    "Start from create_agent with your tools",
+    "Add a Postgres checkpointer and a thread per case",
+    "Put interrupt() before risky actions",
+    "Move to a custom graph when you need explicit control"
+  ],
+  "pitfalls": [
+    "Using the in-memory checkpointer in production",
+    "Graphs more complex than the problem",
+    "Side effects that repeat on resume"
+  ],
+  "tools": [
+    "LangGraph",
+    "LangChain create_agent",
+    "Postgres checkpointer",
+    "LangSmith"
+  ],
+  "remember": "State per thread, a checkpoint per step, interrupt before risk.",
+  "caption": "Python and TypeScript.",
+  "comparison": {
+    "scope": "Durable, controllable workflows",
+    "cost": 3,
+    "needs": "Python or TypeScript",
+    "best": "Over-engineered graphs"
+  },
+  "diagram": {
+    "file": "diagrams/langgraph.svg"
+  },
+  "lesson": {
+    "file": "upi_agent_langgraph.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "@tool",
+        "steps": []
+      },
+      {
+        "text": "def raise_dispute(utr: str, reason: str) -> str:",
+        "steps": []
+      },
+      {
+        "text": "    \"\"\"Raise a dispute for a failed UPI debit.\"\"\"",
+        "steps": []
+      },
+      {
+        "text": "    decision = interrupt({\"utr\": utr, \"reason\": reason})     # pause",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if decision != \"approve\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        return \"Rejected by reviewer.\"",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return bank.disputes.create(utr, reason)       # after approval only",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "with PostgresSaver.from_conn_string(DB_URL) as saver:",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    agent = create_agent(\"anthropic:claude-sonnet-4-5\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                         tools=[get_transaction, raise_dispute],",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                         system_prompt=SYSTEM, checkpointer=saver)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    case = {\"configurable\": {\"thread_id\": \"case-8812\"}}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    agent.invoke({\"messages\": [{\"role\": \"user\", \"content\": Q}]}, case)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "    # hours later, another process",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    agent.invoke(Command(resume=\"approve\"), case)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "# inspect or replay: agent.get_state_history(case)",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "The standard loop, prebuilt",
+        "text": "create_agent builds the model-and-tools loop as a LangGraph graph. Custom graphs come later, if ever."
+      },
+      {
+        "title": "A checkpointer and a thread per case",
+        "text": "Postgres stores the state after every step under thread_id case-8812. The in-memory saver is for tests only."
+      },
+      {
+        "title": "interrupt() pauses the run",
+        "text": "Inside the tool, interrupt() stops the run and saves it. The request returns; nothing waits in memory."
+      },
+      {
+        "title": "Resume from anywhere, any time",
+        "text": "A different process, two days later, resumes the same thread with Command(resume=\"approve\")."
+      },
+      {
+        "title": "Side effects after the pause",
+        "text": "On resume the tool runs again from its start, so the dispute is created only after the decision and must be idempotent."
+      },
+      {
+        "title": "Replay and inspect",
+        "text": "Every step is saved, so you can list the history, inspect state and replay from a past checkpoint when debugging."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"110\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"63\" y=\"20\">agent</text><text class=\"sb\" x=\"63\" y=\"35\">model</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M120 23L140 23\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"142\" y=\"6\" width=\"100\" height=\"34\" rx=\"7\"/><text class=\"lb\" x=\"192\" y=\"27.5\">tools</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"50\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"36\" y=\"65\" text-anchor=\"middle\">step 1</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx pass\" x=\"70\" y=\"50\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"98\" y=\"65\" text-anchor=\"middle\">step 2</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx pass\" x=\"132\" y=\"50\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"160\" y=\"65\" text-anchor=\"middle\">step 3</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx pass\" x=\"194\" y=\"50\" width=\"56\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"222\" y=\"65\" text-anchor=\"middle\">step 4</text></g><text class=\"mono a\" x=\"262\" y=\"65\" style=\"text-anchor:start;--d:0.35s\">case-8812</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"256\" y=\"6\" width=\"96\" height=\"34\" rx=\"6\"/><text class=\"tl\" x=\"304\" y=\"27\" text-anchor=\"middle\">interrupt</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"84\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"99\" text-anchor=\"middle\">2 days later: Command(resume=\"approve\")</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"114\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"129\" text-anchor=\"middle\">create dispute after approval · idempotent</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"161\" style=\"text-anchor:end;--d:0s\">no checkpoint</text><rect x=\"118\" y=\"151\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"151\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--fail);--d:0.1s\"/><text class=\"mono a\" x=\"274\" y=\"161\" style=\"text-anchor:start;--d:0.2s\">280 s lost</text><text class=\"tl a\" x=\"112\" y=\"183\" style=\"text-anchor:end;--d:0.1s\">checkpointed</text><rect x=\"118\" y=\"173\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"173\" width=\"21.428571428571427\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"274\" y=\"183\" style=\"text-anchor:start;--d:0.30000000000000004s\">40 s</text><g class=\"a\" style=\"--d:0.2s\"><text class=\"tag-t\" x=\"180\" y=\"214\" style=\"text-anchor:middle;fill:var(--ink-2)\">crash at step 7 of 10 (illustrative)</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Durable state per thread; survives crashes",
+      "Human approvals that wait hours or days",
+      "Precise control over every step",
+      "Replay and inspection of past runs"
+    ],
+    "cons": [
+      "The steepest learning curve here",
+      "More concepts: state, nodes, reducers, checkpointers",
+      "Easy to over-engineer graphs",
+      "Tied to LangChain’s ecosystem"
+    ],
+    "avoidWhen": [
+      "Short, simple tool loops",
+      "Teams without time to learn it properly"
+    ],
+    "tools": [
+      {
+        "name": "LangGraph",
+        "type": "Open source",
+        "what": "Graphs, state and checkpointers",
+        "url": "https://docs.langchain.com/oss/python/langgraph/overview"
+      },
+      {
+        "name": "LangChain create_agent",
+        "type": "Open source",
+        "what": "Prebuilt agent loop on LangGraph",
+        "url": "https://docs.langchain.com/oss/python/langchain/agents"
+      },
+      {
+        "name": "Postgres checkpointer",
+        "type": "Open source",
+        "what": "Persistent state",
+        "url": "https://pypi.org/project/langgraph-checkpoint-postgres/"
+      },
+      {
+        "name": "LangSmith",
+        "type": "Commercial",
+        "what": "Tracing, evals and deployment",
+        "url": "https://docs.smith.langchain.com"
+      },
+      {
+        "name": "LangGraph JS",
+        "type": "Open source",
+        "what": "TypeScript version",
+        "url": "https://docs.langchain.com/oss/javascript/langgraph/overview"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A fictional NBFC’s collections cases run for days and need a credit officer’s approval before anything is sent. Set the needs and see when LangGraph is the best fit and when its learning curve is not worth it.",
+    "controls": [
+      "Choose your language, whether you must be able to switch model providers, and any cloud preference.",
+      "Rate each need: long-running durability, several agents, typed outputs, step control, built-in workspace tools, prototype speed and few dependencies.",
+      "Or load a scenario and change one thing at a time."
+    ],
+    "outputs": [
+      {
+        "name": "Ranking",
+        "meaning": "Each option’s fit for your needs, with the top pick starred; the highlighted row is this tab’s framework."
+      },
+      {
+        "name": "Lines for the same agent",
+        "meaning": "How long the same UPI-dispute agent is in each option’s example on this page."
+      },
+      {
+        "name": "Ruled out",
+        "meaning": "Options excluded by language or model constraints, and why."
+      },
+      {
+        "name": "Verdict",
+        "meaning": "Whether this tab’s framework fits best, ranks lower, or is ruled out."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Everything useful",
+        "expect": "Top pick: Pydantic AI. LangGraph ranks 2 of 7."
+      },
+      {
+        "k": "bank",
+        "name": "Bank case with approvals",
+        "expect": "Top pick: LangGraph."
+      },
+      {
+        "k": "proto",
+        "name": "Quick prototype on OpenAI",
+        "expect": "Top pick: OpenAI Agents SDK. LangGraph ranks 6 of 7."
+      },
+      {
+        "k": "simple",
+        "name": "Small team, simple agent",
+        "expect": "Top pick: Plain SDK loop. LangGraph ranks 3 of 7."
+      }
+    ],
+    "missions": [
+      {
+        "k": "top",
+        "text": "Make LangGraph the top pick.",
+        "hint": "What does a checkpointer give you?"
+      },
+      {
+        "k": "durable",
+        "text": "Make it top with durability and step control both essential.",
+        "hint": "Start from the bank scenario."
+      },
+      {
+        "k": "drop",
+        "text": "Show LangGraph dropping to fourth or lower when prototype speed is essential and durability is not needed.",
+        "hint": "Its learning curve is the price."
+      }
+    ],
+    "tools": [
+      {
+        "n": "LangGraph",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Stateful graphs with checkpointers and interrupts.",
+        "ex": "Collections cases that pause for approval.",
+        "pros": [
+          "Durable",
+          "Precise control"
+        ],
+        "cons": [
+          "Steep learning curve",
+          "Easy to over-engineer"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/overview"
+      },
+      {
+        "n": "LangChain create_agent",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "The standard tool loop, built on LangGraph.",
+        "ex": "Start the dispute agent without writing a graph.",
+        "pros": [
+          "Quick start",
+          "Upgrade path to custom graphs"
+        ],
+        "cons": [
+          "LangChain dependency",
+          "Abstractions to learn"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langchain/agents"
+      },
+      {
+        "n": "Postgres checkpointer",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Persistent state per thread.",
+        "ex": "Resume case-8812 two days later.",
+        "pros": [
+          "Reliable",
+          "Queryable"
+        ],
+        "cons": [
+          "Needs a database",
+          "Schema upgrades"
+        ],
+        "url": "https://pypi.org/project/langgraph-checkpoint-postgres/"
+      },
+      {
+        "n": "LangSmith",
+        "type": "Commercial",
+        "start": 3,
+        "prod": 3,
+        "best": "Tracing, evals and deployment for LangGraph.",
+        "ex": "Inspect every step of a stuck case.",
+        "pros": [
+          "Deep integration",
+          "Evals"
+        ],
+        "cons": [
+          "Paid",
+          "Vendor coupling"
+        ],
+        "url": "https://docs.smith.langchain.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Cases wait days for approval",
+        "tool": "LangGraph with a Postgres checkpointer"
+      },
+      {
+        "need": "We need replay for debugging",
+        "tool": "LangGraph’s state history"
+      },
+      {
+        "need": "A quick demo by Friday",
+        "tool": "A lighter option first"
+      }
+    ],
+    "goals": [
+      "See what durable state and interrupts give",
+      "Recognise when a graph is over-engineering",
+      "Compare with lighter options"
+    ]
+  },
+  "practice": {
+    "scenario": "A fictional NBFC’s collections agent handles cases that run for days: it gathers payment history, proposes a restructuring or a notice, and must wait for a credit officer’s approval before anything is sent. Built on LangGraph with a Postgres checkpointer, each case is a thread. The agent pauses with interrupt() before sending, survives server restarts, and resumes when the officer approves, sometimes two days later.",
+    "industries": [
+      {
+        "industry": "Lending",
+        "use": "Collections and restructuring cases with approvals"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims that wait for documents or assessors"
+      },
+      {
+        "industry": "Banking",
+        "use": "Account-opening workflows with maker-checker steps"
+      }
+    ],
+    "analogy": "A case file that stays on the desk between visits: each step is written down, so whoever picks it up, even after a power cut, continues from the last page.",
+    "library": {
+      "name": "LangGraph + LangChain",
+      "what": "create_agent builds the tool loop on LangGraph; a checkpointer persists every step per thread, and interrupt() pauses for a human.",
+      "install": "pip install langgraph langchain langgraph-checkpoint-postgres"
+    },
+    "note": "On resume the interrupted node runs again from its start, so keep side effects after the interrupt and make them idempotent (Panel 8).",
+    "samples": [
+      {
+        "file": "upi_agent_langgraph.py",
+        "language": "python",
+        "code": "from langchain.agents import create_agent\nfrom langchain.tools import tool\nfrom langgraph.checkpoint.postgres import PostgresSaver\nfrom langgraph.types import Command, interrupt\n\n@tool\ndef get_transaction(utr: str) -> dict:\n    \"\"\"Look up a UPI transaction by its 12-digit UTR.\"\"\"\n    return bank.transactions.get(utr)\n\n@tool\ndef raise_dispute(utr: str, reason: str) -> str:\n    \"\"\"Raise a dispute for a failed UPI debit. Needs human approval.\"\"\"\n    decision = interrupt({\"utr\": utr, \"reason\": reason})    # run pauses here\n    if decision != \"approve\":\n        return \"Rejected by reviewer.\"\n    return bank.disputes.create(utr, reason)\n\nwith PostgresSaver.from_conn_string(DB_URL) as saver:\n    saver.setup()                                            # first run only\n    agent = create_agent(\"anthropic:claude-sonnet-4-5\",\n                         tools=[get_transaction, raise_dispute],\n                         system_prompt=SYSTEM, checkpointer=saver)\n    case = {\"configurable\": {\"thread_id\": \"case-8812\"}}\n    agent.invoke({\"messages\": [{\"role\": \"user\", \"content\": QUESTION}]}, case)\n\n    # Hours later, in another process, after the reviewer approves:\n    agent.invoke(Command(resume=\"approve\"), case)"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A 10-step agent run takes 40 seconds per step and crashes at step 7. Without a checkpointer it restarts from step 1; with one it redoes only step 7. How many seconds of work does the checkpointer save?",
+    "answer": "Without it, steps 1 to 7 run again: 280 seconds. With it, only step 7: 40 seconds. It saves 240 seconds, plus the model cost of six steps, and it avoids repeating side effects that already happened.",
+    "expected": {
+      "value": 240,
+      "tolerance": 1,
+      "label": "seconds ="
+    },
+    "interview": [
+      {
+        "question": "How does LangGraph support human-in-the-loop?",
+        "answer": "A node calls interrupt() with the data a human needs. The run stops, its state is saved by the checkpointer under a thread id, and it can be resumed later, from any process, with Command(resume=...). Because state is persisted, the wait can be hours or days."
+      },
+      {
+        "question": "What is the catch with resuming after an interrupt?",
+        "answer": "The interrupted node runs again from its start when resumed, so code before interrupt() executes twice. Put side effects after the interrupt and make them idempotent, and use a persistent checkpointer such as Postgres rather than the in-memory one in production."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "In-memory checkpointer in production",
+        "fix": "Use Postgres or another persistent store"
+      },
+      {
+        "mistake": "Side effects before interrupt()",
+        "fix": "Place them after the approval, and make them idempotent"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "lg01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What does a LangGraph checkpointer do?",
+      "options": [
+        "Saves graph state after each step for a thread",
+        "Checks code style",
+        "Compresses prompts",
+        "Chooses models"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Persistence per thread."
+    },
+    {
+      "id": "lg02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What does interrupt() do?",
+      "options": [
+        "Pauses the run for human input and saves its state",
+        "Deletes the thread",
+        "Speeds up the graph",
+        "Stops the server"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Resume later with Command."
+    },
+    {
+      "id": "lg03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "How do you resume an interrupted run?",
+      "options": [
+        "Invoke with Command(resume=...) and the same thread_id",
+        "Start a new thread",
+        "Restart the server",
+        "Edit the database"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Resume carries the decision."
+    },
+    {
+      "id": "lg04",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Which checkpointer should production use?",
+      "options": [
+        "A persistent one such as Postgres",
+        "In-memory",
+        "None",
+        "A text file"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "In-memory is lost on restart."
+    },
+    {
+      "id": "lg05",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which are strengths of LangGraph? Select all that apply.",
+      "options": [
+        "Durable state that survives crashes",
+        "Precise control of each step",
+        "The shortest learning curve",
+        "No dependencies"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Durability and control."
+    },
+    {
+      "id": "lg06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "On resume, where does an interrupted tool restart?",
+      "options": [
+        "From its beginning",
+        "From the line after interrupt()",
+        "From the graph’s start",
+        "It does not restart"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Code before interrupt runs twice."
+    },
+    {
+      "id": "lg07",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A tool creates a dispute before calling interrupt(). What goes wrong?",
+      "options": [
+        "Nothing",
+        "The dispute is created before approval, and again on resume",
+        "It is faster",
+        "The interrupt is skipped"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Side effects after the pause."
+    },
+    {
+      "id": "lg08",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A 10-step run at 40 s per step crashes at step 7. How much does checkpointing save?",
+      "options": [
+        "40 s",
+        "240 s",
+        "280 s",
+        "400 s"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "280 s without, 40 s with."
+    },
+    {
+      "id": "lg09",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What is thread_id used for?",
+      "options": [
+        "Identifying one saved case history",
+        "Choosing the CPU thread",
+        "Naming the model",
+        "Encrypting state"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One thread per case."
+    },
+    {
+      "id": "lg10",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "What does LangChain’s create_agent give you?",
+      "options": [
+        "The standard tool loop built on LangGraph",
+        "A vector database",
+        "A fine-tuned model",
+        "A UI framework"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Start there, customise later."
+    },
+    {
+      "id": "lg11",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is LangGraph likely overkill? Select all that apply.",
+      "options": [
+        "A short two-tool chat agent",
+        "A quick prototype due Friday with no durability needs",
+        "Multi-day cases with approvals",
+        "Workflows needing replay"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Its concepts cost time."
+    },
+    {
+      "id": "lg12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "What does saved state history enable?",
+      "options": [
+        "Inspecting and replaying past steps",
+        "Faster tokens",
+        "Cheaper models",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Time-travel debugging."
+    },
+    {
+      "id": "lg13",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "When did LangGraph reach version 1.0?",
+      "options": [
+        "October 2025",
+        "2019",
+        "2030",
+        "It has not"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Alongside LangChain 1.0."
+    },
+    {
+      "id": "lg14",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which languages does LangGraph support?",
+      "options": [
+        "Python and TypeScript",
+        "Only Java",
+        "Only Go",
+        "Only .NET"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Python and JS/TS."
+    },
+    {
+      "id": "lg15",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Which optional service provides tracing and deployment for LangGraph?",
+      "options": [
+        "LangSmith",
+        "Logfire only",
+        "Azure Monitor only",
+        "None exists"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "LangChain’s platform."
+    },
+    {
+      "id": "lg16",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Why make actions after an interrupt idempotent?",
+      "options": [
+        "Resumes and retries can repeat them",
+        "It is faster",
+        "Models require it",
+        "It is not needed"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Repeat-safe side effects."
+    },
+    {
+      "id": "lg17",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Is LangGraph tied to one model provider?",
+      "options": [
+        "No, it works with many providers",
+        "Yes, OpenAI only",
+        "Yes, Claude only",
+        "Yes, Gemini only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Provider-neutral."
+    },
+    {
+      "id": "lg18",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which belong in a production LangGraph deployment? Select all that apply.",
+      "options": [
+        "A persistent checkpointer",
+        "interrupt() before irreversible actions",
+        "The in-memory saver",
+        "Side effects before interrupts"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Persistence and gated actions."
+    },
+    {
+      "id": "lg19",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "What is a common failure when teams adopt LangGraph?",
+      "options": [
+        "Graphs more complex than the problem",
+        "Too little control",
+        "No persistence available",
+        "No Python support"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Over-engineering."
+    },
+    {
+      "id": "lg20",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "For multi-day approval cases in Python with provider switching required, which option fits best?",
+      "options": [
+        "LangGraph",
+        "Claude Agent SDK",
+        "A six-agent crew",
+        "A plain loop with no persistence"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Durable, controllable, provider-neutral."
+    }
+  ]
+}

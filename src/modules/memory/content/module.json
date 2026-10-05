@@ -1,0 +1,278 @@
+{
+  "slug": "memory",
+  "number": 9,
+  "techniqueOrder": [
+    "ctxbudget",
+    "stm",
+    "semmem",
+    "epimem",
+    "memwrite",
+    "memtools",
+    "procmem",
+    "graphmem"
+  ],
+  "glossary": [
+    {
+      "term": "context window",
+      "definition": "The maximum number of tokens a model can consider in one request, including the prompt and its output."
+    },
+    {
+      "term": "context engineering",
+      "definition": "Choosing and arranging the tokens a model sees at each step: instructions, memories, history and tool results."
+    },
+    {
+      "term": "context rot",
+      "definition": "The drop in accuracy as input length grows, even when the task itself stays simple."
+    },
+    {
+      "term": "lost in the middle",
+      "definition": "The finding that models use information at the start or end of a long input better than information in the middle."
+    },
+    {
+      "term": "effective context",
+      "definition": "The input length at which a model still performs well on your task, often far below the advertised maximum."
+    },
+    {
+      "term": "compaction",
+      "definition": "Summarizing older parts of a conversation into a shorter block so the session can continue within the window."
+    },
+    {
+      "term": "tool-result clearing",
+      "definition": "Removing old tool outputs from the context while keeping the record that the call happened."
+    },
+    {
+      "term": "checkpointer",
+      "definition": "A component that saves an agent’s thread state by session ID so it can resume later."
+    },
+    {
+      "term": "semantic memory",
+      "definition": "Durable facts about users or entities kept outside the model and retrieved when relevant."
+    },
+    {
+      "term": "episodic memory",
+      "definition": "Records of specific past runs or experiences, retrieved when a similar situation comes up."
+    },
+    {
+      "term": "reflection",
+      "definition": "Condensing several episodes into a short, higher-level lesson that cites them."
+    },
+    {
+      "term": "namespace",
+      "definition": "A key prefix, such as tenant and user ID, that scopes where memories are written and searched."
+    },
+    {
+      "term": "TTL",
+      "definition": "Time to live: how long an item is kept before it expires automatically."
+    },
+    {
+      "term": "DPDP Act",
+      "definition": "India’s Digital Personal Data Protection Act, 2023, which includes duties to erase personal data on request or when its purpose ends."
+    },
+    {
+      "term": "path traversal",
+      "definition": "Using sequences such as ../ to reach files outside an allowed directory."
+    },
+    {
+      "term": "temporal knowledge graph",
+      "definition": "A graph of entities and relationships where each relationship carries the time it was valid."
+    },
+    {
+      "term": "edge invalidation",
+      "definition": "Marking a relationship as no longer true by setting its end date, instead of deleting it."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Anthropic: Effective context engineering for AI agents",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    },
+    {
+      "id": "S2",
+      "title": "Chroma research: Context rot",
+      "url": "https://www.trychroma.com/research/context-rot"
+    },
+    {
+      "id": "S3",
+      "title": "Lost in the Middle: How language models use long contexts (Liu et al., 2023)",
+      "url": "https://arxiv.org/abs/2307.03172"
+    },
+    {
+      "id": "S4",
+      "title": "RULER: What’s the real context size of your long-context LMs? (Hsieh et al., 2024)",
+      "url": "https://arxiv.org/abs/2404.06654"
+    },
+    {
+      "id": "S5",
+      "title": "Claude docs: Prompting best practices (long-context tips)",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices"
+    },
+    {
+      "id": "S6",
+      "title": "Claude docs: Context editing",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/context-editing"
+    },
+    {
+      "id": "S7",
+      "title": "Claude docs: Compaction at a token threshold",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/compaction-threshold"
+    },
+    {
+      "id": "S8",
+      "title": "Anthropic: Managing context on the Claude Developer Platform",
+      "url": "https://www.anthropic.com/news/context-management"
+    },
+    {
+      "id": "S9",
+      "title": "LangGraph docs: Memory",
+      "url": "https://docs.langchain.com/oss/python/langgraph/memory"
+    },
+    {
+      "id": "S10",
+      "title": "OpenAI Agents SDK: Sessions",
+      "url": "https://openai.github.io/openai-agents-python/sessions/"
+    },
+    {
+      "id": "S11",
+      "title": "Mem0: Building production-ready AI agents with scalable long-term memory (Chhikara et al., 2025)",
+      "url": "https://arxiv.org/abs/2504.19413"
+    },
+    {
+      "id": "S12",
+      "title": "Zep: A temporal knowledge graph architecture for agent memory (Rasmussen et al., 2025)",
+      "url": "https://arxiv.org/abs/2501.13956"
+    },
+    {
+      "id": "S13",
+      "title": "Graphiti (GitHub)",
+      "url": "https://github.com/getzep/graphiti"
+    },
+    {
+      "id": "S14",
+      "title": "LongMemEval: Benchmarking chat assistants on long-term interactive memory (Wu et al., 2024)",
+      "url": "https://arxiv.org/abs/2410.10813"
+    },
+    {
+      "id": "S15",
+      "title": "Generative Agents: Interactive simulacra of human behavior (Park et al., 2023)",
+      "url": "https://arxiv.org/abs/2304.03442"
+    },
+    {
+      "id": "S16",
+      "title": "Reflexion: Language agents with verbal reinforcement learning (Shinn et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.11366"
+    },
+    {
+      "id": "S17",
+      "title": "Digital Personal Data Protection Act, 2023 (MeitY)",
+      "url": "https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf"
+    },
+    {
+      "id": "S18",
+      "title": "PIB: Digital Personal Data Protection Rules, 2025 notified",
+      "url": "https://static.pib.gov.in/WriteReadData/specificdocs/documents/2025/nov/doc20251117695301.pdf"
+    },
+    {
+      "id": "S19",
+      "title": "DPDP Rules 2025, Rule 8 (text)",
+      "url": "https://www.dpdpa.com/dpdparules/rule8.html"
+    },
+    {
+      "id": "S20",
+      "title": "Letta docs: Sleep-time agents",
+      "url": "https://docs.letta.com/guides/agents/architectures/sleeptime/"
+    },
+    {
+      "id": "S21",
+      "title": "MemGPT: Towards LLMs as operating systems (Packer et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.08560"
+    },
+    {
+      "id": "S22",
+      "title": "Letta docs: Memory blocks",
+      "url": "https://docs.letta.com/guides/agents/memory-blocks"
+    },
+    {
+      "id": "S23",
+      "title": "Letta docs: Archival memory",
+      "url": "https://docs.letta.com/v1-sdk/memory/archival-memory"
+    },
+    {
+      "id": "S24",
+      "title": "Claude docs: Memory tool",
+      "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool"
+    },
+    {
+      "id": "S25",
+      "title": "Voyager: an open-ended embodied agent with a skill library (Wang et al., 2023)",
+      "url": "https://arxiv.org/abs/2305.16291"
+    },
+    {
+      "id": "S26",
+      "title": "Agent Workflow Memory (Wang et al., 2024)",
+      "url": "https://arxiv.org/abs/2409.07429"
+    },
+    {
+      "id": "S27",
+      "title": "Cognitive Architectures for Language Agents, CoALA (Sumers et al., 2023)",
+      "url": "https://arxiv.org/abs/2309.02427"
+    },
+    {
+      "id": "S28",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "id": "S29",
+      "title": "Zep: A temporal knowledge graph architecture for agent memory (Rasmussen et al., 2025)",
+      "url": "https://arxiv.org/abs/2501.13956"
+    },
+    {
+      "id": "S30",
+      "title": "Graphiti on GitHub",
+      "url": "https://github.com/getzep/graphiti"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Answers get worse late in long sessions or with long inputs",
+      "techniqueId": "ctxbudget",
+      "advice": "Curate the window: fewer, higher-signal chunks, key facts at the start and the question last."
+    },
+    {
+      "symptom": "The agent hits the context limit or loses the thread mid-task",
+      "techniqueId": "stm",
+      "advice": "Clear stale tool results and compact old turns, keeping IDs, amounts and open tasks."
+    },
+    {
+      "symptom": "It forgets the user between sessions",
+      "techniqueId": "semmem",
+      "advice": "Extract and reconcile durable facts per user, and retrieve the relevant few each turn."
+    },
+    {
+      "symptom": "It repeats last week’s mistake",
+      "techniqueId": "epimem",
+      "advice": "Log episodes, retrieve by recency, importance and relevance, and inject short lessons."
+    },
+    {
+      "symptom": "It remembers stale, sensitive or deleted things",
+      "techniqueId": "memwrite",
+      "advice": "Allow-list what is saved, invalidate old facts, and delete every copy on request."
+    },
+    {
+      "symptom": "We want the agent to manage its own notes",
+      "techniqueId": "memtools",
+      "advice": "Give it a memory tool with safe path handling and pair it with context editing."
+    },
+    {
+      "symptom": "The agent repeats the same multi-step routine",
+      "techniqueId": "procmem",
+      "advice": "Save proven workflows as procedures or skills, retrieve them by task, and retire them when they go stale."
+    },
+    {
+      "symptom": "Memory returns old nominees and addresses, and cannot chain facts",
+      "techniqueId": "graphmem",
+      "advice": "Store entities and dated relationships, close old edges, and traverse the graph for the current time."
+    }
+  ]
+}

@@ -1,0 +1,808 @@
+{
+  "id": "distill",
+  "moduleSlug": "fine-tuning",
+  "name": "Distillation into a Small Model",
+  "shortName": "Distillation",
+  "question": "Can a small model learn to do what the big one does?",
+  "summary": "Distillation uses a large teacher model’s outputs on your real inputs as training data for a small student. Filter the teacher’s answers with a judge or verifier, optionally include its reasoning, and fine-tune the student, often with LoRA. Then route most traffic to the student and keep the teacher as a fallback. It is the usual way to turn an expensive frontier-model workload into an affordable one.",
+  "useCases": [
+    "A narrow, high-volume task that a frontier model already does well",
+    "Cost or latency limits that rule out a large model on every call",
+    "Data that must stay on your own infrastructure"
+  ],
+  "keyFacts": {
+    "label": "Recipe",
+    "items": [
+      {
+        "term": "Teacher data",
+        "detail": "the large model’s answers on real, representative inputs"
+      },
+      {
+        "term": "Filtering",
+        "detail": "keep only answers a judge or verifier accepts"
+      },
+      {
+        "term": "Rationales",
+        "detail": "training on the teacher’s reasoning helps small students (distilling step by step)"
+      },
+      {
+        "term": "Student",
+        "detail": "a small open model, usually tuned with LoRA"
+      },
+      {
+        "term": "Routing",
+        "detail": "send confident cases to the student, the rest to the teacher (Panel 3)"
+      },
+      {
+        "term": "Terms",
+        "detail": "check each provider’s terms on using outputs to train models"
+      }
+    ]
+  },
+  "steps": [
+    "Log the teacher’s answers on real traffic, and filter them",
+    "Fine-tune a small student on the filtered set",
+    "Evaluate the student against the teacher on held-out data",
+    "Route traffic gradually, with fallback on low confidence"
+  ],
+  "pitfalls": [
+    "Training on unfiltered teacher mistakes",
+    "Too few examples for the variety of real inputs",
+    "Switching all traffic before a head-to-head evaluation"
+  ],
+  "tools": [
+    "Hugging Face TRL",
+    "Unsloth",
+    "OpenAI model distillation",
+    "vLLM for serving the student",
+    "LiteLLM for routing"
+  ],
+  "remember": "Teacher answers, filtered; student tuned; traffic routed with a fallback.",
+  "caption": "Illustrative: a student within a point of the teacher at about a tenth of the cost per call.",
+  "comparison": {
+    "scope": "Cost of a narrow, high-volume task",
+    "cost": 3,
+    "needs": "Teacher outputs, a judge, GPUs",
+    "best": "Copying the teacher’s mistakes"
+  },
+  "diagram": {
+    "file": "diagrams/distill.svg"
+  },
+  "lesson": {
+    "file": "distill.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "def build_dataset(logged, checker, keep_rationale=True):",
+        "steps": []
+      },
+      {
+        "text": "    rows = []",
+        "steps": []
+      },
+      {
+        "text": "    for r in logged:                            # teacher answers from logs",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "        if not checker(r[\"query\"], r[\"answer\"]):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "            continue                            # drop teacher mistakes",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        target = (f\"{r['rationale']}\\nAnswer: {r['answer']}\"",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "                  if keep_rationale else r[\"answer\"])",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        rows.append({\"messages\": [{\"role\": \"user\", \"content\": r[\"query\"]},",
+        "steps": []
+      },
+      {
+        "text": "                                  {\"role\": \"assistant\", \"content\": target}]})",
+        "steps": []
+      },
+      {
+        "text": "    return rows",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "student = sft_train(\"base-8b\", build_dataset(load_logged(), passes_checks))",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def route(query, threshold=0.8):",
+        "steps": []
+      },
+      {
+        "text": "    answer, confidence = student(query)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return answer if confidence >= threshold else teacher(query)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "compare(student, teacher, held_out_queries)     # before shifting traffic",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Log the teacher’s answers",
+        "text": "50,000 real itinerary queries answered by the frontier model. Check the provider’s terms on training with its outputs."
+      },
+      {
+        "title": "Filter out the teacher’s mistakes",
+        "text": "An automatic checker and a sample review drop wrong answers. The student copies whatever it is shown."
+      },
+      {
+        "title": "Keep the reasoning",
+        "text": "Training on the teacher’s rationale as well as its answer helps a small model learn how, not just what."
+      },
+      {
+        "title": "Tune a small student",
+        "text": "Supervised fine-tuning of an 8B model on the filtered set: the same SFT recipe, with the teacher’s answers as targets."
+      },
+      {
+        "title": "Route, with a fallback",
+        "text": "The student answers when it is confident; hard or unusual queries go to the teacher. Here 80% of traffic stayed on the student."
+      },
+      {
+        "title": "Compare before shifting traffic",
+        "text": "On held-out queries the student scored 91% against the teacher’s 92%, at ₹0.08 a query against ₹0.90."
+      }
+    ],
+    "sceneHeight": 240,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"6\" width=\"120\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"68\" y=\"25\">Teacher</text><text class=\"sb\" x=\"68\" y=\"40\">₹0.90 / query</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln acc\" d=\"M130 28L166 28\" marker-end=\"url(#arrA)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx soft\" x=\"170\" y=\"17\" width=\"182\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"261\" y=\"32\" text-anchor=\"middle\">50,000 answers</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"170\" y=\"56\" width=\"182\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"261\" y=\"71\" text-anchor=\"middle\">checker: keep 44,000</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"170\" y=\"84\" width=\"182\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"261\" y=\"99\" text-anchor=\"middle\">+ rationale</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"64\" width=\"120\" height=\"44\" rx=\"7\"/><text class=\"lb\" x=\"68\" y=\"83\">Student 8B</text><text class=\"sb\" x=\"68\" y=\"98\">₹0.08 / query</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"118\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"133\" text-anchor=\"middle\">80% → student</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"184\" y=\"118\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"133\" text-anchor=\"middle\">20% hard → teacher</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"112\" y=\"165\" style=\"text-anchor:end;--d:0s\">teacher</text><rect x=\"118\" y=\"155\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"155\" width=\"174.8\" height=\"13\" rx=\"3\" style=\"fill:var(--ink-2);--d:0.1s\"/><text class=\"mono a\" x=\"314\" y=\"165\" style=\"text-anchor:start;--d:0.2s\">92%</text><text class=\"tl a\" x=\"112\" y=\"187\" style=\"text-anchor:end;--d:0.1s\">student</text><rect x=\"118\" y=\"177\" width=\"190\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"177\" width=\"172.9\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.2s\"/><text class=\"mono a\" x=\"314\" y=\"187\" style=\"text-anchor:start;--d:0.30000000000000004s\">91%</text><g class=\"a\" style=\"--d:0.25s\"><text class=\"tag-t\" x=\"180\" y=\"222\" style=\"text-anchor:middle;fill:var(--pass)\">monthly bill down about 70%</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Cuts cost per query by an order of magnitude",
+      "Lower latency, can run on-premises",
+      "Uses answers you already have in logs",
+      "The teacher stays as a fallback"
+    ],
+    "cons": [
+      "The student is capped below the teacher on hard cases",
+      "Teacher mistakes are copied unless filtered",
+      "Provider terms may restrict training on outputs",
+      "Another model to evaluate and maintain"
+    ],
+    "avoidWhen": [
+      "Low-volume tasks where the teacher is cheap enough",
+      "Distilling without a held-out comparison"
+    ],
+    "tools": [
+      {
+        "name": "Hugging Face TRL",
+        "type": "Open source",
+        "what": "SFT on teacher outputs, and GKD for logit distillation",
+        "url": "https://huggingface.co/docs/trl"
+      },
+      {
+        "name": "OpenAI distillation",
+        "type": "Managed service",
+        "what": "Stored completions to fine-tune a smaller model",
+        "url": "https://platform.openai.com/docs/guides/distillation"
+      },
+      {
+        "name": "Amazon Bedrock model distillation",
+        "type": "Managed service",
+        "what": "Teacher and student models on Bedrock",
+        "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-distillation.html"
+      },
+      {
+        "name": "RouteLLM",
+        "type": "Open source",
+        "what": "Route between a small and a large model",
+        "url": "https://github.com/lm-sys/RouteLLM"
+      },
+      {
+        "name": "Argilla",
+        "type": "Open source",
+        "what": "Review teacher outputs before training",
+        "url": "https://docs.argilla.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A travel platform answers 2 million queries a month with a frontier model at ₹0.90 each, ₹18 lakh a month. Train a student on the teacher’s answers: choose its size, how many answers to use, whether to filter them and keep the reasoning, and what share of traffic to route to it. Watch accuracy across all traffic and the monthly bill.",
+    "controls": [
+      "Choose a 1B or 8B student and 1,000, 10,000 or 50,000 teacher answers.",
+      "Toggle filtering wrong teacher answers and training on the teacher’s reasoning.",
+      "Set the share of traffic routed to the student, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Student accuracy",
+        "meaning": "The student’s held-out accuracy; the teacher scores 92%."
+      },
+      {
+        "name": "Accuracy across all traffic",
+        "meaning": "Student share at its accuracy, the rest at the teacher’s."
+      },
+      {
+        "name": "Monthly bill",
+        "meaning": "Student queries at ₹0.08, teacher queries at ₹0.90, plus ₹30,000 for training and hosting."
+      },
+      {
+        "name": "Share of all-teacher bill",
+        "meaning": "The bill compared with ₹18 lakh."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "1B student, unused",
+        "expect": "The student scores 77%; with no traffic routed, the bill is still ₹18 lakh."
+      },
+      {
+        "k": "big",
+        "name": "Strong 8B student, 50% traffic",
+        "expect": "Student 91%, overall 91.5%, at 56% of the bill."
+      },
+      {
+        "k": "weak",
+        "name": "Weak student, all traffic",
+        "expect": "A 73% student on all traffic: the bill is 11%, but accuracy collapses."
+      },
+      {
+        "k": "half",
+        "name": "Unfiltered 8B, 60% traffic",
+        "expect": "Student 87%, overall 89%, at 47% of the bill."
+      }
+    ],
+    "missions": [
+      {
+        "k": "student",
+        "text": "Train a student that scores 90% or more.",
+        "hint": "A larger student, more data, filtering and reasoning."
+      },
+      {
+        "k": "route",
+        "text": "Keep 90% accuracy across all traffic at 30% or less of the all-teacher bill.",
+        "hint": "A strong student taking most of the traffic."
+      },
+      {
+        "k": "weak",
+        "text": "Show what a weak student does: 50%+ of traffic and overall accuracy below 87%.",
+        "hint": "Route traffic to a small, unfiltered student."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Hugging Face TRL",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "SFT on teacher outputs; GKD for logit-level distillation.",
+        "ex": "Tune an 8B student on 44,000 filtered itinerary answers.",
+        "pros": [
+          "Same stack as SFT",
+          "Open models you can host"
+        ],
+        "cons": [
+          "You run training and serving",
+          "Logit distillation needs white-box teachers"
+        ],
+        "url": "https://huggingface.co/docs/trl"
+      },
+      {
+        "n": "OpenAI distillation",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 2,
+        "best": "Store a large model’s completions and fine-tune a smaller one.",
+        "ex": "Save frontier answers, evaluate, then tune a small hosted model.",
+        "pros": [
+          "End-to-end in one platform",
+          "Built-in evals"
+        ],
+        "cons": [
+          "Tied to one provider",
+          "Limited student choice"
+        ],
+        "url": "https://platform.openai.com/docs/guides/distillation"
+      },
+      {
+        "n": "Amazon Bedrock model distillation",
+        "type": "Managed service",
+        "start": 3,
+        "prod": 3,
+        "best": "Distil a teacher into a student model on Bedrock.",
+        "ex": "Distil a large model for itinerary Q&A within AWS.",
+        "pros": [
+          "Managed data generation",
+          "Enterprise controls"
+        ],
+        "cons": [
+          "Supported model pairs only",
+          "AWS-specific"
+        ],
+        "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-distillation.html"
+      },
+      {
+        "n": "RouteLLM",
+        "type": "Open source",
+        "start": 2,
+        "prod": 2,
+        "best": "Train and serve routers between a small and a large model.",
+        "ex": "Send easy queries to the student and hard ones to the teacher.",
+        "pros": [
+          "Cost-quality trade-off you can tune",
+          "OpenAI-compatible server"
+        ],
+        "cons": [
+          "Router needs calibration data",
+          "Research-grade"
+        ],
+        "url": "https://github.com/lm-sys/RouteLLM"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "A frontier model is too expensive at scale",
+        "tool": "Distil into a small student and route with a fallback"
+      },
+      {
+        "need": "The teacher makes mistakes",
+        "tool": "Filter its answers before training"
+      },
+      {
+        "need": "I want to stay on one cloud",
+        "tool": "The provider’s managed distillation"
+      }
+    ],
+    "goals": [
+      "See how filtering and reasoning raise the student",
+      "See how routing trades cost for accuracy",
+      "Recognise when a student is too weak to take traffic"
+    ]
+  },
+  "practice": {
+    "scenario": "A travel platform’s itinerary assistant ran on a frontier model at ₹0.90 a query. The team collected 50,000 of its answers, kept those an automatic checker and a sample review passed, and tuned an 8B student on them. The student scored 91% against the teacher’s 92% on held-out queries at ₹0.08. Routing 80% of traffic to the student, and hard or low-confidence cases to the teacher, cut the bill by about 70%.",
+    "industries": [
+      {
+        "industry": "Travel",
+        "use": "Itinerary answers from a small model, hard trips routed to the large one"
+      },
+      {
+        "industry": "Banking",
+        "use": "Intent classification and form filling by a distilled model on-premises"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Product Q&A at high volume with a frontier fallback"
+      }
+    ],
+    "analogy": "An experienced chef writes down how they cook each dish, the best recipes are kept, and a junior cook trains on them. The junior handles the everyday menu; the chef still takes the difficult orders.",
+    "library": {
+      "name": "Hugging Face TRL",
+      "what": "Distillation here is SFT on the teacher’s filtered outputs; SFTTrainer and PEFT do the training, and a router sends traffic.",
+      "install": "pip install trl peft"
+    },
+    "note": "Check the provider’s terms before training on a model’s outputs. Keep the teacher as a fallback and compare the student on held-out queries, including hard ones.",
+    "samples": [
+      {
+        "file": "distill.py",
+        "language": "python",
+        "code": "import json\n\ndef build_dataset(logged, checker, keep_rationale=True):\n    \"\"\"Keep teacher answers that pass checks; optionally keep their reasoning.\"\"\"\n    rows = []\n    for r in logged:                              # {\"query\", \"answer\", \"rationale\"}\n        if not checker(r[\"query\"], r[\"answer\"]):\n            continue                              # filter out teacher mistakes\n        target = (f\"{r['rationale']}\\nAnswer: {r['answer']}\"\n                  if keep_rationale else r[\"answer\"])\n        rows.append({\"messages\": [{\"role\": \"user\", \"content\": r[\"query\"]},\n                                  {\"role\": \"assistant\", \"content\": target}]})\n    return rows\n\ndef route(query, student, teacher, threshold=0.8):\n    \"\"\"Serve from the student unless it is unsure.\"\"\"\n    answer, confidence = student(query)\n    return answer if confidence >= threshold else teacher(query)\n\nwith open(\"distil_train.jsonl\", \"w\") as f:\n    for row in build_dataset(load_logged(), checker=passes_checks):\n        f.write(json.dumps(row, ensure_ascii=False) + \"\\n\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A frontier model answers 3 million queries a month at ₹0.90 each. A distilled student costs ₹0.08 a query and takes 80% of traffic; the rest stays on the frontier model. What share of the monthly bill is saved, in percent? (Ignore training cost.)",
+    "answer": "Before: 3M × ₹0.90 = ₹27,00,000. After: 2.4M × ₹0.08 + 0.6M × ₹0.90 = ₹1,92,000 + ₹5,40,000 = ₹7,32,000. Saving ₹19,68,000, about 72.9%.",
+    "expected": {
+      "value": 72.9,
+      "tolerance": 0.2,
+      "label": "% saved ="
+    },
+    "interview": [
+      {
+        "question": "Why filter the teacher’s outputs before distilling?",
+        "answer": "The student learns whatever it is shown, including the teacher’s mistakes. Keeping only answers that pass an automatic checker, a judge or a sample review raises the student’s quality and stops it copying errors. Including the teacher’s rationales can also help a small student learn how, not just what."
+      },
+      {
+        "question": "How would you deploy a distilled model safely?",
+        "answer": "Route traffic to it gradually, starting with the easy, common intents, and keep the teacher as a fallback for low-confidence or unusual queries. Compare the student with the teacher on held-out and live samples, and check the provider’s terms on training with its outputs."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Distilling unfiltered logs",
+        "fix": "Filter out wrong answers first"
+      },
+      {
+        "mistake": "Switching all traffic at once",
+        "fix": "Route gradually with the teacher as fallback"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ds01",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is distillation in this context?",
+      "options": [
+        "Training a smaller student on a larger teacher’s outputs",
+        "Compressing prompts",
+        "Removing layers at random",
+        "Quantising to 4 bits"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The student learns from the teacher."
+    },
+    {
+      "id": "ds02",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "3M queries at ₹0.90; a student at ₹0.08 takes 80%. About what share of the bill is saved?",
+      "options": [
+        "About 27%",
+        "About 50%",
+        "About 73%",
+        "About 91%"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "₹7.32 lakh against ₹27 lakh: about 72.9% saved."
+    },
+    {
+      "id": "ds03",
+      "kind": "single",
+      "industry": "General",
+      "question": "Why filter the teacher’s answers first?",
+      "options": [
+        "The student copies the teacher’s mistakes otherwise",
+        "To slow training",
+        "Filtering is required by law",
+        "To make the student larger"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The student learns what it sees."
+    },
+    {
+      "id": "ds04",
+      "kind": "single",
+      "industry": "General",
+      "question": "What did “Distilling step-by-step” show?",
+      "options": [
+        "Training on the teacher’s rationales lets small models match larger ones with less data",
+        "Distillation never works",
+        "Students must be larger than teachers",
+        "Rationales hurt small models"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Rationales add signal."
+    },
+    {
+      "id": "ds05",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "Which belong in a safe rollout of a distilled model? Select all that apply.",
+      "options": [
+        "A held-out comparison with the teacher",
+        "Routing with the teacher as fallback",
+        "Switching all traffic at once",
+        "Deleting the teacher’s access"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Compare first, then route gradually with a fallback."
+    },
+    {
+      "id": "ds06",
+      "kind": "single",
+      "industry": "General",
+      "question": "A student scores 73% where the teacher scores 92%. What happens if it takes all traffic?",
+      "options": [
+        "Overall accuracy falls to about 73%",
+        "Accuracy stays at 92%",
+        "Accuracy rises",
+        "Costs rise"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Blended accuracy follows the traffic share."
+    },
+    {
+      "id": "ds07",
+      "kind": "single",
+      "industry": "General",
+      "question": "What should you check before training on a provider model’s outputs?",
+      "options": [
+        "The provider’s terms of use",
+        "The colour scheme",
+        "The GPU brand",
+        "Nothing"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Some terms restrict training competing models."
+    },
+    {
+      "id": "ds08",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which traffic should go to the student first?",
+      "options": [
+        "Easy, common intents",
+        "The hardest queries",
+        "Only legal questions",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Start where the student is strongest."
+    },
+    {
+      "id": "ds09",
+      "kind": "single",
+      "industry": "General",
+      "question": "How is a distilled student usually trained when the teacher is an API model?",
+      "options": [
+        "SFT on the teacher’s text outputs",
+        "Matching the teacher’s logits directly",
+        "RLVR only",
+        "It cannot be"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Black-box teachers give text, not logits."
+    },
+    {
+      "id": "ds10",
+      "kind": "multi",
+      "industry": "General",
+      "question": "What limits a student’s quality? Select all that apply.",
+      "options": [
+        "The teacher’s quality",
+        "The student’s size",
+        "The tokenizer’s licence",
+        "The GPU colour"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Teacher quality and student capacity bound results."
+    },
+    {
+      "id": "ds11",
+      "kind": "single",
+      "industry": "Travel",
+      "question": "A router sends a query to the teacher when…",
+      "options": [
+        "The student’s confidence is below a threshold",
+        "The student is confident",
+        "It is a weekday",
+        "The query is short"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Low confidence goes to the fallback."
+    },
+    {
+      "id": "ds12",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is a main benefit of a distilled model besides cost?",
+      "options": [
+        "Lower latency and the option to run on-premises",
+        "Guaranteed higher accuracy than the teacher",
+        "No need to evaluate",
+        "Unlimited context"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Small models are faster and easier to host."
+    },
+    {
+      "id": "ds13",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Logged answers were rated correct by support agents. How do you use the ratings?",
+      "options": [
+        "Keep only answers rated correct for training",
+        "Train on all answers equally",
+        "Train only on incorrect ones",
+        "Ignore them"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Ratings filter the dataset."
+    },
+    {
+      "id": "ds14",
+      "kind": "single",
+      "industry": "General",
+      "question": "The student is at 91% and the teacher at 92% on held-out queries. What should you verify next?",
+      "options": [
+        "Performance on hard and rare cases",
+        "The student’s file size only",
+        "Nothing",
+        "The teacher’s price only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Averages can hide failures on the tail."
+    },
+    {
+      "id": "ds15",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which TRL method distils using the teacher’s token probabilities?",
+      "options": [
+        "GKD (generalized knowledge distillation)",
+        "GRPO",
+        "DPO",
+        "PPO only"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "GKD uses the teacher’s distributions."
+    },
+    {
+      "id": "ds16",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why might a hospital prefer a distilled model?",
+      "options": [
+        "It can run inside its own network for data protection",
+        "It is always more accurate",
+        "It needs no oversight",
+        "It never needs updating"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "On-premises hosting keeps data in-house."
+    },
+    {
+      "id": "ds17",
+      "kind": "single",
+      "industry": "General",
+      "question": "More teacher answers help the student until…",
+      "options": [
+        "It approaches the limit set by its size and the teacher",
+        "Forever, without limit",
+        "The first 10 examples",
+        "The GPU runs out of colours"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Returns diminish."
+    },
+    {
+      "id": "ds18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "The student is strong on 40 intents but weak on others. What is a sensible design?",
+      "options": [
+        "Route those 40 intents to it and the rest to the teacher",
+        "Use it for everything",
+        "Use it for nothing",
+        "Retrain the teacher"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Route by strength."
+    },
+    {
+      "id": "ds19",
+      "kind": "single",
+      "industry": "General",
+      "question": "What is the teacher’s role after rollout?",
+      "options": [
+        "Fallback for hard cases and source of new training data",
+        "None",
+        "Serving all traffic",
+        "Labelling the student’s tokenizer"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The teacher stays useful."
+    },
+    {
+      "id": "ds20",
+      "kind": "single",
+      "industry": "General",
+      "question": "Which is NOT a reason to distil?",
+      "options": [
+        "The teacher is already cheap enough at your volume",
+        "High cost per query",
+        "Latency limits",
+        "A need to run on-premises"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "If cost is fine, distillation adds work for little gain."
+    }
+  ]
+}

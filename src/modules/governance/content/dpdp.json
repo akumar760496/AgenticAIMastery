@@ -1,0 +1,839 @@
+{
+  "id": "dpdp",
+  "moduleSlug": "governance",
+  "name": "India’s DPDP Act and Rules",
+  "shortName": "DPDP",
+  "question": "What does Indian data-protection law require of my agent?",
+  "summary": "The Digital Personal Data Protection Act, 2023 and its Rules (notified 13 November 2025) govern personal data processed in India. An agent that reads KYC documents or chats with customers is processing personal data, so it needs an itemised notice, specific consent or another lawful basis, collection limited to the purpose, reasonable security safeguards, contracts with processors such as model vendors, breach reporting and erasure when the purpose ends, including from vector stores and agent memory.",
+  "useCases": [
+    "Any agent that sees customers’ personal data",
+    "Before sending personal data to a model vendor",
+    "When designing memory, logs and retention"
+  ],
+  "keyFacts": {
+    "label": "Key requirements",
+    "items": [
+      {
+        "term": "Notice",
+        "detail": "itemised, plain language, before or at collection"
+      },
+      {
+        "term": "Consent",
+        "detail": "free, specific, informed; as easy to withdraw as to give"
+      },
+      {
+        "term": "Minimisation",
+        "detail": "only the data the stated purpose needs"
+      },
+      {
+        "term": "Safeguards",
+        "detail": "encryption, masking, access control, logs kept at least a year"
+      },
+      {
+        "term": "Breach",
+        "detail": "inform the Board without delay; detailed report within 72 hours"
+      },
+      {
+        "term": "Erasure",
+        "detail": "delete when the purpose ends or consent is withdrawn"
+      }
+    ]
+  },
+  "steps": [
+    "Map every place personal data flows: prompts, retrieval, memory, logs, vendors",
+    "Write purpose-specific notices and consent, and record them",
+    "Mask or tokenise identifiers before they reach the model or logs",
+    "Build breach and erasure runbooks that reach every store"
+  ],
+  "pitfalls": [
+    "Deleting from the main database but not from embeddings, memory or caches",
+    "Sending raw Aadhaar or PAN details to an offshore model with no processor contract",
+    "Treating 13 May 2027 as far away: the data flows are being designed now"
+  ],
+  "tools": [
+    "Microsoft Presidio for PII detection and masking",
+    "Consent-management platforms, and registered consent managers from November 2026",
+    "Data-flow inventories in your GRC tool",
+    "Vault or cloud KMS for tokenisation keys"
+  ],
+  "remember": "Say why, ask specifically, take less, protect it, delete it, report breaches fast.",
+  "caption": "Penalties are maximums set by the Act; dates as notified. Not legal advice.",
+  "comparison": {
+    "scope": "Personal data in India",
+    "cost": 2,
+    "needs": "A data-flow map and runbooks",
+    "best": "Erasure that misses copies"
+  },
+  "diagram": {
+    "file": "diagrams/dpdp.svg"
+  },
+  "lesson": {
+    "file": "personal_data.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "AADHAAR = re.compile(r\"\\b\\d{4}\\s?\\d{4}\\s?(\\d{4})\\b\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def record_consent(customer_id, purpose, notice_version, lang):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return consent_store.insert({\"customer_id\": customer_id,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"purpose\": purpose, \"notice_version\": notice_version,",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        \"language\": lang, \"given_at\": now(), \"withdrawn_at\": None})",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def mask(text):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    return AADHAAR.sub(lambda m: \"XXXX XXXX \" + m.group(1), text)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask_model(customer_id, purpose, text):",
+        "steps": []
+      },
+      {
+        "text": "    if not consent_store.active(customer_id, purpose):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        raise PermissionError(f\"no active consent for {purpose}\")",
+        "steps": []
+      },
+      {
+        "text": "    return vendor_llm.complete(mask(text))    # processor contract",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def on_breach(incident):",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    board.notify(incident.summary, when=\"without delay\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    schedule(board.full_report, within_hours=72)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    notify_affected_customers(incident)",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "STORES = [primary_db, vector_store, agent_memory, cache, log_archive]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "def erase(customer_id):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {s.name: s.delete_customer(customer_id) for s in STORES}",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "An itemised notice first",
+        "text": "Before collecting anything, tell the customer what data, for which purpose, and how to withdraw or complain, in plain English or a language they choose. The notice version is recorded with the consent."
+      },
+      {
+        "title": "Consent per purpose",
+        "text": "KYC and marketing are separate purposes with separate records. The agent checks for active consent for this purpose before any processing."
+      },
+      {
+        "title": "Take less: mask identifiers",
+        "text": "The model does not need a full Aadhaar number to check an address. Masking to the last four digits before the call keeps it out of prompts, vendor systems and logs."
+      },
+      {
+        "title": "Bind the vendor",
+        "text": "A model vendor processing personal data for you is a data processor. A contract binds it to your purpose and safeguards; you remain responsible."
+      },
+      {
+        "title": "Breach: fast, then in full",
+        "text": "Inform the Data Protection Board and affected people without delay, and give the Board a detailed report within 72 hours. A runbook makes that possible at 2 a.m."
+      },
+      {
+        "title": "Erase every copy",
+        "text": "Erasure must reach the vector store, agent memory, caches and logs, not only the main database. Nivesh Credit’s first test reached 2 of 5 stores."
+      }
+    ],
+    "sceneHeight": 246,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"6\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"21\" text-anchor=\"middle\">notice v3 · Hindi · KYC purpose</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"49\" text-anchor=\"middle\">KYC: consented</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"184\" y=\"34\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"49\" text-anchor=\"middle\">marketing: no</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx fail\" x=\"8\" y=\"62\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"92\" y=\"77\" text-anchor=\"middle\">4829 1177 3051</text></g><text class=\"tl a\" x=\"182\" y=\"77\" style=\"text-anchor:start;--d:0.1s\">→</text><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"196\" y=\"62\" width=\"156\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"274\" y=\"77\" text-anchor=\"middle\">XXXX XXXX 3051</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"90\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"105\" text-anchor=\"middle\">vendor = processor, bound by contract</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"118\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"92\" y=\"133\" text-anchor=\"middle\">Board: at once</text></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx warn\" x=\"184\" y=\"118\" width=\"168\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"268\" y=\"133\" text-anchor=\"middle\">full report ≤ 72 h</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"150\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"40\" y=\"165\" text-anchor=\"middle\">db</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx pass\" x=\"77\" y=\"150\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"109\" y=\"165\" text-anchor=\"middle\">vectors</text></g><g class=\"a\" style=\"--d:0.16s\"><rect class=\"bx pass\" x=\"146\" y=\"150\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"178\" y=\"165\" text-anchor=\"middle\">memory</text></g><g class=\"a\" style=\"--d:0.24s\"><rect class=\"bx pass\" x=\"215\" y=\"150\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"247\" y=\"165\" text-anchor=\"middle\">cache</text></g><g class=\"a\" style=\"--d:0.32s\"><rect class=\"bx pass\" x=\"284\" y=\"150\" width=\"64\" height=\"22\" rx=\"6\"/><text class=\"mono\" x=\"316\" y=\"165\" text-anchor=\"middle\">logs</text></g><text class=\"tl a\" x=\"112\" y=\"195\" style=\"text-anchor:end;--d:0.5s\">erased from</text><rect x=\"118\" y=\"185\" width=\"150\" height=\"13\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"118\" y=\"185\" width=\"150\" height=\"13\" rx=\"3\" style=\"fill:var(--pass);--d:0.6s\"/><text class=\"mono a\" x=\"274\" y=\"195\" style=\"text-anchor:start;--d:0.7s\">5 of 5 stores</text><g class=\"a\" style=\"--d:0.6s\"><text class=\"tag-t\" x=\"180\" y=\"230\" style=\"text-anchor:middle;fill:var(--ink-2)\">most duties apply from 13 May 2027</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Designs privacy in before the 13 May 2027 deadline",
+      "Masking also cuts breach impact and vendor risk",
+      "Clear erasure makes customer requests routine",
+      "Builds customer trust in AI features"
+    ],
+    "cons": [
+      "Data-flow mapping across agents takes effort",
+      "Erasure across vector stores and memory needs engineering",
+      "Rules and Board practice will evolve",
+      "Some records must be retained under other laws"
+    ],
+    "avoidWhen": [
+      "Treating it as a legal-only task with no engineering",
+      "Keeping personal data “just in case” for future training"
+    ],
+    "tools": [
+      {
+        "name": "DPDP Rules, 2025 (MeitY)",
+        "type": "Official text",
+        "what": "Notified rules and schedules",
+        "url": "https://www.meity.gov.in/data-protection-framework"
+      },
+      {
+        "name": "Microsoft Presidio",
+        "type": "Open source",
+        "what": "PII detection and masking with custom recognisers",
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "name": "Data-flow mapping in your GRC tool",
+        "type": "Practice",
+        "what": "Record where personal data goes",
+        "url": "https://www.meity.gov.in/data-protection-framework"
+      },
+      {
+        "name": "HashiCorp Vault",
+        "type": "Open source, commercial",
+        "what": "Tokenisation and key management",
+        "url": "https://developer.hashicorp.com/vault"
+      },
+      {
+        "name": "OpenTelemetry",
+        "type": "Open source",
+        "what": "Trace data flows through agents",
+        "url": "https://opentelemetry.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Nivesh Credit, a fictional digital lender, runs an onboarding agent that reads PAN, Aadhaar and bank statements and calls an offshore model vendor. Most DPDP obligations apply from 13 May 2027, and the agent is being redesigned now. Tick what the design already does and see which obligations are met and the highest penalty band still exposed.",
+    "controls": [
+      "Tick notice, consent and data minimisation to cover the front of the data life cycle.",
+      "Tick the vendor contract, retention and breach runbook to cover safeguards and incidents.",
+      "Tick erasure across every store, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Obligations met",
+        "meaning": "How many of the seven obligations in this checklist the design meets."
+      },
+      {
+        "name": "Highest penalty band exposed",
+        "meaning": "The largest maximum penalty in the Act’s Schedule that an open gap falls under."
+      },
+      {
+        "name": "Personal-data fields held",
+        "meaning": "How many personal-data fields the agent keeps per customer."
+      },
+      {
+        "name": "Stores an erasure reaches",
+        "meaning": "How many of the five places a customer’s data lives are cleared on request."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "As built",
+        "expect": "0 of 7 met; up to ₹250 crore exposed; erasure reaches 2 of 5 stores."
+      },
+      {
+        "k": "vendor",
+        "name": "Vendor contract only",
+        "expect": "1 of 7; the breach-reporting gap still sits in the ₹200 crore band."
+      },
+      {
+        "k": "nearly",
+        "name": "Everything but breach and erasure",
+        "expect": "5 of 7; still up to ₹200 crore, and erasure misses 3 stores."
+      },
+      {
+        "k": "legal",
+        "name": "Notices and runbook, no engineering",
+        "expect": "3 of 7; raw identifiers still go to the vendor: up to ₹250 crore."
+      }
+    ],
+    "missions": [
+      {
+        "k": "full",
+        "text": "Meet all seven obligations.",
+        "hint": "Each unticked box is a gap."
+      },
+      {
+        "k": "band",
+        "text": "Bring the highest exposed band down to ₹50 crore while some gaps remain.",
+        "hint": "Which two gaps carry the ₹250 and ₹200 crore bands?"
+      },
+      {
+        "k": "erase",
+        "text": "Show a design that meets everything except erasure across all stores.",
+        "hint": "It looks compliant until a customer asks to be forgotten."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Microsoft Presidio",
+        "type": "Open source",
+        "start": 3,
+        "prod": 3,
+        "best": "Detect and mask personal identifiers in text, with custom recognisers for Indian IDs.",
+        "ex": "Mask Aadhaar to the last four digits and tokenise PAN before any model call or log write.",
+        "pros": [
+          "Pluggable recognisers",
+          "Runs in your own infrastructure"
+        ],
+        "cons": [
+          "Needs tuning for Indian formats",
+          "Masking is only as good as detection"
+        ],
+        "url": "https://microsoft.github.io/presidio/"
+      },
+      {
+        "n": "DPDP Rules, 2025",
+        "type": "Official text",
+        "start": 3,
+        "prod": 3,
+        "best": "The notified rules and schedules from MeitY.",
+        "ex": "Check the breach-reporting and consent-manager provisions against your design.",
+        "pros": [
+          "Authoritative",
+          "Free"
+        ],
+        "cons": [
+          "Legal text needs interpretation",
+          "Board practice still developing"
+        ],
+        "url": "https://www.meity.gov.in/data-protection-framework"
+      },
+      {
+        "n": "HashiCorp Vault",
+        "type": "Open source · commercial",
+        "start": 2,
+        "prod": 3,
+        "best": "Tokenisation and key management for identifiers.",
+        "ex": "Replace PAN with a token in every store except the KYC vault.",
+        "pros": [
+          "Mature and audited",
+          "Fine-grained access"
+        ],
+        "cons": [
+          "Operational overhead",
+          "Another critical service"
+        ],
+        "url": "https://developer.hashicorp.com/vault"
+      },
+      {
+        "n": "OpenTelemetry",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "Trace where data flows through agents, tools and vendors.",
+        "ex": "Find every span that carries a customer identifier to build the data-flow map.",
+        "pros": [
+          "Vendor-neutral",
+          "Works with agent frameworks"
+        ],
+        "cons": [
+          "Needs instrumentation",
+          "Traces themselves must be masked"
+        ],
+        "url": "https://opentelemetry.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "We send customer documents to a model vendor",
+        "tool": "Mask first and sign a processor contract"
+      },
+      {
+        "need": "A customer asks to be forgotten",
+        "tool": "Erase from every store, including embeddings and memory"
+      },
+      {
+        "need": "We are not sure where personal data goes",
+        "tool": "Trace it and build a data-flow map"
+      }
+    ],
+    "goals": [
+      "Map DPDP obligations onto an agent’s data flows",
+      "See which gaps carry the highest penalties",
+      "Make erasure reach every copy"
+    ]
+  },
+  "practice": {
+    "scenario": "Nivesh Credit, a fictional digital lender, mapped where personal data flowed through its onboarding agent after the DPDP Rules were notified. Full Aadhaar and PAN numbers were going into prompts to an offshore model with no processor contract, into the agent’s chat memory, and into debug logs kept indefinitely. An erasure test removed a customer from 2 of 5 stores. The team now masks identifiers before any model call, has a processor agreement with the vendor, keeps logs for a defined period, and sends erasure to all five stores.",
+    "industries": [
+      {
+        "industry": "Digital lending",
+        "use": "Onboarding agents that read PAN, Aadhaar and bank statements"
+      },
+      {
+        "industry": "Stockbroking",
+        "use": "KYC and account-opening assistants"
+      },
+      {
+        "industry": "Insurance",
+        "use": "Claims agents that read medical and identity documents"
+      }
+    ],
+    "analogy": "A courier who is told exactly what the parcel is for, carries only that parcel, locks the van, reports a theft at once, and hands the parcel back when the job is done.",
+    "library": {
+      "name": "Microsoft Presidio",
+      "what": "Detects and masks personal identifiers in text before it reaches a model, a log or a vector store; custom recognisers handle Indian IDs.",
+      "install": "pip install presidio-analyzer presidio-anonymizer"
+    },
+    "note": "Some records must be kept under other laws, such as KYC rules; erase what you no longer need and restrict what you must retain. Check the current Rules and your counsel for exact duties.",
+    "samples": [
+      {
+        "file": "personal_data.py",
+        "language": "python",
+        "code": "import re\nfrom datetime import datetime, timezone\n\nAADHAAR = re.compile(r\"\\b\\d{4}\\s?\\d{4}\\s?(\\d{4})\\b\")\nPAN = re.compile(r\"\\b[A-Z]{5}\\d{4}[A-Z]\\b\")\n\ndef mask(text: str) -> str:\n    \"\"\"Keep only the last four Aadhaar digits; tokenise PAN.\"\"\"\n    text = AADHAAR.sub(lambda m: \"XXXX XXXX \" + m.group(1), text)\n    return PAN.sub(lambda m: token_for(m.group(0)), text)\n\ndef record_consent(customer_id, purpose, notice_version, lang):\n    return consent_store.insert({\n        \"customer_id\": customer_id, \"purpose\": purpose,        # one purpose per record\n        \"notice_version\": notice_version, \"language\": lang,\n        \"given_at\": datetime.now(timezone.utc).isoformat(), \"withdrawn_at\": None})\n\ndef ask_model(customer_id, purpose, text):\n    if not consent_store.active(customer_id, purpose):\n        raise PermissionError(f\"no active consent for {purpose}\")\n    return vendor_llm.complete(mask(text))                     # vendor bound by a processor contract\n\nSTORES = [primary_db, vector_store, agent_memory, cache, log_archive]\n\ndef erase(customer_id):\n    \"\"\"Erasure must reach every copy, not just the main database.\"\"\"\n    results = {s.name: s.delete_customer(customer_id) for s in STORES}\n    assert all(results.values()), f\"erasure incomplete: {results}\"\n    return results"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A lender’s agent leaks customer data because identifiers were sent unmasked to a vendor, and the lender then fails to notify the Data Protection Board. Using the Act’s maximum penalties of ₹250 crore for failing to take reasonable security safeguards and ₹200 crore for failing to notify a breach, what is the combined maximum exposure, in ₹ crore?",
+    "answer": "₹250 crore + ₹200 crore = ₹450 crore. Actual penalties are set by the Board based on factors such as gravity, duration and mitigation, but the two failures are separate breaches of duty. Masking and a breach runbook remove both.",
+    "expected": {
+      "value": 450,
+      "tolerance": 1,
+      "label": "₹ crore ="
+    },
+    "interview": [
+      {
+        "question": "What does the DPDP Act change for an AI agent that handles customer data?",
+        "answer": "Every place personal data flows becomes a compliance surface: prompts, retrieved context, agent memory, logs, caches and vendor calls. The agent needs a lawful basis and itemised notice for each purpose, collection limited to that purpose, safeguards such as masking and processor contracts, a breach process that reports without delay and in detail within 72 hours, and erasure that reaches every copy."
+      },
+      {
+        "question": "When do the DPDP obligations apply?",
+        "answer": "The Rules were notified on 13 November 2025. The Data Protection Board provisions applied at once, consent managers follow after 12 months, and most substantive obligations, including notice, safeguards, breach reporting and erasure, apply from 13 May 2027. Systems designed now should meet them at launch."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Erasing only from the primary database",
+        "fix": "Fan erasure out to vector stores, memory, caches and logs"
+      },
+      {
+        "mistake": "Raw identifiers in prompts and logs",
+        "fix": "Mask or tokenise before the model and the log see them"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "dp01",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "When were India’s DPDP Rules notified?",
+      "options": [
+        "August 2023",
+        "13 November 2025",
+        "13 May 2027",
+        "1 April 2026"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The Rules were notified on 13 November 2025."
+    },
+    {
+      "id": "dp02",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "From when do most substantive DPDP obligations, such as notice, safeguards and breach reporting, apply?",
+      "options": [
+        "Immediately",
+        "13 November 2026",
+        "13 May 2027",
+        "1 January 2028"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "18 months after notification: 13 May 2027."
+    },
+    {
+      "id": "dp03",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "After a personal-data breach, when is the detailed report to the Data Protection Board due?",
+      "options": [
+        "Within 24 hours",
+        "Within 72 hours",
+        "Within 30 days",
+        "Only on request"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Intimation without delay, then a detailed report within 72 hours."
+    },
+    {
+      "id": "dp04",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the maximum penalty for failing to take reasonable security safeguards?",
+      "options": [
+        "₹50 crore",
+        "₹150 crore",
+        "₹200 crore",
+        "₹250 crore"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "The Schedule caps it at ₹250 crore."
+    },
+    {
+      "id": "dp05",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "Which stores must an erasure request reach for an AI agent? Select all that apply.",
+      "options": [
+        "The agent’s vector store of past chats",
+        "Agent long-term memory",
+        "Only the primary database",
+        "Only the CRM"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Every copy counts, including embeddings and memory."
+    },
+    {
+      "id": "dp06",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "A model vendor processes customer data on your instructions. What is it under the DPDP Act?",
+      "options": [
+        "A data fiduciary",
+        "A data processor",
+        "A consent manager",
+        "A data principal"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "It processes on behalf of the fiduciary."
+    },
+    {
+      "id": "dp07",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A customer consented to KYC processing. Can the same data be used for marketing without further consent?",
+      "options": [
+        "Yes",
+        "No: consent is specific to a purpose",
+        "Only after 30 days",
+        "Only if anonymised by the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Consent must be specific to each purpose."
+    },
+    {
+      "id": "dp08",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which is the most direct safeguard for Aadhaar numbers sent to an LLM?",
+      "options": [
+        "Asking the model not to repeat them",
+        "Masking them before the call",
+        "Using a larger model",
+        "Adding a disclaimer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Mask before the model and logs see them."
+    },
+    {
+      "id": "dp09",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the maximum penalty for failing to notify the Board of a breach?",
+      "options": [
+        "₹10,000",
+        "₹50 crore",
+        "₹200 crore",
+        "₹500 crore"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "₹200 crore under the Schedule."
+    },
+    {
+      "id": "dp10",
+      "kind": "multi",
+      "industry": "Lending",
+      "question": "Which belong in a DPDP-compliant notice? Select all that apply.",
+      "options": [
+        "The personal data and the purpose",
+        "How to withdraw consent or complain",
+        "The model’s parameter count",
+        "The vendor’s share price"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Itemised data and purpose, and how to exercise rights."
+    },
+    {
+      "id": "dp11",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "What must withdrawing consent be, compared with giving it?",
+      "options": [
+        "Harder",
+        "As easy",
+        "Only possible in writing",
+        "Charged a fee"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Withdrawal must be as easy as giving consent."
+    },
+    {
+      "id": "dp12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "When do consent managers begin operating under the Rules?",
+      "options": [
+        "Immediately",
+        "About 12 months after notification",
+        "After 5 years",
+        "They are not in the Rules"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "From November 2026."
+    },
+    {
+      "id": "dp13",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "An agent keeps full chat transcripts forever “for future training”. What is the main DPDP issue?",
+      "options": [
+        "Nothing",
+        "Keeping data beyond its purpose",
+        "Using too little storage",
+        "Using English"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Data should be erased when the purpose ends."
+    },
+    {
+      "id": "dp14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "What must a fiduciary obtain before processing a child’s personal data?",
+      "options": [
+        "Nothing extra",
+        "Verifiable parental consent",
+        "A court order",
+        "The child’s signature only"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Verifiable consent of a parent or guardian."
+    },
+    {
+      "id": "dp15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Which extra duty applies to a Significant Data Fiduciary?",
+      "options": [
+        "No duties",
+        "Periodic data protection impact assessments and audits",
+        "Posting all data publicly",
+        "Using only Indian models"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "SDFs have DPIAs, audits and algorithmic due diligence."
+    },
+    {
+      "id": "dp16",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Some KYC records must be kept under other laws. What should happen on an erasure request?",
+      "options": [
+        "Delete them anyway",
+        "Retain what law requires, restrict its use, and erase the rest",
+        "Keep everything",
+        "Ignore the request"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Erase what is not required and restrict what is."
+    },
+    {
+      "id": "dp17",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "Which tool detects and masks personal identifiers in text?",
+      "options": [
+        "Microsoft Presidio",
+        "Kubernetes",
+        "Grafana",
+        "Pandas"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Presidio analyses and anonymises PII."
+    },
+    {
+      "id": "dp18",
+      "kind": "single",
+      "industry": "Lending",
+      "question": "Who remains responsible if a vendor mishandles personal data it processed for you?",
+      "options": [
+        "Only the vendor",
+        "You, as the data fiduciary",
+        "Nobody",
+        "The customer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The fiduciary stays accountable."
+    },
+    {
+      "id": "dp19",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "Minimum retention floor for logs under the Rules, for specified purposes?",
+      "options": [
+        "No minimum",
+        "At least one year",
+        "Exactly 30 days",
+        "Ten years"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Logs and certain data are kept at least a year."
+    },
+    {
+      "id": "dp20",
+      "kind": "single",
+      "industry": "Fintech",
+      "question": "What is the best time to design DPDP controls into a new agent?",
+      "options": [
+        "After May 2027",
+        "Now, while the data flows are being designed",
+        "After the first breach",
+        "Never"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Retrofitting is harder than designing in."
+    }
+  ]
+}

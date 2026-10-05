@@ -1,0 +1,850 @@
+{
+  "id": "las",
+  "moduleSlug": "vector-databases",
+  "name": "Coarse-to-Fine Retrieval and Re-scoring",
+  "shortName": "Coarse-to-fine",
+  "question": "Can a cheap pass narrow things down before a precise one?",
+  "summary": "A multi-stage pattern, also called phased ranking or re-scoring. A cheap, approximate first layer (binary or compressed vectors, a coarse index) returns a generous candidate set. Each later layer is more precise and more expensive but sees far fewer items, ending with full-precision distances or a cross-encoder. Vector databases expose it as oversampling plus re-scoring.",
+  "useCases": [
+    "Very large corpora with a strict latency budget",
+    "Quantized indexes that need a precise final score",
+    "Pipelines ending in an expensive re-ranker"
+  ],
+  "keyFacts": {
+    "label": "Typical layers",
+    "items": [
+      {
+        "term": "Layer 1",
+        "detail": "binary or PQ vectors over the whole corpus → top 1,000"
+      },
+      {
+        "term": "Layer 2",
+        "detail": "int8 or full vectors → top 100"
+      },
+      {
+        "term": "Layer 3",
+        "detail": "cross-encoder or LLM re-rank → top 10"
+      },
+      {
+        "term": "Oversampling",
+        "detail": "fetch more candidates than needed at early layers"
+      },
+      {
+        "term": "Metric",
+        "detail": "recall@k and latency after each layer"
+      }
+    ]
+  },
+  "steps": [
+    "Measure the cheap layer’s recall at several candidate counts",
+    "Size each layer so the next one rarely misses a true match",
+    "Keep full-precision vectors available for the final rescore",
+    "Track latency per layer to find the bottleneck"
+  ],
+  "pitfalls": [
+    "Anything the first layer misses is lost for good",
+    "Extra layers add latency and moving parts",
+    "The name means different things in different products, so check what yours does"
+  ],
+  "tools": [
+    "Qdrant quantization + rescoring",
+    "Vespa phased ranking",
+    "Weaviate",
+    "FAISS IndexRefineFlat"
+  ],
+  "remember": "Wide and cheap first, narrow and exact last.",
+  "caption": "Candidate counts are typical examples. Tune them against measured recall.",
+  "comparison": {
+    "scope": "Across index tiers",
+    "cost": 3,
+    "needs": "Huge corpora, strict latency",
+    "best": "First-layer misses are permanent"
+  },
+  "diagram": {
+    "file": "diagrams/las.svg"
+  },
+  "lesson": {
+    "file": "layered_search.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import numpy as np",
+        "steps": []
+      },
+      {
+        "text": "from sentence_transformers import SentenceTransformer, CrossEncoder",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "emb = np.load(\"emb_f32.npy\", mmap_mode=\"r\")   # 1,000,000 × 1024 float32 = 4.1 GB, on SSD",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "bits = np.packbits(emb > 0, axis=1)           # 128 B per vector = 128 MB in RAM",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "s = 127 / np.abs(emb).max()",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "i8 = np.round(emb * s).astype(np.int8)        # 1 KB per vector = 1 GB in RAM",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "model = SentenceTransformer(\"BAAI/bge-large-en-v1.5\")        # 1024 dims",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "q = model.encode(query, normalize_embeddings=True)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "POP = np.array([bin(i).count(\"1\") for i in range(256)], dtype=np.uint8)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "ham = POP[bits ^ np.packbits(q > 0)].sum(axis=1)   # Hamming distance to every vector",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "c1 = np.argpartition(ham, 1000)[:1000]             # layer 1: 1,000,000 → 1,000",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "q8 = np.round(q * s).astype(np.int32)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "c2 = c1[np.argsort(-(i8[c1].astype(np.int32) @ q8))[:100]]     # layer 2: 1,000 → 100",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "c3 = c2[np.argsort(-(emb[c2] @ q))[:10]]                        # layer 3: exact, 100 → 10",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "ce = CrossEncoder(\"cross-encoder/ms-marco-MiniLM-L-6-v2\")",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "scores = ce.predict([(query, texts[i]) for i in c3])",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "final = c3[np.argsort(-scores)]                # layer 4: ordered by relevance",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "exact = np.argsort(-(emb @ q))[:10]            # brute force, for evaluation only",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "recall = len(set(c3) & set(exact)) / 10        # measure on many sample queries",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Store three precisions",
+        "text": "Binary codes (128 B) and int8 (1 KB) sit in RAM; full float32 vectors (4 KB) stay on SSD. For one million vectors: 128 MB, 1 GB and 4.1 GB."
+      },
+      {
+        "title": "Layer 1: Hamming scan",
+        "text": "XOR and popcount against every binary code is very cheap. Keep a generous 1,000 candidates, because anything dropped here is lost for good."
+      },
+      {
+        "title": "Layer 2: int8 rescore",
+        "text": "Integer dot products on the 1,000 candidates restore most of the precision. Keep the top 100."
+      },
+      {
+        "title": "Layer 3: exact rescore",
+        "text": "Fetch 100 full vectors from SSD and compute exact cosine similarity. Keep the top 10."
+      },
+      {
+        "title": "Layer 4: cross-encoder",
+        "text": "A cross-encoder reads the query and each passage together and orders the last 10 by relevance rather than by vector distance."
+      },
+      {
+        "title": "Measure recall per layer",
+        "text": "Compare with exact search on sample queries. Retention multiplies: 0.97 × 0.99 × 1.0 ≈ 0.96 of the true top 10 survive."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a \" style=\"--d:0s\"><rect class=\"bx soft\" x=\"4\" y=\"4\" width=\"114\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"61\" y=\"19\">binary</text><text class=\"sb\" x=\"61\" y=\"34\">128 MB · RAM</text></g><g class=\"a \" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"123\" y=\"4\" width=\"114\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"180\" y=\"19\">int8</text><text class=\"sb\" x=\"180\" y=\"34\">1 GB · RAM</text></g><g class=\"a \" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"242\" y=\"4\" width=\"114\" height=\"36\" rx=\"7\"/><text class=\"lb\" x=\"299\" y=\"19\">float32</text><text class=\"sb\" x=\"299\" y=\"34\">4.1 GB · SSD</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<text class=\"mono a\" x=\"4\" y=\"67\" style=\"--d:0s\">L1 binary</text><rect x=\"84\" y=\"52\" width=\"166\" height=\"22\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"256\" y=\"67\" style=\"--d:0.3s\">1M → 1,000</text>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"mono a\" x=\"4\" y=\"109\" style=\"--d:0s\">L2 int8</text><rect x=\"84\" y=\"94\" width=\"88\" height=\"22\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"178\" y=\"109\" style=\"--d:0.3s\">1,000 → 100</text><path d=\"M96 76 v14\" class=\"ln a\" style=\"--d:0s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"mono a\" x=\"4\" y=\"151\" style=\"--d:0s\">L3 float32</text><rect x=\"84\" y=\"136\" width=\"62\" height=\"22\" rx=\"3\" class=\"bar grow \" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"152\" y=\"151\" style=\"--d:0.3s\">100 → 10</text><path d=\"M96 118 v14\" class=\"ln a\" style=\"--d:0s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"mono a\" x=\"4\" y=\"193\" style=\"--d:0s\">L4 cross-enc</text><rect x=\"84\" y=\"178\" width=\"36\" height=\"22\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"126\" y=\"193\" style=\"--d:0.3s\">10 → ranked</text><path d=\"M96 160 v14\" class=\"ln a\" style=\"--d:0s\" marker-end=\"url(#arr)\"/>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"4\" y=\"222\" width=\"352\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"238\" text-anchor=\"middle\">retention 0.97 × 0.99 × 1.0 ≈ 0.96 of the true top 10</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Precise final scores within a tight latency budget",
+      "A cheap first layer makes huge corpora affordable in RAM",
+      "Each layer can be sized and measured separately",
+      "Expensive re-rankers run on only a few items"
+    ],
+    "cons": [
+      "First-layer misses can never be recovered",
+      "More stages add latency and moving parts",
+      "Full-precision vectors must be kept somewhere for rescoring",
+      "The name means different things in different products"
+    ],
+    "avoidWhen": [
+      "The corpus is small enough for exact or single-index search",
+      "The latency budget is too tight for even one extra stage"
+    ],
+    "tools": [
+      {
+        "name": "Qdrant",
+        "type": "Open source · managed cloud",
+        "what": "Scalar and binary quantization with oversampling and rescoring",
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "name": "Vespa",
+        "type": "Open source · managed cloud",
+        "what": "First-, second- and global-phase ranking",
+        "url": "https://docs.vespa.ai/en/ranking/phased-ranking.html"
+      },
+      {
+        "name": "Weaviate",
+        "type": "Open source · managed cloud",
+        "what": "Vector compression with rescoring",
+        "url": "https://weaviate.io"
+      },
+      {
+        "name": "FAISS",
+        "type": "Open source · Meta",
+        "what": "IndexRefineFlat: rescore quantized results with full vectors",
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "name": "Sentence Transformers",
+        "type": "Open source",
+        "what": "CrossEncoder models for the final re-rank",
+        "url": "https://www.sbert.net"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A news archive with 10 million chunks must answer within 50 ms. You design a four-layer search: binary codes, an optional int8 rescore, an exact rescore with full vectors from SSD, and an optional cross-encoder. Recall retention per layer and per-item costs are illustrative but realistic in shape.",
+    "controls": [
+      "Drag how many candidates layer 1 keeps.",
+      "Switch the int8 layer on or off and choose how many it keeps.",
+      "Switch the cross-encoder on or off and choose how many passages it reads."
+    ],
+    "outputs": [
+      {
+        "name": "Flow",
+        "meaning": "How many items each layer receives and keeps."
+      },
+      {
+        "name": "Vector recall@10",
+        "meaning": "Share of the true top 10 that survive every layer: the product of each layer's retention."
+      },
+      {
+        "name": "Latency per layer",
+        "meaning": "Milliseconds spent in each layer, against the 50 ms budget."
+      },
+      {
+        "name": "nDCG@10 (modelled)",
+        "meaning": "How well the final order matches relevance; the cross-encoder improves it."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Thin first layer",
+        "expect": "200 candidates, no int8, no cross-encoder: 89% recall in 13.8 ms."
+      },
+      {
+        "k": "balanced",
+        "name": "Balanced",
+        "expect": "2,000 candidates, int8 keeps 100, cross-encoder on 10: 97% recall in 34.0 ms."
+      },
+      {
+        "k": "noint8",
+        "name": "No int8 layer",
+        "expect": "1,000 candidates all fetched from SSD: 97% recall but 57.0 ms, over budget."
+      },
+      {
+        "k": "starved",
+        "name": "Starved layer 1",
+        "expect": "Every layer on, but only 100 candidates: recall stuck at 81%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "budget",
+        "text": "With the cross-encoder on, reach 97% vector recall within 50 ms.",
+        "hint": "Keep about 2,000 candidates and let the int8 layer cut them to 100."
+      },
+      {
+        "k": "perm",
+        "text": "Turn on every layer but starve layer 1 until recall falls below 85%.",
+        "hint": "Drag layer-1 candidates to 100."
+      },
+      {
+        "k": "noint8",
+        "text": "Without the int8 layer, keep 97% recall and watch the budget break.",
+        "hint": "1,000 candidates with no int8 layer means 1,000 SSD fetches."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Qdrant",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 3,
+        "best": "Binary and scalar quantization with oversampling and automatic rescoring on full vectors.",
+        "ex": "BinaryQuantization with always_ram, oversampling 4.0 and rescore = true for 50 million chunks.",
+        "pros": [
+          "Layers configured, not coded",
+          "Full vectors can stay on disk"
+        ],
+        "cons": [
+          "Rescoring speed depends on where originals live",
+          "Cross-encoder stage is up to you"
+        ],
+        "url": "https://qdrant.tech/documentation/guides/quantization/"
+      },
+      {
+        "n": "Vespa",
+        "type": "Open source · managed cloud",
+        "start": 2,
+        "prod": 3,
+        "best": "First-phase, second-phase and global-phase ranking with explicit rerank counts.",
+        "ex": "A cheap first phase over all matches, a GBDT second phase on the top 1,000 and an ONNX cross-encoder globally.",
+        "pros": [
+          "Phases are first-class and measurable",
+          "Runs models close to the data"
+        ],
+        "cons": [
+          "Steep learning curve",
+          "Heavier to operate"
+        ],
+        "url": "https://docs.vespa.ai/en/ranking/phased-ranking.html"
+      },
+      {
+        "n": "FAISS",
+        "type": "Open source · Meta",
+        "start": 2,
+        "prod": 2,
+        "best": "IndexRefineFlat wraps a compressed index and rescores its candidates with full vectors.",
+        "ex": "IVF-PQ returns 1,000 candidates; IndexRefineFlat keeps the exact top 100.",
+        "pros": [
+          "Fine control over each layer",
+          "Fast on CPU and GPU"
+        ],
+        "cons": [
+          "A library, so serving and storage are yours",
+          "No built-in cross-encoder"
+        ],
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "n": "Sentence Transformers",
+        "type": "Open source",
+        "start": 3,
+        "prod": 2,
+        "best": "CrossEncoder models for the final re-rank of a few dozen passages.",
+        "ex": "ms-marco-MiniLM-L-6-v2 re-ranks the top 20 passages on a small GPU.",
+        "pros": [
+          "Many pretrained re-rankers",
+          "Simple predict() API"
+        ],
+        "cons": [
+          "Cost grows linearly with passages",
+          "Needs a GPU for tight budgets"
+        ],
+        "url": "https://www.sbert.net"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Quantized first layer with rescoring",
+        "tool": "Qdrant"
+      },
+      {
+        "need": "Many explicit ranking phases",
+        "tool": "Vespa"
+      },
+      {
+        "need": "Final re-rank",
+        "tool": "Sentence Transformers CrossEncoder"
+      }
+    ],
+    "goals": [
+      "Explain why each layer sees fewer items and costs more per item",
+      "Calculate end-to-end recall from per-layer retention",
+      "Size layer-1 candidates against a latency budget"
+    ]
+  },
+  "practice": {
+    "scenario": "A news archive with 200 million chunks must answer within 100 ms. A first pass over binary-quantized vectors returns 1,000 candidates, full vectors rescore them down to 100, and a cross-encoder picks the final 10.",
+    "industries": [
+      {
+        "industry": "Media archives",
+        "use": "Huge back catalogues with strict latency"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Retrieve thousands, re-rank to one page of results"
+      },
+      {
+        "industry": "Legal discovery",
+        "use": "Narrow millions of documents to a reviewable set"
+      }
+    ],
+    "analogy": "Hiring: a résumé keyword screen, then a phone call, then a full interview. Each stage costs more and sees fewer people.",
+    "library": {
+      "name": "Qdrant",
+      "what": "Built-in scalar and binary quantization with oversampling and automatic rescoring on full vectors.",
+      "install": "pip install qdrant-client"
+    },
+    "samples": [
+      {
+        "file": "layered.py",
+        "language": "python",
+        "code": "from qdrant_client import QdrantClient, models\nclient = QdrantClient(\"localhost\", port=6333)\n\nclient.create_collection(\n    \"archive\",\n    vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE),\n    quantization_config=models.BinaryQuantization(\n        binary=models.BinaryQuantizationConfig(always_ram=True)),   # layer 1 in RAM\n)\n\nhits = client.query_points(\n    \"archive\", query=query_vec, limit=100,\n    search_params=models.SearchParams(\n        quantization=models.QuantizationSearchParams(\n            rescore=True,          # layer 2: rescore with full vectors\n            oversampling=10.0)),   # fetch 1,000 cheap candidates for 100 results\n).points\n\ntop10 = cross_encoder_rerank(query_text, hits)[:10]           # layer 3"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "Layer 1 keeps 1,000 candidates with recall 0.97. Layer 2 keeps 100 and retains 0.99 of what it receives. Layer 3 keeps 10 and retains 0.95. End-to-end recall?",
+    "answer": "0.97 × 0.99 × 0.95 ≈ 0.91. Each layer's losses multiply, so the weakest early layer caps the whole pipeline.",
+    "expected": {
+      "value": 0.91,
+      "tolerance": 0.01,
+      "label": "recall ="
+    },
+    "interview": [
+      {
+        "question": "Why use several retrieval stages instead of one precise search?",
+        "answer": "Precise scoring is expensive per item. A cheap first stage shrinks millions of items to hundreds, so the costly stages run on few items and results stay near-precise within the latency budget."
+      },
+      {
+        "question": "How do you size each stage?",
+        "answer": "Measure recall at several candidate counts per stage, pick the smallest count where the next stage rarely misses true matches, then check end-to-end recall and per-stage latency."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Too few first-stage candidates",
+        "fix": "Oversample early; misses there are permanent"
+      },
+      {
+        "mistake": "Tuning stages only in isolation",
+        "fix": "Measure end-to-end recall and latency"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "la01",
+      "kind": "single",
+      "industry": "Media",
+      "question": "Layers keep 0.95, 0.99 and 1.0 of the true top 10. What is the end-to-end recall?",
+      "options": [
+        "0.99",
+        "0.95",
+        "About 0.94",
+        "About 0.89"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "0.95 × 0.99 × 1.0 = 0.9405, so about 0.94."
+    },
+    {
+      "id": "la02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "How many bytes does a binary code take for a 1,024-dimension vector?",
+      "options": [
+        "128 B",
+        "1,024 B",
+        "32 B",
+        "4,096 B"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One bit per dimension: 1,024 ÷ 8 = 128 bytes."
+    },
+    {
+      "id": "la03",
+      "kind": "multi",
+      "industry": "Legal",
+      "question": "Which statements about layered search are correct? Select all that apply.",
+      "options": [
+        "Candidates dropped by the first layer are lost for good",
+        "Each later layer is more precise per item",
+        "Later layers see fewer items",
+        "The final layer scans the whole corpus"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Coarse to fine: cheap and wide first, precise and narrow last. The final layer sees only a handful of items."
+    },
+    {
+      "id": "la04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "10 million 1,024-dimension vectors are stored as int8 for a rescoring layer. How much RAM does that take?",
+      "options": [
+        "About 1.28 GB",
+        "About 41 GB",
+        "About 2.6 GB",
+        "About 10.2 GB"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "int8 is one byte per dimension: 10 million × 1,024 B ≈ 10.2 GB."
+    },
+    {
+      "id": "la05",
+      "kind": "single",
+      "industry": "Media",
+      "question": "A news archive’s end-to-end recall is 0.80, while each later layer keeps almost everything it receives. What fixes it?",
+      "options": [
+        "A larger cross-encoder",
+        "Keeping more candidates in the first layer",
+        "More precise int8 rescoring",
+        "Returning fewer final results"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Later layers cannot recover what layer 1 dropped, so layer 1 needs a larger candidate set."
+    },
+    {
+      "id": "la06",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "A Qdrant query asks for limit = 100 with oversampling = 4.0 and rescoring on. How many candidates are fetched from the quantized index?",
+      "options": [
+        "104",
+        "25",
+        "400",
+        "100"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Oversampling multiplies the limit: 100 × 4 = 400 candidates are rescored with full vectors to return 100."
+    },
+    {
+      "id": "la07",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Layer 1 costs 3 ms plus 0.004 ms per candidate and keeps 2,000. Layer 2 rescores those at 0.003 ms each and keeps 100. Layer 3 fetches the 100 at 0.05 ms each. A cross-encoder takes 1.2 ms per pair for 10 pairs. Total latency?",
+      "options": [
+        "23 ms",
+        "34 ms",
+        "46 ms",
+        "28 ms"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "(3 + 8) + 6 + 5 + 12 = 34 ms."
+    },
+    {
+      "id": "la08",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "Which layer designs are reasonable for 50 million support chunks? Select all that apply.",
+      "options": [
+        "Binary codes in RAM for layer 1",
+        "int8 rescoring of a few thousand candidates",
+        "Fetching full vectors from SSD only for the last hundred",
+        "Running the cross-encoder over all 50 million chunks"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Each layer is sized to what it can afford. A cross-encoder over the whole corpus would take hours."
+    },
+    {
+      "id": "la09",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Why add an int8 layer between the binary scan and the float32 rescore? Select all that apply.",
+      "options": [
+        "It avoids fetching thousands of float32 vectors from SSD",
+        "It restores most of the precision lost by binary codes",
+        "It recovers neighbours the binary layer dropped",
+        "int8 dot products are cheap"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "int8 narrows the set cheaply and accurately in RAM. It can only reorder what layer 1 kept."
+    },
+    {
+      "id": "la10",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A cross-encoder costs 1.2 ms per pair and re-ranks 50 passages, pushing a 50 ms budget over. What is the most direct fix?",
+      "options": [
+        "Re-rank more passages",
+        "Remove the binary layer",
+        "Re-rank fewer passages, such as 20, which takes 24 ms",
+        "Drop the exact rescore"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "50 × 1.2 = 60 ms breaks the budget; 20 × 1.2 = 24 ms fits."
+    },
+    {
+      "id": "la11",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A vendor says its product does “layered approximate search”. What should you understand by that?",
+      "options": [
+        "A specific Microsoft algorithm",
+        "A pattern rather than one standard algorithm: products call it phased ranking or rescoring, so check what it does",
+        "A pgvector index type",
+        "A BM25 variant"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The name means different things in different products. Ask which layers it runs and how many candidates each keeps."
+    },
+    {
+      "id": "la12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "Which product expresses layered ranking as first-phase, second-phase and global-phase?",
+      "options": [
+        "hnswlib",
+        "pgvector",
+        "Vespa",
+        "rank_bm25"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Vespa’s phased ranking runs a cheap first phase over many hits and costlier phases over fewer."
+    },
+    {
+      "id": "la13",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "Binary quantization replaces 32-bit floats with 1 bit per dimension. What is the compression factor?",
+      "options": [
+        "8×",
+        "4×",
+        "16×",
+        "32×"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "32 bits ÷ 1 bit = 32×."
+    },
+    {
+      "id": "la14",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "Which measurements do you need to size each layer? Select all that apply.",
+      "options": [
+        "Layer 1 recall at several candidate counts",
+        "Latency per layer",
+        "End-to-end recall on sample queries",
+        "The embedding model’s parameter count"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Sizing is empirical: measure what each layer keeps and costs, and check the whole pipeline."
+    },
+    {
+      "id": "la15",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "Layer 1 keeps 0.90 of the true top 10. Every later layer keeps everything and a cross-encoder orders the result. What is the best possible vector recall@10?",
+      "options": [
+        "0.90",
+        "1.0",
+        "0.81",
+        "It depends only on the cross-encoder"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Later layers only reorder what layer 1 kept, so recall is capped at 0.90."
+    },
+    {
+      "id": "la16",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "How much RAM do binary codes need for 200 million 1,024-dimension vectors?",
+      "options": [
+        "204.8 GB",
+        "25.6 GB",
+        "819 GB",
+        "6.4 GB"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "1,024 bits = 128 B per vector, and 200 million × 128 B = 25.6 GB."
+    },
+    {
+      "id": "la17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which FAISS index rescores results from a quantized index with full vectors?",
+      "options": [
+        "IndexHNSWFlat",
+        "IndexFlatL2 on its own",
+        "IndexIVFFlat",
+        "IndexRefineFlat"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "IndexRefineFlat wraps a compressed index and re-ranks its candidates with exact distances."
+    },
+    {
+      "id": "la18",
+      "kind": "multi",
+      "industry": "Media",
+      "question": "Which of these make the first layer miss true neighbours? Select all that apply.",
+      "options": [
+        "Keeping too few candidates",
+        "Binary codes that lose too much information for this embedding model",
+        "An oversampling factor of 1",
+        "A cross-encoder at the end"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A narrow or lossy first layer drops neighbours. The final re-ranker cannot cause first-layer misses."
+    },
+    {
+      "id": "la19",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Layer 1 keeps 0.98 of true neighbours at 1,000 candidates and 0.995 at 3,000, which adds 8 ms. The pipeline has 10 ms to spare. What do you choose?",
+      "options": [
+        "3,000 candidates",
+        "1,000 candidates",
+        "100 candidates",
+        "Remove layer 1"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The extra recall is permanent and fits the spare budget, since 8 ms is below 10 ms."
+    },
+    {
+      "id": "la20",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Where must full-precision vectors live for the final rescore?",
+      "options": [
+        "Nowhere; binary codes are enough",
+        "Somewhere retrievable, such as on SSD; they need not be in RAM",
+        "Only in GPU memory",
+        "Inside the BM25 index"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only the few final candidates need full vectors, so they can be fetched from disk."
+    }
+  ]
+}

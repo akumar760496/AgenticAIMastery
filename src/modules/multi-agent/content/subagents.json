@@ -1,0 +1,984 @@
+{
+  "id": "subagents",
+  "moduleSlug": "multi-agent",
+  "name": "Parallel Sub-Agents with Isolated Context",
+  "shortName": "Parallel sub-agents",
+  "question": "How do I run many pieces at once without flooding one context?",
+  "summary": "An orchestrator splits a job into independent pieces and starts one sub-agent per piece, all at the same time. Each sub-agent gets a fresh, isolated context window holding only its brief, does its own reading and tool calls, and returns a condensed result, such as a card of at most 500 tokens, instead of its transcript. Anthropic’s multi-agent research system works this way. This page covers the fan-out and fan-in mechanics: concurrency, condensed returns, shared inputs and the merge check. Whether to split at all is Single vs Multi-Agent; how workers are briefed and tool-scoped is Supervisor and Workers.",
+  "useCases": [
+    "Comparing many independent entities at once, such as 12 companies’ quarterly results",
+    "Broad research across sources that together overflow one context window",
+    "Batch reviews where each item can be judged on its own: loan files, claims, contracts"
+  ],
+  "keyFacts": {
+    "label": "Key concepts",
+    "items": [
+      {
+        "term": "Fan-out",
+        "detail": "one sub-agent per independent piece, started together under a concurrency cap"
+      },
+      {
+        "term": "Isolated context",
+        "detail": "each sub-agent sees its brief and its own tool results, nothing else"
+      },
+      {
+        "term": "Condensed return",
+        "detail": "a fixed schema of at most about 500 tokens per item, not the transcript"
+      },
+      {
+        "term": "Wall-clock",
+        "detail": "the slowest sub-agent plus planning and merging, not the sum of all"
+      },
+      {
+        "term": "Token bill",
+        "detail": "every sub-agent pays its own prompt, tools and reasoning, so the total rises with fan-out"
+      },
+      {
+        "term": "Merge check",
+        "detail": "the fan-in step that compares shared figures, units and gaps before synthesis"
+      }
+    ]
+  },
+  "steps": [
+    "Split the job into pieces that share no inputs; compute any shared input once and put it in every brief",
+    "Start one fresh session per piece, all at once, under a concurrency and budget cap",
+    "Have each return a validated card of at most about 500 tokens, with its sources",
+    "Fan in through a merge check: same shared figures, same units, no gaps, conflicts flagged"
+  ],
+  "pitfalls": [
+    "Each sub-agent re-derives a shared input, so work is duplicated and findings conflict",
+    "Returning transcripts refills the orchestrator’s context that isolation was meant to protect",
+    "Awaiting sub-agents one by one in a loop quietly makes the fan-out sequential"
+  ],
+  "tools": [
+    "Claude Agent SDK subagents",
+    "LangGraph Send API",
+    "Google ADK ParallelAgent",
+    "OpenAI Agents SDK + asyncio.gather",
+    "Python asyncio TaskGroup"
+  ],
+  "remember": "Fan out the independent, pass shared inputs in, bring back cards, check before merging.",
+  "caption": "Illustrative: 12 pharma companies at Dalal Lens Research, a fictional equity-research firm; 40k tokens of filings each, 40k of overhead per sub-agent, a 200k window, ₹0.40 per 1,000 tokens.",
+  "comparison": {
+    "scope": "How parallel pieces run and come back",
+    "cost": 4,
+    "needs": "Independent pieces and a return schema",
+    "best": "Several times one agent’s tokens"
+  },
+  "diagram": {
+    "file": "diagrams/subagents.svg"
+  },
+  "lesson": {
+    "file": "pharma_fanout.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import asyncio",
+        "steps": []
+      },
+      {
+        "text": "from pydantic import BaseModel, Field",
+        "steps": []
+      },
+      {
+        "text": "from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "COMPANIES = [\"Arogya\", \"Sanjivani\", \"Nilgiri\", \"Kaveri\", \"Vindhya\", \"Tapti\",",
+        "steps": []
+      },
+      {
+        "text": "             \"Sahyadri\", \"Narmada\", \"Godavari\", \"Aravalli\", \"Konkan\", \"Chambal\"]",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "SECTOR = {\"usd_inr\": 86.4, \"api_price_index\": 112.0}   # computed ONCE, sent to all",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "class Card(BaseModel):                     # what comes back: at most ~500 tokens",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    company: str",
+        "steps": []
+      },
+      {
+        "text": "    revenue_cr: float                      # ₹ crore, one unit for everyone",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    ebitda_margin_pct: float",
+        "steps": []
+      },
+      {
+        "text": "    usd_inr_used: float",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    red_flags: list[str] = Field(max_length=3)",
+        "steps": []
+      },
+      {
+        "text": "    sources: list[str]",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "BRIEF = \"\"\"Analyse {co} only, from the files in this folder.",
+        "steps": []
+      },
+      {
+        "text": "Use these sector figures exactly; do not re-derive them: {sector}",
+        "steps": []
+      },
+      {
+        "text": "Reply with JSON only, matching this schema, in under 500 tokens: {schema}\"\"\"",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def analyse(co: str, sem: asyncio.Semaphore) -> Card:",
+        "steps": []
+      },
+      {
+        "text": "    async with sem:                                   # at most 6 at once",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        opts = ClaudeAgentOptions(",
+        "steps": []
+      },
+      {
+        "text": "            cwd=f\"./filings/{co}\",                    # sees only its own folder",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            allowed_tools=[\"Read\", \"Grep\", \"Glob\"],",
+        "steps": []
+      },
+      {
+        "text": "            max_turns=30, max_budget_usd=1.0)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        prompt = BRIEF.format(co=co, sector=SECTOR, schema=Card.model_json_schema())",
+        "steps": []
+      },
+      {
+        "text": "        async for msg in query(prompt=prompt, options=opts):   # new session, fresh context",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "            if isinstance(msg, ResultMessage):",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "                return Card.model_validate_json(msg.result)   # the card, not the transcript",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    raise RuntimeError(f\"{co}: no result\")",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def fan_out(names: list[str]):",
+        "steps": []
+      },
+      {
+        "text": "    sem = asyncio.Semaphore(6)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    got = await asyncio.gather(*(analyse(c, sem) for c in names),",
+        "steps": []
+      },
+      {
+        "text": "                               return_exceptions=True)   # one failure is not all",
+        "steps": [
+          3,
+          5
+        ]
+      },
+      {
+        "text": "    cards = {c: r for c, r in zip(names, got) if isinstance(r, Card)}",
+        "steps": []
+      },
+      {
+        "text": "    return cards, [c for c in names if c not in cards]",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def merge_check(cards: dict) -> dict:",
+        "steps": []
+      },
+      {
+        "text": "    rates = {card.usd_inr_used for card in cards.values()}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    conflicts = [] if rates <= {SECTOR[\"usd_inr\"]} else sorted(rates)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return {\"cards\": list(cards.values()), \"conflicts\": conflicts}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "async def main():",
+        "steps": []
+      },
+      {
+        "text": "    cards, missing = await fan_out(COMPANIES)",
+        "steps": []
+      },
+      {
+        "text": "    if missing:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        retried, missing = await fan_out(missing)    # retry once, then report",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        cards |= retried",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "    return {**merge_check(cards), \"missing\": missing}",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "report = asyncio.run(main())",
+        "steps": []
+      }
+    ],
+    "steps": [
+      {
+        "title": "One fresh session per company",
+        "text": "Every query() call starts a new session with its own context window. The sub-agent for Kaveri sees its brief and the files in ./filings/Kaveri, nothing from the other eleven, and its 40k tokens of filings never leave that session."
+      },
+      {
+        "title": "Pass shared inputs in, once",
+        "text": "All twelve comparisons depend on the same USD/INR rate and API price index. The orchestrator computes them once and writes them into every brief. Left alone, twelve sub-agents would each look them up again: eleven duplicate reads and up to eleven different rates."
+      },
+      {
+        "title": "Fan out under a cap",
+        "text": "asyncio.gather starts all twelve and Semaphore(6) lets six run at a time, so they go in two waves: the wall-clock is about two company-lengths, not twelve. max_turns and max_budget_usd bound each session’s spend."
+      },
+      {
+        "title": "Return a card, not a transcript",
+        "text": "Only the final ResultMessage comes back, validated as a Card of under 500 tokens with its sources. Twelve cards are 6k tokens; twelve transcripts of about 80k each would be 960k, far beyond the orchestrator’s window."
+      },
+      {
+        "title": "Expect failures",
+        "text": "return_exceptions=True means one session that times out or returns bad JSON does not throw away the other eleven. Missing companies are retried once and then reported by name, never silently dropped."
+      },
+      {
+        "title": "Merge check before synthesis",
+        "text": "Fan-in checks that every card used the same USD/INR rate and the same units, and lists conflicts and gaps. The orchestrator then holds about 14k tokens: 2k of its own, 6k of briefs and 6k of cards."
+      }
+    ],
+    "sceneHeight": 262,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"--d:0s\">one fresh session per company</text><g class=\"a\" style=\"--d:0.05s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"20.5\" y=\"34\" text-anchor=\"middle\">C1</text></g><g class=\"a\" style=\"--d:0.08s\"><rect class=\"bx soft\" x=\"37\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"49.5\" y=\"34\" text-anchor=\"middle\">C2</text></g><g class=\"a\" style=\"--d:0.11s\"><rect class=\"bx soft\" x=\"66\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"78.5\" y=\"34\" text-anchor=\"middle\">C3</text></g><g class=\"a\" style=\"--d:0.14s\"><rect class=\"bx soft\" x=\"95\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"107.5\" y=\"34\" text-anchor=\"middle\">C4</text></g><g class=\"a\" style=\"--d:0.16999999999999998s\"><rect class=\"bx soft\" x=\"124\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"136.5\" y=\"34\" text-anchor=\"middle\">C5</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"153\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"165.5\" y=\"34\" text-anchor=\"middle\">C6</text></g><g class=\"a\" style=\"--d:0.22999999999999998s\"><rect class=\"bx soft\" x=\"182\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"194.5\" y=\"34\" text-anchor=\"middle\">C7</text></g><g class=\"a\" style=\"--d:0.26s\"><rect class=\"bx soft\" x=\"211\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"223.5\" y=\"34\" text-anchor=\"middle\">C8</text></g><g class=\"a\" style=\"--d:0.29s\"><rect class=\"bx soft\" x=\"240\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"252.5\" y=\"34\" text-anchor=\"middle\">C9</text></g><g class=\"a\" style=\"--d:0.32s\"><rect class=\"bx soft\" x=\"269\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"281.5\" y=\"34\" text-anchor=\"middle\">C10</text></g><g class=\"a\" style=\"--d:0.35s\"><rect class=\"bx soft\" x=\"298\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"310.5\" y=\"34\" text-anchor=\"middle\">C11</text></g><g class=\"a\" style=\"--d:0.37999999999999995s\"><rect class=\"bx soft\" x=\"327\" y=\"20\" width=\"25\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"339.5\" y=\"34\" text-anchor=\"middle\">C12</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx acc\" x=\"8\" y=\"50\" width=\"344\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"65\" text-anchor=\"middle\">sector figures, once: USD/INR ₹86.4 · API index 112</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<text class=\"mono a\" x=\"8\" y=\"94\" style=\"--d:0s\">Semaphore(6)</text><rect x=\"96\" y=\"82\" width=\"126\" height=\"16\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono a\" text-anchor=\"middle\" x=\"159\" y=\"94\" style=\"--d:0.2s\">C1–C6</text><rect x=\"226\" y=\"82\" width=\"126\" height=\"16\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.3s\"/><text class=\"mono a\" text-anchor=\"middle\" x=\"289\" y=\"94\" style=\"--d:0.4s\">C7–C12</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<text class=\"tl a\" x=\"104\" y=\"124\" style=\"text-anchor:end;--d:0s\">12 cards</text><rect x=\"110\" y=\"114\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"114\" width=\"1.5\" height=\"12\" rx=\"3\" class=\"bar grow pass\" style=\"--d:0.1s\"/><text class=\"mono l a\" x=\"306\" y=\"124\" style=\"--d:0.2s\">6k</text><text class=\"tl a\" x=\"104\" y=\"144\" style=\"text-anchor:end;--d:0.15s\">12 transcripts</text><rect x=\"110\" y=\"134\" width=\"190\" height=\"12\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect x=\"110\" y=\"134\" width=\"190\" height=\"12\" rx=\"3\" class=\"bar grow warn\" style=\"--d:0.25s\"/><text class=\"mono l a\" x=\"306\" y=\"144\" style=\"--d:0.35s\">960k</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx warn\" x=\"8\" y=\"160\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"176\" text-anchor=\"middle\">first pass: 11 cards · missing [Tapti] → retried once</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"8\" y=\"196\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"180\" y=\"212\" text-anchor=\"middle\">merge check: 12 cards · one USD/INR · ₹ crore · 0 conflicts</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"8\" y=\"228\" width=\"344\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"244\" text-anchor=\"middle\">orchestrator: 2k + 6k briefs + 6k cards = 14k</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Wall-clock falls to about the slowest piece plus planning and merging",
+      "Each sub-agent’s context holds only its piece, so nothing overflows",
+      "Raw reading stays in the sub-agents; the orchestrator sees only cards",
+      "Breadth: many entities or sources covered in one run"
+    ],
+    "cons": [
+      "Tokens rise with every sub-agent, because each pays its own prompt, tools and reasoning",
+      "Shared inputs re-derived per sub-agent cause duplicated work and conflicting figures",
+      "A condensed card can drop a detail the synthesis needed",
+      "More moving parts: concurrency caps, rate limits, retries and partial failures"
+    ],
+    "avoidWhen": [
+      "The pieces are tightly coupled, such as one valuation model or one refactor: keep one agent",
+      "The job fits one context and nobody is waiting on the minutes saved: one agent is cheaper"
+    ],
+    "tools": [
+      {
+        "name": "Claude Agent SDK subagents",
+        "type": "Agent SDK (Anthropic)",
+        "what": "Sub-agents run in their own context and return only their final message; several can run at once",
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "name": "LangGraph Send API",
+        "type": "Open source (LangChain)",
+        "what": "Map-reduce: Send one state slice per item to a worker node, and a reducer collects the results",
+        "url": "https://docs.langchain.com/oss/python/langgraph/workflows-agents"
+      },
+      {
+        "name": "Google ADK ParallelAgent",
+        "type": "Open source (Google)",
+        "what": "Runs sub-agents concurrently on separate branches; they share session state, so give each its own output_key",
+        "url": "https://google.github.io/adk-docs/agents/workflow-agents/parallel-agents/"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Run several agents with asyncio.gather over Runner.run and merge their final outputs in code",
+        "url": "https://openai.github.io/openai-agents-python/multi_agent/"
+      },
+      {
+        "name": "Python asyncio",
+        "type": "Standard library",
+        "what": "gather, TaskGroup and Semaphore for concurrency caps, timeouts and partial failures",
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "Dalal Lens Research, a fictional equity-research firm, compares 12 pharma companies on results day. Each company has 40k tokens of filings and takes 10 minutes to analyse. Every sub-agent adds 40k tokens of overhead and 3 minutes to start, a context window holds 200k tokens, and tokens cost ₹0.40 per 1,000. The orchestrator plans for 2 minutes and uses 2k tokens plus 0.5k per brief.",
+    "controls": [
+      "Choose how many sub-agents to start: 1, 3, 6 or 12.",
+      "Choose whether each returns its full transcript or a condensed card of at most 500 tokens per company, and whether the companies share inputs.",
+      "Turn the orchestrator’s merge check on or off."
+    ],
+    "outputs": [
+      {
+        "name": "Wall-clock",
+        "meaning": "Planning, the slowest sub-agent’s companies at 10 minutes each, start-up, any shared lookups, merging and the merge check."
+      },
+      {
+        "name": "Total tokens · cost",
+        "meaning": "Every sub-agent’s context plus the orchestrator’s, at ₹0.40 per 1,000 tokens."
+      },
+      {
+        "name": "Orchestrator context",
+        "meaning": "Its own plan and briefs, everything the sub-agents return, and the merge check."
+      },
+      {
+        "name": "Coverage",
+        "meaning": "How much of each sub-agent’s work fits its 200k window, times how much of what comes back fits the orchestrator’s."
+      },
+      {
+        "name": "Conflicting findings",
+        "meaning": "Companies judged on different sector figures from the others, when each sub-agent works them out itself."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Transcripts, shared inputs",
+        "expect": "3 sub-agents return full transcripts and each looks up the sector figures itself: 58 minutes, 1,293.5k tokens (₹517), the orchestrator holds 603.5k tokens, coverage 28% and 8 of 12 companies conflict."
+      },
+      {
+        "k": "wide",
+        "name": "12 sub-agents, no check",
+        "expect": "12 sub-agents returning cards finish in 22 minutes with 100% coverage and a 14k orchestrator, but 1,334k tokens (₹534), 330k of it duplicated lookups, and 11 of 12 companies conflict."
+      },
+      {
+        "k": "checked",
+        "name": "6 sub-agents with a merge check",
+        "expect": "The merge check reconciles all 10 conflicts, so 0 remain and coverage is 100%, but it takes 35 minutes, 935k tokens (₹374) and a 35k orchestrator context."
+      },
+      {
+        "k": "single",
+        "name": "One agent",
+        "expect": "One agent does all 12 companies: 127 minutes, 528.5k tokens (₹211), no conflicts, but its 520k tokens of work in a 200k window give only 38% coverage."
+      }
+    ],
+    "missions": [
+      {
+        "k": "fast",
+        "text": "Finish in 30 minutes or less with 100% coverage, no conflicting findings and an orchestrator context of 20k tokens or less.",
+        "hint": "Make the companies independent by passing the sector figures in every brief, return cards, and use 6 or 12 sub-agents."
+      },
+      {
+        "k": "agree",
+        "text": "Keep the shared dependencies, but get to 0 conflicting findings in under 30 minutes.",
+        "hint": "The merge check reconciles conflicts; with 12 sub-agents returning cards it finishes in 25 minutes."
+      },
+      {
+        "k": "cheap",
+        "text": "Cover all 12 companies for under ₹250.",
+        "hint": "Fewer sub-agents pay less overhead: 3 sub-agents on independent tasks returning cards cost about ₹244."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Claude Agent SDK",
+        "type": "Agent SDK · Anthropic",
+        "start": 3,
+        "prod": 3,
+        "best": "Sub-agents defined in code, each with its own prompt, tool list and model, called through the Agent tool.",
+        "ex": "A research orchestrator fans out one read-only sub-agent per company filing and merges their summaries.",
+        "pros": [
+          "Context isolation built in",
+          "Depth, concurrency and spend caps"
+        ],
+        "cons": [
+          "Tied to Claude models",
+          "Sub-agent spawning must be bounded deliberately"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/subagents"
+      },
+      {
+        "n": "LangGraph Send API",
+        "type": "Open source · by LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Map-reduce fan-out inside a graph: one Send per item, each worker gets only its slice, a reducer collects the results.",
+        "ex": "One Send per company to an analyse node; operator.add gathers the cards for a merge node.",
+        "pros": [
+          "Parallel branches and reducers are explicit",
+          "max_concurrency caps the fan-out in the run config"
+        ],
+        "cons": [
+          "You write the merge and conflict checks",
+          "Graph concepts to learn first"
+        ],
+        "url": "https://docs.langchain.com/oss/python/langgraph/workflows-agents"
+      },
+      {
+        "n": "Google ADK ParallelAgent",
+        "type": "Open source · Google",
+        "start": 3,
+        "prod": 3,
+        "best": "A workflow agent that runs its sub-agents concurrently, each on its own branch of the conversation.",
+        "ex": "Three research sub-agents run at once, each writing to its own output_key, then a merge agent reads them.",
+        "pros": [
+          "Parallel run in a few lines",
+          "Pairs with SequentialAgent for fan-out then merge"
+        ],
+        "cons": [
+          "Sub-agents share session state, so writes need distinct keys",
+          "No built-in conflict check"
+        ],
+        "url": "https://google.github.io/adk-docs/agents/workflow-agents/parallel-agents/"
+      },
+      {
+        "n": "OpenAI Agents SDK + asyncio.gather",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "Code-driven fan-out: run several agents with Runner.run concurrently and merge their final outputs yourself.",
+        "ex": "Twelve Runner.run calls, one per company, gathered with a semaphore and merged into one table.",
+        "pros": [
+          "Deterministic fan-out you control in code",
+          "Tracing covers every parallel run"
+        ],
+        "cons": [
+          "Concurrency caps and retries are your job",
+          "No automatic synthesis"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/multi_agent/"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Parallel sessions with Claude, each with its own context",
+        "tool": "Claude Agent SDK"
+      },
+      {
+        "need": "Map-reduce inside an explicit graph",
+        "tool": "LangGraph Send API"
+      },
+      {
+        "need": "A few lines of parallel workflow on Google’s stack",
+        "tool": "Google ADK ParallelAgent"
+      }
+    ],
+    "goals": [
+      "Explain why parallel sub-agents save minutes but cost more tokens",
+      "Pass shared inputs in the brief instead of letting each sub-agent re-derive them",
+      "Design a condensed return and a merge check for the fan-in"
+    ]
+  },
+  "practice": {
+    "scenario": "Dalal Lens Research, a fictional equity-research firm in Mumbai, publishes a comparison of 12 listed pharma companies on the morning their quarterly results come out. The orchestrator works out the sector figures once (USD/INR and an API price index), then fans out one isolated sub-agent per company. Each reads only its company’s filings and returns a card of at most 500 tokens; a merge check confirms every card used the same figures and units before the note is written.",
+    "industries": [
+      {
+        "industry": "Equity research",
+        "use": "One sub-agent per company on results day, cards merged into one comparison table"
+      },
+      {
+        "industry": "Insurance claims",
+        "use": "Parallel review of independent claim files, each returning a structured verdict with evidence"
+      },
+      {
+        "industry": "Banking KYC refresh",
+        "use": "Sanctions, adverse-media and registry checks per customer run at once, merged into one risk card"
+      }
+    ],
+    "analogy": "An exam hall with 12 examiners. Each marks one bundle of answer sheets in a separate room and hands back a one-page mark sheet, not the scripts. The chief examiner sets the marking scheme once for everyone, then checks that every mark sheet used it before publishing results.",
+    "library": {
+      "name": "LangGraph",
+      "what": "Its Send API does map-reduce: a conditional edge returns one Send per item, each worker node receives only its own slice of state, and a reducer such as operator.add collects the results.",
+      "install": "pip install langgraph"
+    },
+    "note": "analyse_company() is a stub for your own model call (any SDK). LangGraph runs the Send branches in the same superstep, in parallel; cap concurrency with the max_concurrency key in the run config if your model provider rate-limits you.",
+    "samples": [
+      {
+        "file": "fanout_graph.py",
+        "language": "python",
+        "code": "import operator\nfrom typing import Annotated, TypedDict\nfrom langgraph.graph import StateGraph, START, END\nfrom langgraph.types import Send\n\nSECTOR = {\"usd_inr\": 86.4, \"api_price_index\": 112.0}      # computed once\n\nclass Research(TypedDict):\n    companies: list[str]\n    cards: Annotated[list[dict], operator.add]              # reducer: parallel writes append\n\nclass One(TypedDict):                                       # a worker sees only this\n    company: str\n    sector: dict\n\ndef analyse_company(company: str, sector: dict) -> dict:\n    \"\"\"Stub: call your model with the brief and this company's filings only.\"\"\"\n    return {\"company\": company, \"revenue_cr\": 0.0, \"usd_inr_used\": sector[\"usd_inr\"],\n            \"red_flags\": [], \"sources\": [f\"filings/{company}/q2.pdf\"]}\n\ndef fan_out(state: Research):\n    return [Send(\"analyse\", {\"company\": c, \"sector\": SECTOR}) for c in state[\"companies\"]]\n\ndef analyse(slice_: One):\n    card = analyse_company(slice_[\"company\"], slice_[\"sector\"])\n    return {\"cards\": [card]}                                # a short card, not a transcript\n\ndef merge_check(state: Research):\n    rates = {c[\"usd_inr_used\"] for c in state[\"cards\"]}\n    seen = {c[\"company\"] for c in state[\"cards\"]}\n    missing = [c for c in state[\"companies\"] if c not in seen]\n    return {\"cards\": [{\"merge_check\": {\"conflicting_rates\": sorted(rates) if len(rates) > 1 else [],\n                                       \"missing\": missing}}]}\n\ng = StateGraph(Research)\ng.add_node(\"analyse\", analyse)\ng.add_node(\"merge_check\", merge_check)\ng.add_conditional_edges(START, fan_out, [\"analyse\"])\ng.add_edge(\"analyse\", \"merge_check\")\ng.add_edge(\"merge_check\", END)\napp = g.compile()\n\nnames = [\"Arogya\", \"Sanjivani\", \"Nilgiri\", \"Kaveri\", \"Vindhya\", \"Tapti\",\n         \"Sahyadri\", \"Narmada\", \"Godavari\", \"Aravalli\", \"Konkan\", \"Chambal\"]\nout = app.invoke({\"companies\": names, \"cards\": []}, config={\"max_concurrency\": 6})\nprint(len(out[\"cards\"]), out[\"cards\"][-1])"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "An orchestrator fans out 12 company analyses, one isolated session each, with a concurrency cap of 4. Every session takes 10 minutes. Planning takes 2 minutes and the merge check 3 minutes. What is the wall-clock time, in minutes?",
+    "answer": "With 4 at a time, the 12 sessions run in 12 ÷ 4 = 3 waves of 10 minutes: 30 minutes. Add 2 for planning and 3 for the merge check: 2 + 30 + 3 = 35 minutes. Run one after another they would take 2 + 120 + 3 = 125 minutes; the token bill is the same either way.",
+    "expected": {
+      "value": 35,
+      "tolerance": 0.1,
+      "label": "wall-clock (min) ="
+    },
+    "interview": [
+      {
+        "question": "Why should a sub-agent return a condensed card rather than its transcript?",
+        "answer": "The point of an isolated context is that raw reading stays with the sub-agent. A card of a few hundred tokens with a fixed schema and sources lets the orchestrator hold 12 results in about 6k tokens; 12 transcripts would be hundreds of thousands of tokens, overflow its window and make the merge worse."
+      },
+      {
+        "question": "Two sub-agents report different USD/INR rates for the same quarter. What went wrong and how do you fix it?",
+        "answer": "The companies were not truly independent: each sub-agent re-derived a shared input. Compute the shared figures once in the orchestrator and pass them in every brief, record the figure each card used, and run a merge check that flags any card that differs."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Don’t let every sub-agent look up the same shared input.",
+        "fix": "Compute it once and pass it in the brief; the merge check confirms everyone used it."
+      },
+      {
+        "mistake": "Don’t await sub-agents one by one in a loop.",
+        "fix": "Start them together with gather or a TaskGroup, under a semaphore that caps concurrency."
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "fo01",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "Dalal Lens Research, a fictional equity-research firm, runs 12 sub-agents, one per company, and each reads about 40k tokens of filings. What should each sub-agent send back to the orchestrator?",
+      "options": [
+        "Its full transcript, so nothing is lost",
+        "A condensed card of at most about 500 tokens in a fixed schema, with sources",
+        "Nothing: it should write straight into the final report",
+        "The raw PDFs it read, so the orchestrator can check them"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The raw reading should stay inside each isolated context. Twelve cards cost about 6k tokens in the orchestrator; twelve transcripts would be about 480k tokens of filings alone."
+    },
+    {
+      "id": "fo02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "An orchestrator uses 2k tokens of its own plus 0.5k per brief. It fans out 16 sub-agents, and each returns a 0.5k card. How large is the orchestrator’s context after fan-in?",
+      "options": [
+        "10k tokens",
+        "18k tokens",
+        "26k tokens",
+        "16k tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "2k own + 16 × 0.5k of briefs + 16 × 0.5k of cards = 2 + 8 + 8 = 18k tokens."
+    },
+    {
+      "id": "fo03",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An insurer fans out 30 independent claim reviews with a concurrency cap of 10. Each review takes 6 minutes, planning takes 1 minute and merging 2 minutes. What is the wall-clock time?",
+      "options": [
+        "21 minutes",
+        "180 minutes",
+        "9 minutes",
+        "183 minutes"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Thirty reviews at 10 at a time run in 3 waves of 6 minutes: 18 minutes. Add 1 for planning and 2 for merging: 21 minutes. Run one by one they would take 1 + 180 + 2 = 183 minutes."
+    },
+    {
+      "id": "fo04",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A payments company plans to fan out dispute analysis across many sub-agents. Which are real costs of that design? (Select all that apply.)",
+      "options": [
+        "More total tokens, because every sub-agent pays its own prompt, tools and reasoning",
+        "Coordination work: concurrency caps, retries and partial failures",
+        "Conflicting results when the pieces secretly share an input",
+        "A longer wall-clock than doing the disputes one by one"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Fan-out saves wall-clock time, so the last option is wrong. It does cost tokens, coordination and the risk of conflicting findings when pieces are not truly independent."
+    },
+    {
+      "id": "fo05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinical support agent must adjust one patient’s medication plan, where every dose change affects the others. A developer proposes one parallel sub-agent per drug. What is the better design?",
+      "options": [
+        "Keep it with one agent, because the decisions are tightly coupled",
+        "Twelve sub-agents, one per drug, to finish faster",
+        "Sub-agents that return transcripts so the orchestrator sees everything",
+        "Sub-agents with a higher temperature for more variety"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Parallel sub-agents fit independent pieces. Coupled decisions split across isolated contexts produce conflicting implicit choices, so one agent with full context is safer and cheaper."
+    },
+    {
+      "id": "fo06",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An e-commerce team’s fan-out code reads: for sku in skus: results.append(await check(sku)). Fifty checks of 1 minute each take 50 minutes. Why?",
+      "options": [
+        "The semaphore is too small",
+        "Each await finishes before the next check starts, so the checks run one at a time",
+        "The model is rate-limited to one call a minute",
+        "The results list is shared between sub-agents"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Awaiting inside the loop makes the fan-out sequential. Start all checks together with asyncio.gather or a TaskGroup, under a concurrency cap."
+    },
+    {
+      "id": "fo07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A telecom operator fans out 12 regional churn analyses. Each sub-agent estimates the national churn baseline itself, and the regional reports disagree. What is the best fix?",
+      "options": [
+        "Add a debate round between the 12 sub-agents",
+        "Compute the baseline once in the orchestrator and pass it in every brief",
+        "Return full transcripts so the orchestrator can spot the difference",
+        "Use a larger model for each sub-agent"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The regions were not independent: they shared a hidden input. Computing it once removes both the duplicated work and the source of the conflict; a merge check can then confirm everyone used it."
+    },
+    {
+      "id": "fo08",
+      "kind": "multi",
+      "industry": "NBFC",
+      "question": "Udaan Lend, a fictional NBFC, fans out loan-file reviews to sub-agents. What belongs in each sub-agent’s condensed card? (Select all that apply.)",
+      "options": [
+        "A fixed schema of the key fields, such as income, obligations and red flags",
+        "The document ids behind each claim",
+        "The shared figures and units it used, such as the policy rate and ₹ lakh",
+        "Every tool call and intermediate thought"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "A card should be short, structured, sourced and state the shared inputs it relied on so the merge check can compare cards. Intermediate thoughts belong in the sub-agent’s own context and traces."
+    },
+    {
+      "id": "fo09",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Six sub-agents each process 120k tokens and the orchestrator processes 11k. Tokens cost ₹0.40 per 1,000. What does the run cost?",
+      "options": [
+        "₹292.40",
+        "₹48.00",
+        "₹731.00",
+        "₹2,924"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "6 × 120k + 11k = 731k tokens. 731 × ₹0.40 = ₹292.40."
+    },
+    {
+      "id": "fo10",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "Three sub-agents under a Google ADK ParallelAgent all save their results to the same session-state key, and only one result survives. What is the fix?",
+      "options": [
+        "Ask the sub-agents to write shorter results",
+        "Give each sub-agent its own output_key and merge the keys afterwards",
+        "Increase the model’s context window",
+        "Ask the sub-agents to agree on one answer"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Sub-agents under a ParallelAgent share session state, so writes to one key overwrite each other. Distinct output keys, read by a merge step, keep every result."
+    },
+    {
+      "id": "fo11",
+      "kind": "single",
+      "industry": "Equity research",
+      "question": "Twelve company sessions are started with asyncio.gather(..., return_exceptions=True), and one times out. What does the orchestrator get back?",
+      "options": [
+        "Nothing: gather raises and all results are lost",
+        "Eleven results plus the exception object in the failed company’s slot",
+        "Twelve results, with the timed-out one filled in by the model",
+        "Only the results that finished before the timeout"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "With return_exceptions=True, exceptions are returned in place instead of raised, so the other eleven cards survive and the missing company can be retried and reported."
+    },
+    {
+      "id": "fo12",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A law firm’s data room holds 200 contracts of about 6k tokens each. Each sub-agent has a 200k window and needs 40k for its own prompt, tools and notes. What is the smallest number of sub-agents that lets every contract be read in full?",
+      "options": [
+        "4",
+        "8",
+        "26",
+        "200"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each sub-agent has 200k − 40k = 160k for contracts, which is 26 whole contracts of 6k. 200 ÷ 26 ≈ 7.7, so 8 sub-agents are needed."
+    },
+    {
+      "id": "fo13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Anthropic reported how many tokens its multi-agent research system uses compared with ordinary chat. Roughly what multiple?",
+      "options": [
+        "About 1.5×",
+        "About 4×",
+        "About 15×",
+        "About 100×"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Anthropic reported single agents using about 4× the tokens of chat and multi-agent systems about 15×, which is why fan-out suits valuable, broad tasks."
+    },
+    {
+      "id": "fo14",
+      "kind": "single",
+      "industry": "Market research",
+      "question": "In Anthropic’s analysis of its research system on the BrowseComp benchmark, which factor alone explained most of the variance in performance?",
+      "options": [
+        "Token usage",
+        "The number of sub-agents",
+        "The length of the system prompt",
+        "The sampling temperature"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Token usage alone explained about 80% of the variance; together with the number of tool calls and the model choice it explained about 95%. Parallel sub-agents help partly because they spend more tokens across separate contexts."
+    },
+    {
+      "id": "fo15",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank runs KYC refresh checks for thousands of customers with fan-out. Which practices keep this safe at scale? (Select all that apply.)",
+      "options": [
+        "A concurrency cap, such as a semaphore sized to the provider’s rate limits",
+        "A turn or budget cap on every session",
+        "Retrying failed pieces once, then reporting what is still missing",
+        "Letting every sub-agent start more sub-agents without a limit"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Caps on concurrency and per-session spend, plus explicit handling of failures, keep a large fan-out predictable. Unbounded nested spawning multiplies cost and failure modes."
+    },
+    {
+      "id": "fo16",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "One agent analyses 10 regions at 9 minutes each, then merges for 2 minutes. Ten parallel sub-agents each take 9 minutes after a 3-minute start-up, then the merge takes 2 minutes. How many minutes does the parallel design save?",
+      "options": [
+        "78",
+        "90",
+        "14",
+        "82"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "One agent: 10 × 9 + 2 = 92 minutes. Parallel: 3 + 9 + 2 = 14 minutes. Saved: 92 − 14 = 78 minutes."
+    },
+    {
+      "id": "fo17",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "An orchestrator summarising reviews for 50 products runs out of context after the sub-agents finish. Each sub-agent returned its whole conversation. What should change?",
+      "options": [
+        "Use fewer products",
+        "Have each sub-agent return a short, fixed-format card instead of its conversation",
+        "Give the orchestrator a higher temperature",
+        "Let the sub-agents share one context window"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Returning transcripts brings all the raw reading back into the one context that isolation was meant to protect. Condensed cards keep fan-in small."
+    },
+    {
+      "id": "fo18",
+      "kind": "multi",
+      "industry": "Insurance",
+      "question": "When is parallel fan-out a poor fit? (Select all that apply.)",
+      "options": [
+        "The pieces are tightly coupled, so each change affects the others",
+        "The whole job fits comfortably in one context and nobody is waiting on the minutes",
+        "The pieces are independent and together overflow one window",
+        "Each piece needs the finished results of the others before it can start"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Fan-out pays when pieces are independent and too big for one context. Coupled or sequential pieces, or small jobs, are cheaper and more coherent with one agent."
+    },
+    {
+      "id": "fo19",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "Two sub-agents in a UPI dispute review both analysed the same 400 transactions, because one was briefed on “March disputes” and the other on “high-value disputes”. What prevents this?",
+      "options": [
+        "Briefs that partition the work on one key, such as non-overlapping date ranges, plus a merge check that removes duplicates by transaction id",
+        "A larger context window for each sub-agent",
+        "Returning transcripts so the orchestrator can compare them",
+        "A higher concurrency cap"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Overlapping scopes cause duplicated work. Partition the pieces on a single key so they cannot overlap, and deduplicate by id at fan-in in case they still do."
+    },
+    {
+      "id": "fo20",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital’s orchestrator uses 4k tokens of its own. Eight sub-agents would each return a 90k transcript, or a 1k card instead. How many tokens does condensing save in the orchestrator’s context?",
+      "options": [
+        "712k",
+        "720k",
+        "724k",
+        "8k"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Transcripts: 4 + 8 × 90 = 724k. Cards: 4 + 8 × 1 = 12k. Saved: 724 − 12 = 712k tokens."
+    }
+  ]
+}

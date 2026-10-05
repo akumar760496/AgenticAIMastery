@@ -1,0 +1,945 @@
+{
+  "id": "workflows",
+  "moduleSlug": "architectures",
+  "name": "Workflow Patterns",
+  "shortName": "Workflows",
+  "question": "Do I need an agent at all?",
+  "summary": "Workflows run the model along code paths you wrote in advance; agents let the model choose its own steps and tools. The three core workflow patterns are prompt chaining (fixed steps with checks between them), routing (classify, then send each input down a specialised path) and parallelization (sectioning or voting). Start with the simplest pattern that works and add agentic freedom only when it measurably helps.",
+  "useCases": [
+    "The steps can be written down before the task starts",
+    "Requests fall into a few known types, each with its own procedure",
+    "Audit, cost or latency limits call for predictable behaviour"
+  ],
+  "keyFacts": {
+    "label": "Patterns",
+    "items": [
+      {
+        "term": "Prompt chaining",
+        "detail": "a fixed sequence of calls, with plain-code gates between steps"
+      },
+      {
+        "term": "Routing",
+        "detail": "a classifier sends each input to a specialised prompt or path"
+      },
+      {
+        "term": "Sectioning",
+        "detail": "independent subtasks run at the same time, then join"
+      },
+      {
+        "term": "Voting",
+        "detail": "the same check run several times or with several prompts; aggregate"
+      },
+      {
+        "term": "Fallback",
+        "detail": "low-confidence routes go to a general path or a human"
+      },
+      {
+        "term": "Agent instead",
+        "detail": "the model picks the steps: more flexible, costlier, errors can compound"
+      }
+    ]
+  },
+  "steps": [
+    "Write the procedure down and mark which steps need a model at all",
+    "Put a plain-code check between steps so bad output stops early",
+    "Add a router only when request types need genuinely different handling",
+    "Measure accuracy, cost and unhandled cases before reaching for an agent"
+  ],
+  "pitfalls": [
+    "A router without a fallback silently misroutes unfamiliar requests",
+    "Rigid chains break on open-ended tasks nobody anticipated",
+    "Voting multiplies cost, so use it only where errors are expensive"
+  ],
+  "tools": [
+    "Anthropic API + plain code",
+    "LangGraph",
+    "OpenAI Agents SDK",
+    "Claude Agent SDK",
+    "Temporal"
+  ],
+  "remember": "Write the path down if you can. Let the model steer only where you can’t.",
+  "caption": "Illustrative: 1,000 health-insurance claims, one generic prompt against a router with specialised paths and a completeness gate.",
+  "comparison": {
+    "scope": "Your code",
+    "cost": 1,
+    "needs": "Low: prompts and code",
+    "best": "Breaks on inputs nobody planned for"
+  },
+  "diagram": {
+    "file": "diagrams/workflows.svg"
+  },
+  "lesson": {
+    "file": "claims_workflow.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import json",
+        "steps": []
+      },
+      {
+        "text": "from concurrent.futures import ThreadPoolExecutor",
+        "steps": []
+      },
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "SMALL, LARGE = \"claude-haiku-4-5\", \"claude-sonnet-4-5\"   # use current models",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def ask(model, prompt, max_tokens=600):",
+        "steps": []
+      },
+      {
+        "text": "    r = client.messages.create(model=model, max_tokens=max_tokens,",
+        "steps": []
+      },
+      {
+        "text": "                               messages=[{\"role\": \"user\", \"content\": prompt}])",
+        "steps": []
+      },
+      {
+        "text": "    return r.content[0].text",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def extract(email):",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    prompt = \"Extract policy_no, amount, hospital as JSON:\\n\" + email",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    return json.loads(ask(SMALL, prompt))",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def complete(f):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    return bool(f.get(\"policy_no\")) and f.get(\"amount\", 0) > 0",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def route(email):",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    out = json.loads(ask(SMALL, ROUTER_PROMPT + email, 60))",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "    if out[\"confidence\"] < 0.7:",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "        return \"general\"                        # or a human queue",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "    return out[\"route\"]            # cashless | reimbursement | other",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def vote(fields):",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    flags = [ask(SMALL, p + json.dumps(fields), 20) for p in FRAUD_PROMPTS]",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "    return sum(f.strip() == \"SUSPECT\" for f in flags) >= 2",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def handle(email):",
+        "steps": []
+      },
+      {
+        "text": "    fields = extract(email)",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    if not complete(fields):",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        return {\"status\": \"sent back for documents\"}",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "    path = route(email)",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    with ThreadPoolExecutor() as pool:",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        fraud = pool.submit(vote, fields)",
+        "steps": [
+          5,
+          6
+        ]
+      },
+      {
+        "text": "        summary = pool.submit(ask, LARGE, PATHS[path] + json.dumps(fields))",
+        "steps": [
+          1,
+          5
+        ]
+      },
+      {
+        "text": "    return {\"route\": path, \"summary\": summary.result(), \"suspect\": fraud.result()}",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Chain fixed steps",
+        "text": "The claim email goes through a fixed sequence: a small model extracts the fields, then a path prompt writes the summary. Your code, not the model, decides the order."
+      },
+      {
+        "title": "Gate between steps",
+        "text": "A plain-code check sits between the steps. A claim with no policy number or amount is sent back for documents instead of producing a confident but wrong summary."
+      },
+      {
+        "title": "Route by request type",
+        "text": "A cheap classifier sends each claim down a specialised path: cashless 55%, reimbursement 30%, other 15%. Each path has its own prompt and checks."
+      },
+      {
+        "title": "Fall back when unsure",
+        "text": "If the router's confidence is below 0.7, the claim goes to a general path or a human queue. Without this, unfamiliar requests are silently misrouted."
+      },
+      {
+        "title": "Section: run independent parts together",
+        "text": "The fraud screen and the summary do not depend on each other, so they run at the same time. The slower one sets the latency: 4.1 s instead of 7.8 s one after the other."
+      },
+      {
+        "title": "Vote where errors are expensive",
+        "text": "Three independent fraud prompts review the claim and it is flagged when two agree. Voting triples the cost of that check, so keep it for decisions where a miss is costly."
+      }
+    ],
+    "sceneHeight": 252,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"4\" y=\"14\" width=\"52\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"30\" y=\"30\" text-anchor=\"middle\">claim</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M58 26L70 26\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.15s\"><rect class=\"bx \" x=\"72\" y=\"6\" width=\"86\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"115\" y=\"23\">Extract</text><text class=\"sb\" x=\"115\" y=\"38\">small model</text></g><g class=\"a\" style=\"--d:0.3s\"><path class=\"ln \" d=\"M160 26L244 26\" marker-end=\"url(#arr)\"/></g><g class=\"a \" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"248\" y=\"6\" width=\"104\" height=\"40\" rx=\"7\"/><text class=\"lb\" x=\"300\" y=\"23\">Summarise</text><text class=\"sb\" x=\"300\" y=\"38\">path prompt</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"bx acc\" d=\"M202 13 L215 26 L202 39 L189 26 Z\"/></g><text class=\"sb a\" x=\"216\" y=\"46\" style=\"text-anchor:start;--d:0.1s\">gate</text><path class=\"ln draw fail\" pathLength=\"1\" d=\"M202 39 V64\" style=\"--d:0.2s\"/><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx fail\" x=\"128\" y=\"66\" width=\"148\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"202\" y=\"81\" text-anchor=\"middle\">incomplete → sent back</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"bx acc\" d=\"M34 110 L56 132 L34 154 L12 132 Z\"/></g><text class=\"sb a\" x=\"34\" y=\"104\" style=\"text-anchor:middle;--d:0.05s\">router</text><path class=\"ln draw pass\" pathLength=\"1\" d=\"M56 132 C66 132,66 104,76 104\" style=\"--d:0.15s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M56 132 L76 132\" style=\"--d:0.2s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M56 132 C66 132,66 160,76 160\" style=\"--d:0.25s\"/><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx pass\" x=\"78\" y=\"93\" width=\"130\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"143\" y=\"108\" text-anchor=\"middle\">cashless · 55%</text></g><g class=\"a\" style=\"--d:0.38s\"><rect class=\"bx \" x=\"78\" y=\"121\" width=\"130\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"143\" y=\"136\" text-anchor=\"middle\">reimbursement · 30%</text></g><g class=\"a\" style=\"--d:0.46s\"><rect class=\"bx \" x=\"78\" y=\"149\" width=\"130\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"143\" y=\"164\" text-anchor=\"middle\">other · 15%</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln a\" d=\"M34 154 V195 H74\" style=\"stroke-dasharray:4 3;stroke:var(--warn);--d:0s\" marker-end=\"url(#arr)\"/><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx warn\" x=\"78\" y=\"184\" width=\"130\" height=\"22\" rx=\"6\"/><text class=\"tl\" x=\"143\" y=\"199\" text-anchor=\"middle\">conf < 0.7 → general</text></g><text class=\"sb a\" x=\"143\" y=\"222\" style=\"text-anchor:middle;--d:0.3s\">or a human queue</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<text class=\"tl a\" x=\"224\" y=\"100\" style=\"text-anchor:start;--d:0s\">sequential · 7.8 s</text><rect class=\"a\" x=\"224\" y=\"106\" width=\"53.3\" height=\"10\" rx=\"3\" style=\"fill:var(--accent);--d:0.1s\"/><rect class=\"a\" x=\"278.3\" y=\"106\" width=\"48.1\" height=\"10\" rx=\"3\" style=\"fill:var(--warn);--d:0.2s\"/><text class=\"tl a\" x=\"224\" y=\"136\" style=\"text-anchor:start;--d:0.3s\">sectioned · 4.1 s</text><rect class=\"a\" x=\"224\" y=\"142\" width=\"53.3\" height=\"10\" rx=\"3\" style=\"fill:var(--accent);--d:0.4s\"/><rect class=\"a\" x=\"224\" y=\"155\" width=\"48.1\" height=\"10\" rx=\"3\" style=\"fill:var(--warn);--d:0.45s\"/><text class=\"sb a\" x=\"224\" y=\"180\" style=\"text-anchor:start;fill:var(--accent);--d:0.5s\">summary</text><text class=\"sb a\" x=\"282\" y=\"180\" style=\"text-anchor:start;fill:var(--warn);--d:0.5s\">fraud</text>"
+      },
+      {
+        "step": 6,
+        "svg": "<text class=\"tl a\" x=\"224\" y=\"202\" style=\"text-anchor:start;--d:0s\">3 fraud checks</text><g class=\"a\" style=\"--d:0.1s\"><circle cx=\"234\" cy=\"220\" r=\"9\" class=\"bd-warn\"/><path d=\"M234 215.5v5M234 223.5v.5\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.2s\"><circle cx=\"256\" cy=\"220\" r=\"9\" class=\"bd-warn\"/><path d=\"M256 215.5v5M256 223.5v.5\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.3s\"><circle cx=\"278\" cy=\"220\" r=\"9\" class=\"bd-pass\"/><path d=\"M274 220l3 3 5-6\" class=\"bd-mark\"/></g><g class=\"a\" style=\"--d:0.45s\"><rect class=\"bx warn\" x=\"224\" y=\"234\" width=\"128\" height=\"18\" rx=\"6\"/><text class=\"tl\" x=\"288\" y=\"247\" text-anchor=\"middle\">2 of 3 → flag</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Predictable cost, latency and behaviour: easy to test and audit",
+      "Each step can use the cheapest model that passes it",
+      "Plain-code gates stop bad inputs before they spread",
+      "No framework needed; any engineer can read the code"
+    ],
+    "cons": [
+      "Breaks on requests nobody designed a path for",
+      "Every new request type needs a new path and tests",
+      "Routers misroute unless you add a fallback",
+      "Voting and extra checks add cost per request"
+    ],
+    "avoidWhen": [
+      "The steps depend on what the tools return and cannot be listed in advance (use a ReAct loop)",
+      "Most requests are open-ended and would all fall through to a general path"
+    ],
+    "tools": [
+      {
+        "name": "Anthropic API + plain code",
+        "type": "Model API",
+        "what": "Chains, routers and parallel calls with no framework",
+        "url": "https://docs.anthropic.com"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "Workflows as graphs with state, branches and parallel nodes",
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Handoffs and guardrails around fixed agent steps",
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "name": "Claude Agent SDK",
+        "type": "SDK (Anthropic)",
+        "what": "Building agents on the same harness as Claude Code",
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "name": "Temporal",
+        "type": "Open source, commercial cloud",
+        "what": "Durable, retryable long-running workflows",
+        "url": "https://temporal.io"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A general insurer's health-claims desk handles 1,000 claim emails. You build the pipeline from workflow parts: a router with cheap specialised paths, a completeness gate, a fraud screen that can run in parallel with the summary, and voting on the fraud check. Then switch the task mix to open-ended work and see where a fixed workflow stops coping.",
+    "controls": [
+      "Tick the router, gate, sectioning and voting to add each workflow pattern.",
+      "Drag the slider to set the router's confidence threshold; below it, claims go to the general large-model path.",
+      "Switch the task mix between predictable and open-ended, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Accuracy",
+        "meaning": "Share of claims handled correctly, including incomplete claims sent back and fraud caught."
+      },
+      {
+        "name": "Cost vs one generic prompt",
+        "meaning": "Cost per 1,000 claims as a share of one large-model prompt plus fraud screen (₹650)."
+      },
+      {
+        "name": "Unhandled tasks",
+        "meaning": "Claims that fit no designed path and were sent down a wrong one."
+      },
+      {
+        "name": "p95 latency",
+        "meaning": "Time within which 95% of claims finish; the slow path and the fraud screen set it."
+      },
+      {
+        "name": "Model calls per claim",
+        "meaning": "Average number of model calls for one claim."
+      },
+      {
+        "name": "To general path · misrouted",
+        "meaning": "Share sent to the general large-model path, and share sent down the wrong specialised path."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "One generic prompt",
+        "expect": "Every claim goes to the large model: accuracy 71.8%, ₹650 per 1,000 claims, p95 7.5 s."
+      },
+      {
+        "k": "routed",
+        "name": "Router + gate",
+        "expect": "Specialised small-model paths and a gate: accuracy 90.3%, ₹237 per 1,000, but p95 8.3 s."
+      },
+      {
+        "k": "fast",
+        "name": "Router + gate + sectioning",
+        "expect": "The fraud screen runs alongside the summary: same 90.3% and ₹237, p95 down to 5.3 s."
+      },
+      {
+        "k": "open",
+        "name": "Open-ended mix",
+        "expect": "35% of tasks fit no path: accuracy falls to 72.1% and 19.3% of tasks are unhandled."
+      }
+    ],
+    "missions": [
+      {
+        "k": "cheap",
+        "text": "Get the cost under ₹400 per 1,000 claims with accuracy at or above 90%.",
+        "hint": "Switch on the router and the gate. The gate alone is worth 8 points of accuracy."
+      },
+      {
+        "k": "fast",
+        "text": "Get p95 latency under 6 s using sectioning, with accuracy still at or above 90%.",
+        "hint": "With the router and gate on, tick sectioning: the fraud screen no longer waits for the summary."
+      },
+      {
+        "k": "agent",
+        "text": "On the open-ended mix with the router on, find where unhandled tasks exceed 20%, the signal that an agent may be warranted.",
+        "hint": "Lower the confidence threshold to 0.65 or below: fewer unfamiliar tasks fall back to the general path."
+      }
+    ],
+    "tools": [
+      {
+        "n": "Anthropic API + plain code",
+        "type": "Model API · no framework",
+        "start": 3,
+        "prod": 3,
+        "best": "Chains, routers and parallel calls written as ordinary functions, with nothing between you and the model.",
+        "ex": "A claims router in 60 lines: a Haiku classifier, three path prompts and a thread pool for the fraud screen.",
+        "pros": [
+          "Nothing to learn beyond the SDK",
+          "Every step is visible and testable"
+        ],
+        "cons": [
+          "Retries, state and tracing are yours to add",
+          "Parallelism and timeouts need care"
+        ],
+        "url": "https://docs.anthropic.com"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "Workflows as explicit graphs with state, conditional edges and parallel branches, plus persistence.",
+        "ex": "A graph with a router node, three path subgraphs and a fraud node that runs in parallel with the summary.",
+        "pros": [
+          "Branches and parallel nodes are first-class",
+          "Checkpointing and human review built in"
+        ],
+        "cons": [
+          "More concepts than plain code",
+          "Easy to over-engineer a simple chain"
+        ],
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 2,
+        "best": "Small agents with handoffs and guardrails when a step needs a little autonomy inside a mostly fixed flow.",
+        "ex": "A triage agent hands off to a cashless or reimbursement agent, with an input guardrail for missing policy numbers.",
+        "pros": [
+          "Handoffs and guardrails are built in",
+          "Tracing out of the box"
+        ],
+        "cons": [
+          "Oriented to agents rather than fixed pipelines",
+          "Best with OpenAI models, though others work"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/"
+      },
+      {
+        "n": "Claude Agent SDK",
+        "type": "SDK · Anthropic",
+        "start": 2,
+        "prod": 2,
+        "best": "Building agents on the harness behind Claude Code when a path needs tools, files and a loop.",
+        "ex": "A reimbursement path that reads uploaded bills with file tools while the rest of the pipeline stays fixed.",
+        "pros": [
+          "Tools, permissions and context management included",
+          "Same loop as Claude Code"
+        ],
+        "cons": [
+          "Heavier than a few API calls for simple chains",
+          "Tied to Claude models"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "n": "Temporal",
+        "type": "Open source · commercial cloud",
+        "start": 1,
+        "prod": 3,
+        "best": "Durable workflows that survive crashes and retries, for long-running or multi-day processes.",
+        "ex": "A claim workflow that waits two days for a hospital document, then resumes at the right step.",
+        "pros": [
+          "Retries, timers and state survive failures",
+          "Proven at large scale"
+        ],
+        "cons": [
+          "A platform to run and learn",
+          "Overkill for short request-response chains"
+        ],
+        "url": "https://temporal.io"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "A few known request types",
+        "tool": "Plain code with a router"
+      },
+      {
+        "need": "Branches, state and human review",
+        "tool": "LangGraph"
+      },
+      {
+        "need": "Long-running, must survive crashes",
+        "tool": "Temporal"
+      }
+    ],
+    "goals": [
+      "Explain the difference between a workflow and an agent",
+      "Choose between chaining, routing, sectioning and voting for a given task",
+      "Explain why a router needs a fallback and what unhandled tasks signal"
+    ]
+  },
+  "practice": {
+    "scenario": "An Indian general insurer's health-claims desk receives about 4,000 emails a day. A cheap classifier routes each one to a cashless, reimbursement or general path; each path is a short chain with a plain-code gate that stops claims with a missing policy number or discharge summary. A fraud screen runs in parallel with the summary, so the team gets predictable cost and an audit trail without an agent deciding anything.",
+    "industries": [
+      {
+        "industry": "Insurance",
+        "use": "Route claims by type, then run fixed extraction and summary chains with completeness gates"
+      },
+      {
+        "industry": "Banking operations",
+        "use": "Classify service requests (address change, card block, statement) into fixed procedures"
+      },
+      {
+        "industry": "E-commerce support",
+        "use": "Route returns, refunds and delivery queries to specialised prompts, with a human fallback"
+      }
+    ],
+    "analogy": "A hospital reception desk. The receptionist does not treat anyone; they send each patient to the right department, where a set procedure runs.",
+    "library": {
+      "name": "Anthropic Python SDK (plain code)",
+      "what": "Workflows need no framework: a few model calls, ordinary if-statements and a thread pool cover chaining, routing and sectioning.",
+      "install": "pip install anthropic"
+    },
+    "note": "Minimal sketch. Prompts are shortened; add retries, logging and your own schemas before production.",
+    "samples": [
+      {
+        "file": "claims_workflow.py",
+        "language": "python",
+        "code": "import json\nfrom concurrent.futures import ThreadPoolExecutor\nimport anthropic\n\nclient = anthropic.Anthropic()\nSMALL, LARGE = \"claude-haiku-4-5\", \"claude-sonnet-4-5\"   # use your current models\nPATHS = {\"cashless\": \"Check pre-authorisation fields...\",\n         \"reimbursement\": \"Check bills, discharge summary...\",\n         \"general\": \"Answer the policyholder's question...\"}\n\ndef ask(model, prompt, max_tokens=800):\n    r = client.messages.create(model=model, max_tokens=max_tokens,\n                               messages=[{\"role\": \"user\", \"content\": prompt}])\n    return r.content[0].text\n\ndef route(email):                                   # routing\n    out = json.loads(ask(SMALL, 'Classify as cashless, reimbursement or general. '\n                                'Reply as JSON {\"route\": ..., \"confidence\": 0-1}\\n' + email, 100))\n    return out[\"route\"] if out[\"confidence\"] >= 0.7 else \"general\"   # fallback\n\ndef handle(email):\n    path = route(email)\n    fields = json.loads(ask(SMALL, \"Extract policy_no, amount, hospital as JSON:\\n\" + email))\n    if not fields.get(\"policy_no\"):                 # gate between chain steps\n        return {\"status\": \"sent back\", \"reason\": \"policy number missing\"}\n    with ThreadPoolExecutor() as pool:              # sectioning: run in parallel\n        fraud = pool.submit(ask, SMALL, \"List fraud red flags:\\n\" + json.dumps(fields))\n        summary = pool.submit(ask, LARGE, PATHS[path] + \"\\n\" + json.dumps(fields))\n    return {\"route\": path, \"summary\": summary.result(), \"flags\": fraud.result()}"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "One generic prompt costs ₹0.60 per claim on the large model. The routed design makes a small router call (₹0.03) for every claim, then runs a 2-call small-model chain (₹0.03 per call) for 70% of claims and one large-model call (₹0.60) for the other 30%. What does the routed design cost per 1,000 claims, in ₹?",
+    "answer": "Router: 1,000 × ₹0.03 = ₹30. Small chains: 700 × 2 × ₹0.03 = ₹42. Large path: 300 × ₹0.60 = ₹180. Total ₹252, against ₹600 for one generic prompt on the large model.",
+    "expected": {
+      "value": 252,
+      "tolerance": 1,
+      "label": "₹ per 1,000 ="
+    },
+    "interview": [
+      {
+        "question": "When would you choose a workflow over an agent?",
+        "answer": "When the steps can be written down in advance and requests fall into known types. A workflow is cheaper, faster, easier to test and easier to audit. Move to an agent only for the slice of work where the path depends on what the tools return, and measure that the extra freedom actually improves results."
+      },
+      {
+        "question": "What is the difference between sectioning and voting?",
+        "answer": "Both are parallelization. Sectioning splits a task into independent parts that run at the same time, such as a fraud screen alongside a summary. Voting runs the same check several times or with several prompts and aggregates the answers, trading extra cost for fewer mistakes."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Building a router with no fallback for low-confidence or unknown requests",
+        "fix": "Send low-confidence routes to a general path or a human, and count them"
+      },
+      {
+        "mistake": "Reaching for an agent framework before measuring a simple chain",
+        "fix": "Build the simplest chain first and add agentic steps only where metrics show a gap"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "wf01",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A health insurer’s claims emails fall into three types, each with a written procedure. The team is choosing between an autonomous agent and fixed code paths. What should it build first?",
+      "options": [
+        "An autonomous agent with every claims tool",
+        "A router that sends each type down its own fixed chain",
+        "One long prompt listing all three procedures",
+        "A tree search over possible procedures"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The steps are known in advance and the request types are few, so routing to fixed chains is cheaper, faster and easier to audit than an agent."
+    },
+    {
+      "id": "wf02",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s router sends 4% of service requests to the wrong chain, and those customers get irrelevant replies. The misroutes are all low-confidence predictions. What is the most direct fix?",
+      "options": [
+        "Add a confidence threshold with a general or human fallback",
+        "Replace the router with a larger model everywhere",
+        "Add voting to every chain",
+        "Remove the router and use one prompt"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Low-confidence predictions are where misroutes cluster, so a threshold that falls back to a general path or a human removes most of them."
+    },
+    {
+      "id": "wf03",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A returns workflow extracts order details, then drafts a refund note. 6% of emails have no order number, and the drafts for them invent one. What stops this?",
+      "options": [
+        "A larger drafting model",
+        "A plain-code gate that checks the order number before drafting",
+        "Asking the drafting prompt to be careful",
+        "Running the draft step twice"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A gate between chain steps is cheap and certain: stop and ask for the order number instead of letting a model guess."
+    },
+    {
+      "id": "wf04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "One generic prompt costs ₹0.60 per claim. A router call costs ₹0.03; 70% of claims then take a 2-call small chain at ₹0.03 per call and 30% take the ₹0.60 prompt. What is the routed cost per 1,000 claims?",
+      "options": [
+        "₹210",
+        "₹252",
+        "₹282",
+        "₹222"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Router ₹30, small chains 700 × 2 × ₹0.03 = ₹42, large path 300 × ₹0.60 = ₹180. Total ₹252."
+    },
+    {
+      "id": "wf05",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital’s discharge workflow runs a medication check (3.0 s) and a summary (4.5 s) one after the other. Neither needs the other’s output. With sectioning, what is the latency of these two steps?",
+      "options": [
+        "7.5 s",
+        "3.0 s",
+        "4.5 s",
+        "6.0 s"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Run in parallel, the slower step sets the time: 4.5 s instead of 3.0 + 4.5 = 7.5 s."
+    },
+    {
+      "id": "wf06",
+      "kind": "multi",
+      "industry": "Software",
+      "question": "Which of these are workflow patterns rather than agent behaviours? Select all that apply.",
+      "options": [
+        "Prompt chaining with checks between steps",
+        "Routing each input to a specialised prompt",
+        "The model choosing which tool to call next from what it just saw",
+        "Running the same check three times and voting"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Chaining, routing and parallelization (including voting) follow code paths you wrote. Choosing the next tool from an observation is agent behaviour."
+    },
+    {
+      "id": "wf07",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A broker’s support desk sees 20 request types, but 3 of them make up 85% of volume and have fixed procedures. The rest are varied. What design fits?",
+      "options": [
+        "An agent for everything",
+        "Workflows for the top 3 types and an agent or human path for the rest",
+        "One workflow per request type, all 20",
+        "A single generic prompt"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Fix the predictable bulk with workflows and send the varied tail to a more flexible path; building 20 rigid chains costs more than it saves."
+    },
+    {
+      "id": "wf08",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A fraud check is voted on by three independent prompts, and a transaction is flagged when two agree. Each prompt costs ₹0.04. What does voting add per 1,000 transactions compared with one prompt?",
+      "options": [
+        "₹40",
+        "₹120",
+        "₹80",
+        "₹160"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Three prompts cost ₹0.12 against ₹0.04 for one, so voting adds ₹0.08 × 1,000 = ₹80."
+    },
+    {
+      "id": "wf09",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A telecom’s workflow handles SIM, billing and roaming requests well, but open-ended complaints now make up 30% of traffic and 22% of all tasks end up misrouted. Which conclusions are reasonable? Select all that apply.",
+      "options": [
+        "The fixed paths do not cover a large slice of the work",
+        "An agent or human path may be warranted for that slice",
+        "Adding voting to every chain will solve it",
+        "The router should be removed entirely"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Unhandled tasks above about a fifth signal that fixed paths no longer fit; a more flexible path for that slice is the fix. Voting and removing the router do not address coverage."
+    },
+    {
+      "id": "wf10",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A contract-review pipeline extracts clauses, classifies each and then summarises risks. A junior engineer wants to replace it with an agent “to make it smarter”. Accuracy and cost are already on target. What should the team do?",
+      "options": [
+        "Replace it; agents are more capable",
+        "Keep the workflow and add an agent only for a measured gap",
+        "Add a tree search on top",
+        "Double the number of chain steps"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Add agentic complexity only when it measurably helps. A workflow that meets its targets is cheaper and easier to audit."
+    },
+    {
+      "id": "wf11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A routing prompt classifies requests with probabilities. The code reads: if probs[route] > 0.7: route = \"general\". What is the effect?",
+      "options": [
+        "Confident predictions go to the general path and unsure ones stay routed",
+        "Unsure predictions go to the general path",
+        "All requests go to the general path",
+        "The router never falls back"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The comparison is inverted: confident predictions fall back and unsure ones are routed. It should be < 0.7."
+    },
+    {
+      "id": "wf12",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "An EdTech platform grades essays with one call per essay. For high-stakes final exams it wants fewer grading errors and accepts higher cost. Which pattern fits?",
+      "options": [
+        "Sectioning",
+        "Voting across several independent grading prompts",
+        "Routing by essay length",
+        "A completeness gate"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Voting runs the same task several times and aggregates, trading cost for fewer errors, which suits high-stakes decisions."
+    },
+    {
+      "id": "wf13",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "A shipment-exception workflow has a router with a 0.9 confidence threshold. Accuracy is high but costs doubled. Which are likely causes? Select all that apply.",
+      "options": [
+        "Many confident-enough requests now fall back to the expensive general path",
+        "The threshold is set too high for this traffic",
+        "The gate between steps is too cheap",
+        "Sectioning is running steps in parallel"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "A very high threshold sends many routable requests to the general path, which costs more. Lowering it trades a little accuracy for large savings; gates and sectioning do not raise cost."
+    },
+    {
+      "id": "wf14",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A lab-report workflow routes 60% of reports to a small-model chain at ₹0.10 and 40% to a large-model path at ₹0.50, plus a ₹0.02 router call on every report. What is the average cost per report?",
+      "options": [
+        "₹0.28",
+        "₹0.30",
+        "₹0.26",
+        "₹0.32"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.02 + 0.6 × 0.10 + 0.4 × 0.50 = 0.02 + 0.06 + 0.20 = ₹0.28."
+    },
+    {
+      "id": "wf15",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A loan-application workflow calls a large model to check whether the PAN field is filled in. What is the best change?",
+      "options": [
+        "Replace that step with a plain-code check",
+        "Use a larger model for more accuracy",
+        "Vote across three models",
+        "Move it to the end of the chain"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Only use a model where one is needed. A field-presence check is ordinary code: free, instant and exact."
+    },
+    {
+      "id": "wf16",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "A SaaS support team measures its new routed workflow. Which metrics tell it whether routing is working? Select all that apply.",
+      "options": [
+        "Accuracy per route",
+        "Share of requests sent to the fallback path",
+        "Share of requests that fit no path and were misrouted",
+        "Average prompt length per route"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Per-route accuracy, fallback share and unhandled share show whether paths fit the traffic. Prompt length says nothing about quality."
+    },
+    {
+      "id": "wf17",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims chain has three steps with success rates of 98%, 95% and 97%, and the steps fail independently. What share of claims pass all three?",
+      "options": [
+        "About 90.3%",
+        "About 95.0%",
+        "About 93.1%",
+        "About 97.0%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.98 × 0.95 × 0.97 = 0.9031, so about 90.3%. Chains multiply step error rates, which is why gates between steps matter."
+    },
+    {
+      "id": "wf18",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Which case best justifies moving from a workflow to an agent?",
+      "options": [
+        "Requests are few and well defined",
+        "The next action depends on what each lookup returns, and the paths cannot be listed in advance",
+        "The team wants lower latency",
+        "Auditors need a fixed procedure"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Agents earn their cost when the path depends on observations nobody can predict. Fixed procedures, low latency and audit needs favour workflows."
+    },
+    {
+      "id": "wf19",
+      "kind": "multi",
+      "industry": "Payments",
+      "question": "A payments company splits a dispute summary into three independent sections (transaction facts, customer history, policy) and runs them in parallel. Which statements are true? Select all that apply.",
+      "options": [
+        "Latency is set by the slowest section",
+        "Total tokens stay roughly the same as running them one after another",
+        "Parallel sections must share one model call",
+        "Sectioning is a form of voting"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Sectioning cuts latency to the slowest part while doing the same work, so tokens are similar. Each section is its own call, and voting is a different parallel pattern."
+    },
+    {
+      "id": "wf20",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A router sends 55% of requests to path A (accuracy 96%), 30% to path B (92%) and 15% to a general path (80%). What is the overall accuracy?",
+      "options": [
+        "92.4%",
+        "93.0%",
+        "91.8%",
+        "90.0%"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "0.55 × 0.96 + 0.30 × 0.92 + 0.15 × 0.80 = 0.528 + 0.276 + 0.12 = 0.924, so 92.4%."
+    }
+  ]
+}

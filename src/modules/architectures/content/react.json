@@ -1,0 +1,902 @@
+{
+  "id": "react",
+  "moduleSlug": "architectures",
+  "name": "ReAct Loop",
+  "shortName": "ReAct",
+  "question": "What should I do next, given what I just saw?",
+  "summary": "ReAct interleaves reasoning with actions: the model thinks, calls a tool, reads the observation and decides again, until it can answer. Because every step sees the latest result, it copes with paths nobody could predict. It is the default loop in most agent SDKs, and it needs a step cap, compact tool results and errors returned as observations.",
+  "useCases": [
+    "The next step depends on what the last tool returned",
+    "Diagnosis and investigation tasks with branching paths",
+    "A small, well-described tool set the model can choose from reliably"
+  ],
+  "keyFacts": {
+    "label": "The loop",
+    "items": [
+      {
+        "term": "Thought",
+        "detail": "the model reasons about what to do next"
+      },
+      {
+        "term": "Action",
+        "detail": "a tool call with arguments"
+      },
+      {
+        "term": "Observation",
+        "detail": "the tool’s result, appended to the history"
+      },
+      {
+        "term": "Stop condition",
+        "detail": "a final answer, or a hard step cap"
+      },
+      {
+        "term": "History growth",
+        "detail": "every call resends all earlier steps"
+      },
+      {
+        "term": "Errors",
+        "detail": "returned to the model as observations, not raised as crashes"
+      }
+    ]
+  },
+  "steps": [
+    "Define a few tools with tight schemas and short, informative results",
+    "Run the loop: call the model, execute its tool calls, append the results, repeat",
+    "Cap the steps and stop gracefully with a partial answer",
+    "Log every trace so failures can be replayed and graded"
+  ],
+  "pitfalls": [
+    "No step cap means loops that never end",
+    "Verbose tool results inflate every later call",
+    "Re-deciding after every observation is slow and costly for routine tasks"
+  ],
+  "tools": [
+    "OpenAI Agents SDK",
+    "smolagents",
+    "LangGraph",
+    "Claude Agent SDK",
+    "Anthropic tool use"
+  ],
+  "remember": "Think, act, observe. Cap the loop.",
+  "caption": "Each call resends the whole history, so tokens grow with every step. Numbers are illustrative.",
+  "comparison": {
+    "scope": "The model, after every observation",
+    "cost": 3,
+    "needs": "Medium: tools and caps",
+    "best": "Long loops and growing history"
+  },
+  "diagram": {
+    "file": "diagrams/react.svg"
+  },
+  "lesson": {
+    "file": "react_loop.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import anthropic",
+        "steps": []
+      },
+      {
+        "text": "client = anthropic.Anthropic()",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "TOOLS = [",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    {\"name\": \"get_order\", \"description\": \"Order status by order id\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "     \"input_schema\": {\"type\": \"object\",",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                      \"properties\": {\"order_id\": {\"type\": \"string\"}},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "                      \"required\": [\"order_id\"]}},",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "    # get_courier_status and raise_ticket are defined the same way",
+        "steps": []
+      },
+      {
+        "text": "]",
+        "steps": []
+      },
+      {
+        "text": "MAX_STEPS = 8",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "def run(question):",
+        "steps": []
+      },
+      {
+        "text": "    messages = [{\"role\": \"user\", \"content\": question}]",
+        "steps": []
+      },
+      {
+        "text": "    for step in range(MAX_STEPS):",
+        "steps": [
+          4,
+          5
+        ]
+      },
+      {
+        "text": "        r = client.messages.create(model=\"claude-sonnet-4-5\", max_tokens=1024,",
+        "steps": []
+      },
+      {
+        "text": "                                   tools=TOOLS, messages=messages)",
+        "steps": [
+          2,
+          4
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"assistant\", \"content\": r.content})",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "        if r.stop_reason != \"tool_use\":",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "            return r.content[-1].text",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "        results = []",
+        "steps": []
+      },
+      {
+        "text": "        for call in [b for b in r.content if b.type == \"tool_use\"]:",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            try:",
+        "steps": []
+      },
+      {
+        "text": "                out = TOOL_FNS[call.name](**call.input)",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "            except Exception as e:",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "                out = f\"error: {e}\"         # an observation, not a crash",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "            results.append({\"type\": \"tool_result\", \"tool_use_id\": call.id,",
+        "steps": []
+      },
+      {
+        "text": "                            \"content\": out[:1500]})",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "        messages.append({\"role\": \"user\", \"content\": results})",
+        "steps": [
+          3,
+          4
+        ]
+      },
+      {
+        "text": "    return \"Stopped at the step cap; handing over to a human.\"",
+        "steps": [
+          5
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Define a few tight tools",
+        "text": "Three tools with short descriptions and strict input schemas. The model can only act through them, so clear names and required fields matter more than clever prompts."
+      },
+      {
+        "title": "Think, then act",
+        "text": "The model reads the question and replies with a tool call rather than an answer: get_order for order 8812. The stop reason tool_use tells your loop to run it."
+      },
+      {
+        "title": "Observe the result",
+        "text": "Your code runs the tool and appends the result as a tool_result message: “shipped”. That observation is what the next step reasons about."
+      },
+      {
+        "title": "Loop with the growing history",
+        "text": "The model is called again with everything so far and asks for the courier status: “held at hub”. Each call resends the whole history, so input grows from 1.2k to 3.4k to 5.8k tokens."
+      },
+      {
+        "title": "Stop on an answer or the cap",
+        "text": "On the third call the model answers instead of calling a tool, so the loop ends after 3 of the 8 allowed steps. If the cap is reached first, the loop stops and hands over."
+      },
+      {
+        "title": "Return errors as observations",
+        "text": "When the courier API times out, the loop returns “error: timeout” as the tool result. The model retries or picks another route instead of the whole run crashing."
+      }
+    ],
+    "sceneHeight": 268,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<text class=\"tl a\" x=\"8\" y=\"14\" style=\"text-anchor:start;--d:0s\">Tools the model can call</text><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"20\" width=\"70\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"43\" y=\"34\" text-anchor=\"middle\">get_order</text></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx soft\" x=\"84\" y=\"20\" width=\"128\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"148\" y=\"34\" text-anchor=\"middle\">get_courier_status</text></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx soft\" x=\"218\" y=\"20\" width=\"90\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"263\" y=\"34\" text-anchor=\"middle\">raise_ticket</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"8\" y=\"48\" width=\"56\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"36\" y=\"64\" text-anchor=\"middle\">think</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M66 60L80 60\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"82\" y=\"48\" width=\"132\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"148\" y=\"64\" text-anchor=\"middle\">get_order(8812)</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path class=\"ln \" d=\"M216 60L230 60\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx \" x=\"232\" y=\"48\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"292\" y=\"64\" text-anchor=\"middle\">shipped</text></g><text class=\"sb a\" x=\"292\" y=\"84\" style=\"text-anchor:middle;--d:0.2s\">observation</text>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw \" pathLength=\"1\" d=\"M292 88 C292 98,36 88,36 100\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"102\" width=\"56\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"36\" y=\"118\" text-anchor=\"middle\">think</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln \" d=\"M66 114L80 114\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx acc\" x=\"82\" y=\"102\" width=\"132\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"148\" y=\"118\" text-anchor=\"middle\">get_courier_status</text></g><g class=\"a\" style=\"--d:0.25s\"><path class=\"ln \" d=\"M216 114L230 114\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx \" x=\"232\" y=\"102\" width=\"120\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"292\" y=\"118\" text-anchor=\"middle\">held at hub</text></g><text class=\"tl a\" x=\"8\" y=\"216\" style=\"text-anchor:start;--d:0.35s\">Input tokens sent on each call</text><text class=\"tl a\" x=\"46\" y=\"233\" style=\"text-anchor:end;--d:0.4s\">call 1</text><rect x=\"52\" y=\"224\" width=\"240\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"52\" y=\"224\" width=\"49.6551724137931\" height=\"11\" rx=\"3\" style=\"fill:var(--accent);--d:0.45s\"/><text class=\"mono a\" x=\"298\" y=\"233\" style=\"--d:0.5s\">1.2k</text><text class=\"tl a\" x=\"46\" y=\"248\" style=\"text-anchor:end;--d:0.5s\">call 2</text><rect x=\"52\" y=\"239\" width=\"240\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"52\" y=\"239\" width=\"140.6896551724138\" height=\"11\" rx=\"3\" style=\"fill:var(--accent);--d:0.55s\"/><text class=\"mono a\" x=\"298\" y=\"248\" style=\"--d:0.6s\">3.4k</text>"
+      },
+      {
+        "step": 5,
+        "svg": "<path class=\"ln draw \" pathLength=\"1\" d=\"M292 128 C292 138,36 132,36 144\" style=\"--d:0s\"/><g class=\"a\" style=\"--d:0.1s\"><rect class=\"bx soft\" x=\"8\" y=\"146\" width=\"56\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"36\" y=\"162\" text-anchor=\"middle\">think</text></g><g class=\"a\" style=\"--d:0.15s\"><path class=\"ln \" d=\"M66 158L80 158\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.2s\"><rect class=\"bx pass\" x=\"82\" y=\"146\" width=\"270\" height=\"24\" rx=\"6\"/><text class=\"tl\" x=\"217\" y=\"162\" text-anchor=\"middle\">answer: reshipping today, ticket raised</text></g><text class=\"tl a\" x=\"46\" y=\"263\" style=\"text-anchor:end;--d:0.25s\">call 3</text><rect x=\"52\" y=\"254\" width=\"240\" height=\"11\" rx=\"3\" class=\"skel\" style=\"opacity:.45\"/><rect class=\"a\" x=\"52\" y=\"254\" width=\"240\" height=\"11\" rx=\"3\" style=\"fill:var(--warn);--d:0.3s\"/><text class=\"mono a\" x=\"298\" y=\"263\" style=\"--d:0.35s\">5.8k</text><g class=\"a\" style=\"--d:0.4s\"><text class=\"tag-t\" x=\"352\" y=\"216\" style=\"text-anchor:end;fill:var(--pass)\">3 of 8 steps</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx soft\" x=\"82\" y=\"176\" width=\"132\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"148\" y=\"190\" text-anchor=\"middle\">get_courier_status</text></g><g class=\"a\" style=\"--d:0.1s\"><path class=\"ln \" d=\"M216 186L230 186\" marker-end=\"url(#arr)\"/></g><g class=\"a\" style=\"--d:0.15s\"><rect class=\"bx fail\" x=\"232\" y=\"176\" width=\"120\" height=\"20\" rx=\"6\"/><text class=\"tl\" x=\"292\" y=\"190\" text-anchor=\"middle\">error: timeout</text></g><text class=\"tl a\" x=\"8\" y=\"190\" style=\"text-anchor:start;--d:0.25s\">retry →</text>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Handles paths nobody can predict, one observation at a time",
+      "The default loop in most agent SDKs, so little code",
+      "Recovers from tool errors when they come back as observations",
+      "Traces are easy to read, replay and grade"
+    ],
+    "cons": [
+      "Every call resends the growing history, so tokens compound",
+      "Re-decides after every step, which is slow for routine work",
+      "Can loop or stall without a cap",
+      "Quality depends heavily on tool design and result size"
+    ],
+    "avoidWhen": [
+      "The steps are known in advance (use a workflow)",
+      "The steps are knowable but deciding each one is costly (use plan-and-execute)"
+    ],
+    "tools": [
+      {
+        "name": "OpenAI Agents SDK",
+        "type": "Open source (OpenAI)",
+        "what": "Runner loop with max_turns, tools and tracing",
+        "url": "https://openai.github.io/openai-agents-python/running_agents/"
+      },
+      {
+        "name": "smolagents",
+        "type": "Open source (Hugging Face)",
+        "what": "Small ReAct agents, including code-writing agents",
+        "url": "https://huggingface.co/docs/smolagents/conceptual_guides/react"
+      },
+      {
+        "name": "LangGraph",
+        "type": "Open source (LangChain)",
+        "what": "A prebuilt ReAct agent plus custom loops with state",
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "name": "Claude Agent SDK",
+        "type": "SDK (Anthropic)",
+        "what": "The agent loop and tools behind Claude Code",
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "name": "Anthropic tool use",
+        "type": "Model API",
+        "what": "Writing the loop yourself on the Messages API",
+        "url": "https://docs.anthropic.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A telecom operator's support agent diagnoses why a customer's SIM swap failed. The next check depends on what the last tool returned, so the model runs a ReAct loop: think, call a tool, read the result, decide again. You control the step cap, how tool errors are handled, how big each tool result is, and whether the provisioning tool is flaky.",
+    "controls": [
+      "Drag the slider to set the step cap (maximum model calls).",
+      "Choose full or compact tool results, and tick whether errors come back to the model as observations.",
+      "Tick the flaky tool to make the provisioning log time out once, or load a scenario."
+    ],
+    "outputs": [
+      {
+        "name": "Outcome",
+        "meaning": "Whether the customer got a diagnosis, the run crashed, or the cap stopped it."
+      },
+      {
+        "name": "Model calls · needed",
+        "meaning": "Calls made, against the calls this task needs (5, or 6 with one retry)."
+      },
+      {
+        "name": "Total tokens",
+        "meaning": "All input and output tokens across the run. Each call resends the whole history."
+      },
+      {
+        "name": "Latency",
+        "meaning": "About 1.5 s per model call and 0.4 s per tool call."
+      },
+      {
+        "name": "Trace",
+        "meaning": "One row per model call: the action, the observation and a bar for that call's size."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Default loop",
+        "expect": "5 calls, success, but full payloads push the total to 22,500 tokens."
+      },
+      {
+        "k": "flaky",
+        "name": "Flaky tool, errors raised",
+        "expect": "The provisioning tool times out on call 3 and the exception ends the run: no answer."
+      },
+      {
+        "k": "recover",
+        "name": "Flaky tool, errors as observations",
+        "expect": "The model reads the timeout and retries: success in 6 calls, 27,420 tokens."
+      },
+      {
+        "k": "tight",
+        "name": "Cap of 4, compact results",
+        "expect": "The cap stops the run one call short of an answer, after 6,520 tokens."
+      }
+    ],
+    "missions": [
+      {
+        "k": "flaky",
+        "text": "Succeed with the flaky tool switched on.",
+        "hint": "Return errors as observations, and allow at least 6 steps."
+      },
+      {
+        "k": "lean",
+        "text": "Solve the task using fewer than 9,000 tokens in total.",
+        "hint": "Switch tool results to compact fields. The flaky retry adds a call, so turn it off."
+      },
+      {
+        "k": "cap",
+        "text": "Find the smallest step cap that still succeeds.",
+        "hint": "The cap must equal the calls the task needs: 5 normally, 6 with the flaky retry."
+      }
+    ],
+    "tools": [
+      {
+        "n": "OpenAI Agents SDK",
+        "type": "Open source · OpenAI",
+        "start": 3,
+        "prod": 3,
+        "best": "A Runner that executes the tool loop, with max_turns as the cap and tracing built in.",
+        "ex": "A SIM-swap agent with four function tools, run with Runner.run_sync(agent, question, max_turns=8).",
+        "pros": [
+          "Very little code for a full loop",
+          "MaxTurnsExceeded makes the cap explicit"
+        ],
+        "cons": [
+          "Loop internals are less visible",
+          "Best with OpenAI models, though others work"
+        ],
+        "url": "https://openai.github.io/openai-agents-python/running_agents/"
+      },
+      {
+        "n": "smolagents",
+        "type": "Open source · Hugging Face",
+        "start": 3,
+        "prod": 2,
+        "best": "Small ReAct agents built on MultiStepAgent, including agents that write their actions as code.",
+        "ex": "A CodeAgent that calls lookup tools and composes their results in Python to diagnose a porting failure.",
+        "pros": [
+          "Tiny, readable code base",
+          "Code actions can combine several tools in one step"
+        ],
+        "cons": [
+          "Code execution needs sandboxing",
+          "Fewer production features"
+        ],
+        "url": "https://huggingface.co/docs/smolagents/conceptual_guides/react"
+      },
+      {
+        "n": "LangGraph",
+        "type": "Open source · LangChain",
+        "start": 2,
+        "prod": 3,
+        "best": "A prebuilt ReAct agent, or a custom loop with state, checkpoints and human approval.",
+        "ex": "A ReAct node that pauses for approval before raise_ticket runs.",
+        "pros": [
+          "Persistence and human-in-the-loop",
+          "Fine control over the loop"
+        ],
+        "cons": [
+          "More setup than a plain loop",
+          "Abstractions to learn"
+        ],
+        "url": "https://www.langchain.com/langgraph"
+      },
+      {
+        "n": "Claude Agent SDK",
+        "type": "SDK · Anthropic",
+        "start": 2,
+        "prod": 3,
+        "best": "The agent loop behind Claude Code: tools, permissions, context compaction and subagents.",
+        "ex": "A network-operations agent that reads logs with built-in tools and calls your provisioning API through MCP.",
+        "pros": [
+          "Context management built in",
+          "Permission controls for tools"
+        ],
+        "cons": [
+          "Tied to Claude models",
+          "Broader than a single loop needs"
+        ],
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview"
+      },
+      {
+        "n": "Anthropic tool use (raw loop)",
+        "type": "Model API",
+        "start": 2,
+        "prod": 3,
+        "best": "Writing the loop yourself on the Messages API: full control over caps, errors and result size.",
+        "ex": "A 30-line loop that trims tool results to 1,500 characters and returns exceptions as tool_result text.",
+        "pros": [
+          "Nothing hidden",
+          "Easy to add caps and compaction"
+        ],
+        "cons": [
+          "Tracing and retries are yours",
+          "Easy to get message ordering wrong"
+        ],
+        "url": "https://docs.anthropic.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Fastest working loop",
+        "tool": "OpenAI Agents SDK"
+      },
+      {
+        "need": "Full control, few lines",
+        "tool": "Raw tool-use loop"
+      },
+      {
+        "need": "Approvals and persistence",
+        "tool": "LangGraph"
+      }
+    ],
+    "goals": [
+      "Trace one ReAct step: thought, action, observation",
+      "Calculate how history growth drives total tokens",
+      "Explain why errors should come back as observations and why a cap is needed"
+    ]
+  },
+  "practice": {
+    "scenario": "A telecom operator's support agent diagnoses failed SIM swaps. Nobody can list the steps in advance: the next check depends on whether the swap request exists, whether KYC re-verification passed and whether the network provisioning job errored. A ReAct loop with four tools, a step cap of 8 and compact tool results handles it, and every trace is logged for grading.",
+    "industries": [
+      {
+        "industry": "Telecom",
+        "use": "Diagnose SIM swaps, porting failures and recharge issues step by step"
+      },
+      {
+        "industry": "IT service desks",
+        "use": "Investigate an incident by querying logs, then metrics, then recent deploys"
+      },
+      {
+        "industry": "Stockbroking support",
+        "use": "Trace a rejected order through margin, RMS and exchange responses"
+      }
+    ],
+    "analogy": "A doctor taking a history. Each answer decides the next question; nobody hands the doctor a fixed list.",
+    "library": {
+      "name": "OpenAI Agents SDK",
+      "what": "A small agent framework whose Runner executes the tool loop for you, with max_turns as the step cap and tracing built in.",
+      "install": "pip install openai-agents"
+    },
+    "note": "The tool bodies are stubs; connect them to your own systems. MaxTurnsExceeded is raised when the cap is hit.",
+    "samples": [
+      {
+        "file": "sim_swap_agent.py",
+        "language": "python",
+        "code": "from agents import Agent, Runner, function_tool, MaxTurnsExceeded\n\n@function_tool\ndef get_swap_request(msisdn: str) -> str:\n    \"\"\"Latest SIM swap request for a mobile number: id, status, time.\"\"\"\n    return \"req 55120 · status: provisioning_failed · 10:42\"\n\n@function_tool\ndef get_provisioning_log(request_id: str) -> str:\n    \"\"\"Short error summary for a provisioning job.\"\"\"\n    return \"HLR update rejected: IMSI already active\"\n\n@function_tool\ndef raise_ticket(summary: str, team: str) -> str:\n    \"\"\"Open a ticket for the named back-office team.\"\"\"\n    return \"ticket NOC-8812 created\"\n\nagent = Agent(\n    name=\"SIM swap support\",\n    instructions=\"Diagnose failed SIM swaps. Use tools; keep answers short. \"\n                 \"If a tool returns an error, read it and try another route.\",\n    tools=[get_swap_request, get_provisioning_log, raise_ticket],\n)\n\ntry:\n    result = Runner.run_sync(agent, \"My SIM swap for 98xxxxxx21 failed. Why?\",\n                             max_turns=8)              # hard step cap\n    print(result.final_output)\nexcept MaxTurnsExceeded:\n    print(\"Stopped at 8 turns; escalating to a human.\")"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "In a ReAct loop the system prompt and tools take 2,000 tokens, and each step adds 800 tokens (the tool call and its result). Step n therefore sends 2,000 + 800 × (n − 1) input tokens. How many input tokens do 6 steps send in total?",
+    "answer": "The fixed part is 6 × 2,000 = 12,000. The growing part is 800 × (0 + 1 + 2 + 3 + 4 + 5) = 800 × 15 = 12,000. Total 24,000 input tokens, twice what 6 independent calls would send.",
+    "expected": {
+      "value": 24000,
+      "tolerance": 50,
+      "label": "input tokens ="
+    },
+    "interview": [
+      {
+        "question": "Why should tool errors be returned to the model instead of raised?",
+        "answer": "An error message is an observation the model can act on: retry with different arguments, use another tool or tell the user. Raising an exception ends the run and throws away the progress so far. Keep the error short and specific so it helps the next step."
+      },
+      {
+        "question": "How do you stop a ReAct agent from looping?",
+        "answer": "Set a hard step cap, such as max_turns, and stop gracefully with a partial answer or a hand-off. Make tool results informative so the model does not repeat calls, and log traces to find the tools or prompts that cause loops."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Returning full API payloads as observations",
+        "fix": "Return only the fields the next decision needs"
+      },
+      {
+        "mistake": "Running a loop with no step cap",
+        "fix": "Cap the steps and define what happens when the cap is hit"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "ra01",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A support agent diagnosing failed SIM swaps needs different checks depending on what each lookup returns. Which architecture fits?",
+      "options": [
+        "A fixed prompt chain",
+        "A ReAct loop with a step cap",
+        "A single call with a large thinking budget",
+        "Voting across three prompts"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "When the next step depends on the last observation, a ReAct loop fits; the cap keeps it bounded."
+    },
+    {
+      "id": "ra02",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "A ReAct agent keeps calling get_order with the same id until it hits the cap. Traces show the tool message contains the arguments, not the result. What is wrong?",
+      "options": [
+        "The step cap is too low",
+        "The observation never reaches the model",
+        "The model is too small",
+        "The tool schema is too strict"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "If the tool result is not appended, the model never sees the outcome and repeats the call."
+    },
+    {
+      "id": "ra03",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "The system prompt and tools take 2,000 tokens, each step adds 800, and step n sends 2,000 + 800 × (n − 1) input tokens. How many input tokens do 6 steps send in total?",
+      "options": [
+        "16,800",
+        "24,000",
+        "20,000",
+        "12,000"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "6 × 2,000 = 12,000 fixed, plus 800 × (0+1+2+3+4+5) = 12,000. Total 24,000."
+    },
+    {
+      "id": "ra04",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A tool that checks card status sometimes times out, and each timeout crashes the whole agent run. What change keeps runs alive?",
+      "options": [
+        "Raise the step cap",
+        "Return the error to the model as a tool result",
+        "Use a larger model",
+        "Remove the tool"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Returned as an observation, the error lets the model retry or choose another route instead of ending the run."
+    },
+    {
+      "id": "ra05",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "A broker’s order-investigation agent burns tokens on long traces. Which changes reduce tokens per task? Select all that apply.",
+      "options": [
+        "Return only the fields the next step needs from each tool",
+        "Load only the tools relevant to the task",
+        "Raise the step cap from 8 to 20",
+        "Add more example traces to the system prompt"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Compact results and fewer tool definitions shrink every call. A higher cap and longer prompts increase tokens."
+    },
+    {
+      "id": "ra06",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "With the OpenAI Agents SDK, what happens when an agent run exceeds max_turns?",
+      "options": [
+        "The run silently returns the last message",
+        "MaxTurnsExceeded is raised",
+        "The SDK doubles the limit",
+        "The model is switched to a smaller one"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The Runner raises MaxTurnsExceeded once the turn limit is passed, so you can stop gracefully or hand off."
+    },
+    {
+      "id": "ra07",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A clinical-coding agent’s tool returns the full 6,000-token patient record on every lookup, and later calls get slow. Why do later calls suffer most?",
+      "options": [
+        "The model gets tired",
+        "Every later call resends all earlier tool results",
+        "Tools run slower over time",
+        "The cap counts tokens"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "ReAct history grows with each step, so a large early result is paid for again on every later call."
+    },
+    {
+      "id": "ra08",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "Which elements make up one ReAct step? Select all that apply.",
+      "options": [
+        "A thought about what to do next",
+        "An action: a tool call with arguments",
+        "An observation: the tool result fed back",
+        "A fixed plan written before the task starts"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "ReAct interleaves thought, action and observation. A plan written up front is plan-and-execute."
+    },
+    {
+      "id": "ra09",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "A claims-status agent needs 5 model calls on a normal task and 6 when one tool retry happens. What is the smallest step cap that handles the retry case?",
+      "options": [
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The cap must cover the calls the task needs, here 6 with a retry. Anything lower stops the run early."
+    },
+    {
+      "id": "ra10",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Compared with 6 independent calls of 2,000 tokens each, how much more input does a 6-step ReAct loop send if each step adds 800 tokens of history?",
+      "options": [
+        "12,000 more",
+        "4,800 more",
+        "9,600 more",
+        "None"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Independent calls: 12,000. ReAct: 24,000 (see the growing history). The loop sends 12,000 more."
+    },
+    {
+      "id": "ra11",
+      "kind": "multi",
+      "industry": "Telecom",
+      "question": "A ReAct agent loops on some tasks. Which safeguards belong in production? Select all that apply.",
+      "options": [
+        "A hard step cap with a graceful hand-off",
+        "Logging every trace for replay and grading",
+        "Removing all error handling so failures are visible",
+        "Letting the model decide when the cap applies"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Caps and traces keep loops bounded and debuggable. Crashing on errors and letting the model control the cap defeat the purpose."
+    },
+    {
+      "id": "ra12",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s standard address-change process always runs the same four steps. A team built it as a ReAct agent and it costs three times its budget. What should they do?",
+      "options": [
+        "Raise the budget",
+        "Replace it with a fixed workflow",
+        "Add reflection",
+        "Add tree search"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Re-deciding after every observation is wasted on a fixed procedure; a workflow runs the same steps far more cheaply."
+    },
+    {
+      "id": "ra13",
+      "kind": "single",
+      "industry": "SaaS",
+      "question": "Which smolagents class do its agents build on, as “an abstraction of ReAct framework”?",
+      "options": [
+        "ToolCallingChain",
+        "MultiStepAgent",
+        "PlannerAgent",
+        "ReActGraph"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "smolagents documents MultiStepAgent as the ReAct abstraction that its agents build on."
+    },
+    {
+      "id": "ra14",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "On ALFWorld and WebShop, how did ReAct compare with imitation and reinforcement learning baselines in the original paper?",
+      "options": [
+        "It was 34 and 10 absolute points better",
+        "It matched them",
+        "It was worse on both",
+        "It was only tested on HotpotQA"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The paper reports gains of 34 and 10 absolute points with only one or two in-context examples."
+    },
+    {
+      "id": "ra15",
+      "kind": "multi",
+      "industry": "EdTech",
+      "question": "An EdTech tutor agent answers from a course-search tool. Which tool-result designs help the loop? Select all that apply.",
+      "options": [
+        "Short results with the fields the model needs",
+        "Clear error messages that suggest a next step",
+        "Raw HTML pages of the course site",
+        "Identical wording for success and failure"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Compact, informative results and helpful errors let the model decide well. Raw HTML bloats context and ambiguous results cause repeats."
+    },
+    {
+      "id": "ra16",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "A dispute agent makes 5 calls. Input per call is 1,200 tokens plus 220 tokens for each earlier step, and each call writes 100 output tokens. What is the total token count?",
+      "options": [
+        "8,700",
+        "7,100",
+        "9,200",
+        "6,500"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Inputs: 1,200, 1,420, 1,640, 1,860, 2,080 = 8,200. Plus 5 × 100 output = 8,700."
+    },
+    {
+      "id": "ra17",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A ReAct agent sometimes answers after 3 steps even though the cap is 8. Is this a problem?",
+      "options": [
+        "Yes: it should use all 8",
+        "No: the cap is a limit, and it stopped because it had an answer",
+        "Yes: caps must equal the steps used",
+        "No: caps are ignored by the model"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The loop ends when the model answers without a tool call. The cap only bounds runaway cases."
+    },
+    {
+      "id": "ra18",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "Why did ReAct reduce hallucination on HotpotQA and FEVER compared with reasoning alone?",
+      "options": [
+        "It used a larger model",
+        "It grounded reasoning in results from a Wikipedia API",
+        "It removed chain of thought",
+        "It used voting"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Interleaving reasoning with lookups let the model check facts against retrieved results instead of inventing them."
+    },
+    {
+      "id": "ra19",
+      "kind": "multi",
+      "industry": "Logistics",
+      "question": "A fleet-tracking agent has 25 tools loaded and often picks the wrong one. Which fixes are sensible? Select all that apply.",
+      "options": [
+        "Load only the tools relevant to the task",
+        "Give tools distinct names and clear descriptions",
+        "Raise the temperature",
+        "Add more tools so the right one is always present"
+      ],
+      "correct": [
+        0,
+        1
+      ],
+      "explanation": "Fewer, clearly described tools make selection easier and shrink every call. Temperature and more tools make it worse."
+    },
+    {
+      "id": "ra20",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A ReAct agent at a brokerage must never place trades without approval. Where should that control sit?",
+      "options": [
+        "In the system prompt only",
+        "In code: the place_order tool requires an approval step before it runs",
+        "In the step cap",
+        "In the model’s thinking budget"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Safety-critical controls belong in code around the tool, not in instructions the model might ignore."
+    }
+  ]
+}

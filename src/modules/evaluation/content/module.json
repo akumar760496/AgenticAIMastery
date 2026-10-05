@@ -1,0 +1,284 @@
+{
+  "slug": "evaluation",
+  "number": 1,
+  "techniqueOrder": [
+    "system",
+    "process",
+    "llmjudge",
+    "agentjudge",
+    "rag",
+    "bench",
+    "evaldata",
+    "usersim",
+    "pairwise"
+  ],
+  "glossary": [
+    {
+      "term": "pass^k",
+      "definition": "Share of tasks an agent solves in all k repeated trials. Measures consistency; stricter than pass@k."
+    },
+    {
+      "term": "pass@k",
+      "definition": "Share of tasks solved in at least one of k attempts. Measures capability, not reliability."
+    },
+    {
+      "term": "p95 latency",
+      "definition": "The time within which 95% of requests finish; tracks the slow tail users notice."
+    },
+    {
+      "term": "trajectory",
+      "definition": "The sequence of steps, tool calls and results an agent produces while solving a task."
+    },
+    {
+      "term": "golden set",
+      "definition": "A fixed, versioned set of tasks with known correct outcomes, used to compare versions."
+    },
+    {
+      "term": "rubric",
+      "definition": "Written grading criteria, ideally with an example for each score level."
+    },
+    {
+      "term": "Cohen's κ",
+      "definition": "Agreement between two raters corrected for chance: 1 is perfect, 0 is chance level."
+    },
+    {
+      "term": "faithfulness",
+      "definition": "Share of an answer's claims supported by the retrieved context."
+    },
+    {
+      "term": "context recall",
+      "definition": "Share of the reference answer's facts covered by the retrieved context."
+    },
+    {
+      "term": "context precision",
+      "definition": "Whether relevant chunks are ranked near the top of the retrieved list."
+    },
+    {
+      "term": "contamination",
+      "definition": "Benchmark items leaking into a model's training data, inflating its score."
+    },
+    {
+      "term": "span",
+      "definition": "One timed unit in a trace, such as a single LLM or tool call, with its inputs and outputs."
+    },
+    {
+      "term": "stratified sampling",
+      "definition": "Sampling separately from each group, such as intent, language or risk tier, so small but important groups are represented instead of being left to chance."
+    },
+    {
+      "term": "inter-annotator agreement",
+      "definition": "How often two people labelling the same cases agree, usually reported as a percentage and a chance-corrected score such as Cohen’s κ."
+    },
+    {
+      "term": "adjudication",
+      "definition": "Settling each case where annotators disagree, usually by a senior reviewer, and updating the rubric where it was unclear."
+    },
+    {
+      "term": "margin of error",
+      "definition": "Half the width of a confidence interval; for a 95% interval on a rate, about 1.96 × √(p(1 − p) ÷ n)."
+    },
+    {
+      "term": "user simulator",
+      "definition": "An LLM prompted to play a user from a scenario card during multi-turn evaluation."
+    },
+    {
+      "term": "scenario card",
+      "definition": "A test case for a simulated user: persona, goal, hidden details, stop rule and expected end state."
+    },
+    {
+      "term": "pass^k",
+      "definition": "The probability that all k runs of the same task succeed; a reliability measure."
+    },
+    {
+      "term": "win rate",
+      "definition": "Share of paired comparisons a version wins, with ties usually counted as half."
+    },
+    {
+      "term": "position bias",
+      "definition": "A judge’s tendency to favour an answer because of its slot, first or second."
+    },
+    {
+      "term": "Bradley–Terry model",
+      "definition": "A statistical model that turns pairwise win and loss counts into a ranking of strengths."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Inspect AI documentation",
+      "url": "https://inspect.aisi.org.uk"
+    },
+    {
+      "id": "S2",
+      "title": "τ-bench paper (introduces pass^k)",
+      "url": "https://arxiv.org/abs/2406.12045"
+    },
+    {
+      "id": "S3",
+      "title": "Anthropic: Building effective agents",
+      "url": "https://www.anthropic.com/research/building-effective-agents"
+    },
+    {
+      "id": "S4",
+      "title": "Judging LLM-as-a-Judge with MT-Bench (Zheng et al., 2023)",
+      "url": "https://arxiv.org/abs/2306.05685"
+    },
+    {
+      "id": "S5",
+      "title": "G-Eval: NLG evaluation with GPT-4 (Liu et al., 2023)",
+      "url": "https://arxiv.org/abs/2303.16634"
+    },
+    {
+      "id": "S6",
+      "title": "Agent-as-a-Judge (Zhuge et al., 2024)",
+      "url": "https://arxiv.org/abs/2410.10934"
+    },
+    {
+      "id": "S7",
+      "title": "RAGAS: Automated evaluation of RAG (Es et al., 2023)",
+      "url": "https://arxiv.org/abs/2309.15217"
+    },
+    {
+      "id": "S8",
+      "title": "Ragas documentation",
+      "url": "https://docs.ragas.io"
+    },
+    {
+      "id": "S9",
+      "title": "SWE-bench paper (Jimenez et al., 2023)",
+      "url": "https://arxiv.org/abs/2310.06770"
+    },
+    {
+      "id": "S10",
+      "title": "OpenAI: Introducing SWE-bench Verified",
+      "url": "https://openai.com/index/introducing-swe-bench-verified/"
+    },
+    {
+      "id": "S11",
+      "title": "Langfuse documentation",
+      "url": "https://langfuse.com/docs"
+    },
+    {
+      "id": "S12",
+      "title": "LangSmith documentation",
+      "url": "https://docs.smith.langchain.com"
+    },
+    {
+      "id": "S13",
+      "title": "Vertex AI: Gen AI evaluation overview",
+      "url": "https://cloud.google.com/vertex-ai/generative-ai/docs/models/evaluation-overview"
+    },
+    {
+      "id": "S14",
+      "title": "GAIA benchmark paper (Mialon et al., 2023)",
+      "url": "https://arxiv.org/abs/2311.12983"
+    },
+    {
+      "id": "S15",
+      "title": "scikit-learn: cohen_kappa_score",
+      "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html"
+    },
+    {
+      "id": "S17",
+      "title": "TruLens: the RAG triad",
+      "url": "https://www.trulens.org"
+    },
+    {
+      "id": "S18",
+      "title": "Adding Error Bars to Evals (Miller, 2024)",
+      "url": "https://arxiv.org/abs/2411.00640"
+    },
+    {
+      "id": "S19",
+      "title": "statsmodels: proportion_confint",
+      "url": "https://www.statsmodels.org/stable/generated/statsmodels.stats.proportion.proportion_confint.html"
+    },
+    {
+      "id": "S20",
+      "title": "Hamel Husain: Your AI product needs evals",
+      "url": "https://hamel.dev/blog/posts/evals/"
+    },
+    {
+      "id": "S21",
+      "title": "Argilla documentation",
+      "url": "https://docs.argilla.io"
+    },
+    {
+      "id": "S22",
+      "title": "τ-bench: a benchmark for tool-agent-user interaction (Yao et al., 2024)",
+      "url": "https://arxiv.org/abs/2406.12045"
+    },
+    {
+      "id": "S23",
+      "title": "τ²-bench: evaluating conversational agents in a dual-control environment (Barres et al., 2025)",
+      "url": "https://arxiv.org/abs/2506.07982"
+    },
+    {
+      "id": "S24",
+      "title": "openevals on GitHub (multi-turn simulation)",
+      "url": "https://github.com/langchain-ai/openevals"
+    },
+    {
+      "id": "S25",
+      "title": "Chatbot Arena: an open platform for evaluating LLMs by human preference (Chiang et al., 2024)",
+      "url": "https://arxiv.org/abs/2403.04132"
+    },
+    {
+      "id": "S26",
+      "title": "SciPy: scipy.stats.binomtest",
+      "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binomtest.html"
+    },
+    {
+      "id": "S27",
+      "title": "Anthropic: A statistical approach to model evaluations",
+      "url": "https://www.anthropic.com/research/statistical-approach-to-model-evals"
+    }
+  ],
+  "symptomRouter": [
+    {
+      "symptom": "Did the agent finish the task?",
+      "techniqueId": "system",
+      "advice": "Check the end state of real tasks, several runs each, and report success with cost and latency."
+    },
+    {
+      "symptom": "Why did it fail, and at which step?",
+      "techniqueId": "process",
+      "advice": "Score the trace step by step to find the wrong tool, the bad argument or the loop."
+    },
+    {
+      "symptom": "Is this free-text answer good enough?",
+      "techniqueId": "llmjudge",
+      "advice": "Grade against a rubric with a strong model, calibrated on a hand-labelled sample."
+    },
+    {
+      "symptom": "Does the code or app it built actually meet the spec?",
+      "techniqueId": "agentjudge",
+      "advice": "Let a sandboxed judge agent open, run and inspect the work against each requirement."
+    },
+    {
+      "symptom": "Is the answer backed by my documents?",
+      "techniqueId": "rag",
+      "advice": "Measure retrieval and faithfulness separately so you know which half to fix."
+    },
+    {
+      "symptom": "Which model or framework should we start with?",
+      "techniqueId": "bench",
+      "advice": "Compare on public suites that match your workload, then confirm on your own tasks."
+    },
+    {
+      "symptom": "Scores look fine but users keep hitting failures the tests never show",
+      "techniqueId": "evaldata",
+      "advice": "Rebuild the test set from real traffic: stratify by intent, language and risk, label twice with a rubric, size it for the margin you need, and add every new failure."
+    },
+    {
+      "symptom": "The agent passes single-turn tests but fails with real users over several turns",
+      "techniqueId": "usersim",
+      "advice": "Simulate users with an LLM from scenario cards, check the end state, and report pass^k across personas."
+    },
+    {
+      "symptom": "A new version scores a bit higher, but you are unsure it is really better",
+      "techniqueId": "pairwise",
+      "advice": "Judge A and B pairwise in both orders on the same questions and ship only if the win-rate interval clears 50%."
+    }
+  ]
+}

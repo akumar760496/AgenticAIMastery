@@ -1,0 +1,849 @@
+{
+  "id": "ivf",
+  "moduleSlug": "vector-databases",
+  "name": "IVFFlat Index",
+  "shortName": "Clustered index",
+  "question": "Can I search only the nearest clusters?",
+  "summary": "IVF (inverted file) indexing groups vectors into clusters with k-means, each represented by a centroid. A query is first compared with the centroids, then only the vectors in the closest few clusters (the probes) are scanned. “Flat” means vectors inside each list are stored uncompressed, so distances within a list are exact.",
+  "useCases": [
+    "Moderate datasets where fast index builds matter",
+    "Postgres with pgvector, when memory is tight",
+    "Batch-loaded data that doesn’t change much"
+  ],
+  "keyFacts": {
+    "label": "Key parameters",
+    "items": [
+      {
+        "term": "lists",
+        "detail": "number of clusters; pgvector suggests rows ÷ 1,000 up to 1M rows, √rows above"
+      },
+      {
+        "term": "probes",
+        "detail": "clusters scanned per query; higher = better recall, slower"
+      },
+      {
+        "term": "Training",
+        "detail": "k-means runs on the data present when the index is built"
+      },
+      {
+        "term": "IVF-PQ",
+        "detail": "compress vectors inside lists to save memory"
+      }
+    ]
+  },
+  "steps": [
+    "Load representative data before building, since clusters are learned from it",
+    "Set lists to about rows ÷ 1,000 (up to 1M rows) or √rows beyond that",
+    "Start probes around √lists and tune for your recall target",
+    "Rebuild the index after large changes to the data"
+  ],
+  "pitfalls": [
+    "An index built on an empty or tiny table has poor clusters",
+    "Recall drops as new data drifts from the original clusters",
+    "Queries near cluster borders need more probes"
+  ],
+  "tools": [
+    "pgvector",
+    "FAISS IndexIVFFlat",
+    "Milvus",
+    "OpenSearch"
+  ],
+  "remember": "Cluster first, probe a few.",
+  "caption": "Faded clusters are never scanned. Raising probes trades speed for recall.",
+  "comparison": {
+    "scope": "RAM",
+    "cost": 2,
+    "needs": "Fast builds, moderate scale, pgvector",
+    "best": "Needs training data; tune probes"
+  },
+  "diagram": {
+    "file": "diagrams/ivf.svg"
+  },
+  "lesson": {
+    "file": "ivf_faiss.py",
+    "language": "python",
+    "code": [
+      {
+        "text": "import faiss, numpy as np",
+        "steps": []
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "xb = np.load(\"chunks.npy\").astype(\"float32\")      # 2,000,000 × 384",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "faiss.normalize_L2(xb)            # unit length: inner product = cosine",
+        "steps": [
+          1
+        ]
+      },
+      {
+        "text": "d, nlist = xb.shape[1], 2000      # nlist ≈ rows ÷ 1,000",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "quantizer = faiss.IndexFlatIP(d)  # holds the 2,000 centroids",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "index = faiss.IndexIVFFlat(quantizer, d, nlist, faiss.METRIC_INNER_PRODUCT)",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "sample = xb[np.random.choice(len(xb), 200_000, replace=False)]",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "index.train(sample)               # k-means learns the centroids",
+        "steps": [
+          2
+        ]
+      },
+      {
+        "text": "index.add(xb)                     # each vector joins its nearest centroid's list",
+        "steps": [
+          3
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "xq = embed([\"How do I reset my UPI PIN?\"]).astype(\"float32\")",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "faiss.normalize_L2(xq)",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "index.nprobe = 45                 # ≈ √nlist lists scanned per query",
+        "steps": [
+          4
+        ]
+      },
+      {
+        "text": "D, I = index.search(xq, 10)       # exact distances inside ~45 of 2,000 lists",
+        "steps": [
+          5
+        ]
+      },
+      {
+        "text": "",
+        "steps": []
+      },
+      {
+        "text": "exact = faiss.IndexFlatIP(d)      # brute force, for evaluation only",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "exact.add(xb)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "_, I_true = exact.search(xq, 10)",
+        "steps": [
+          6
+        ]
+      },
+      {
+        "text": "recall = len(set(I[0]) & set(I_true[0])) / 10   # recall@10",
+        "steps": [
+          6
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "title": "Load and normalise the vectors",
+        "text": "Load representative data first, because the clusters are learned from it. Unit-length vectors make inner product equal to cosine similarity."
+      },
+      {
+        "title": "Train the centroids",
+        "text": "k-means on a sample learns nlist centroids. Two million rows ÷ 1,000 gives 2,000 lists; the picture uses 4."
+      },
+      {
+        "title": "Fill the inverted lists",
+        "text": "Every vector is stored in the list of its nearest centroid. A list is scanned as a unit at query time."
+      },
+      {
+        "title": "Pick the nearest lists",
+        "text": "The query is compared with every centroid, a cheap step, and the nprobe closest lists are chosen: 2 of 4 here."
+      },
+      {
+        "title": "Scan only those lists",
+        "text": "Exact distances are computed inside the probed lists only: 16 of 32 vectors here, and 45 of 2,000 lists, about 2%, at full scale."
+      },
+      {
+        "title": "Measure recall",
+        "text": "Compare with exact search on sample queries. If recall@10 is below target, raise nprobe; if it falls as data changes, rebuild."
+      }
+    ],
+    "sceneHeight": 250,
+    "scenes": [
+      {
+        "step": 1,
+        "svg": "<circle class=\"dot a\" cx=\"85.8\" cy=\"52.0\" r=\"4\" style=\"--d:0s;\"/><circle class=\"dot a\" cx=\"70.2\" cy=\"64.0\" r=\"4\" style=\"--d:0.02s;\"/><circle class=\"dot a\" cx=\"51.0\" cy=\"70.2\" r=\"4\" style=\"--d:0.04s;\"/><circle class=\"dot a\" cx=\"35.5\" cy=\"55.1\" r=\"4\" style=\"--d:0.06s;\"/><circle class=\"dot a\" cx=\"35.0\" cy=\"41.1\" r=\"4\" style=\"--d:0.08s;\"/><circle class=\"dot a\" cx=\"53.6\" cy=\"32.5\" r=\"4\" style=\"--d:0.1s;\"/><circle class=\"dot a\" cx=\"71.4\" cy=\"27.3\" r=\"4\" style=\"--d:0.12s;\"/><circle class=\"dot a\" cx=\"78.5\" cy=\"35.2\" r=\"4\" style=\"--d:0.14s;\"/><circle class=\"dot a\" cx=\"208.7\" cy=\"46.0\" r=\"4\" style=\"--d:0.1s;\"/><circle class=\"dot a\" cx=\"184.6\" cy=\"71.5\" r=\"4\" style=\"--d:0.12000000000000001s;\"/><circle class=\"dot a\" cx=\"176.7\" cy=\"70.9\" r=\"4\" style=\"--d:0.14s;\"/><circle class=\"dot a\" cx=\"162.5\" cy=\"47.6\" r=\"4\" style=\"--d:0.16s;\"/><circle class=\"dot a\" cx=\"154.7\" cy=\"41.2\" r=\"4\" style=\"--d:0.18s;\"/><circle class=\"dot a\" cx=\"158.3\" cy=\"22.6\" r=\"4\" style=\"--d:0.2s;\"/><circle class=\"dot a\" cx=\"188.7\" cy=\"19.4\" r=\"4\" style=\"--d:0.22s;\"/><circle class=\"dot a\" cx=\"191.2\" cy=\"36.6\" r=\"4\" style=\"--d:0.24000000000000002s;\"/><circle class=\"dot a\" cx=\"97.7\" cy=\"150.0\" r=\"4\" style=\"--d:0.2s;\"/><circle class=\"dot a\" cx=\"70.8\" cy=\"163.1\" r=\"4\" style=\"--d:0.22s;\"/><circle class=\"dot a\" cx=\"51.5\" cy=\"176.2\" r=\"4\" style=\"--d:0.24000000000000002s;\"/><circle class=\"dot a\" cx=\"42.4\" cy=\"172.5\" r=\"4\" style=\"--d:0.26s;\"/><circle class=\"dot a\" cx=\"46.8\" cy=\"135.1\" r=\"4\" style=\"--d:0.28s;\"/><circle class=\"dot a\" cx=\"56.2\" cy=\"131.1\" r=\"4\" style=\"--d:0.30000000000000004s;\"/><circle class=\"dot a\" cx=\"71.6\" cy=\"121.8\" r=\"4\" style=\"--d:0.32s;\"/><circle class=\"dot a\" cx=\"86.8\" cy=\"133.8\" r=\"4\" style=\"--d:0.34s;\"/><circle class=\"dot a\" cx=\"196.5\" cy=\"152.0\" r=\"4\" style=\"--d:0.30000000000000004s;\"/><circle class=\"dot a\" cx=\"195.9\" cy=\"172.9\" r=\"4\" style=\"--d:0.32000000000000006s;\"/><circle class=\"dot a\" cx=\"181.8\" cy=\"164.5\" r=\"4\" style=\"--d:0.34s;\"/><circle class=\"dot a\" cx=\"165.0\" cy=\"168.9\" r=\"4\" style=\"--d:0.36000000000000004s;\"/><circle class=\"dot a\" cx=\"163.2\" cy=\"142.3\" r=\"4\" style=\"--d:0.38000000000000006s;\"/><circle class=\"dot a\" cx=\"177.1\" cy=\"119.9\" r=\"4\" style=\"--d:0.4s;\"/><circle class=\"dot a\" cx=\"186.3\" cy=\"122.6\" r=\"4\" style=\"--d:0.42000000000000004s;\"/><circle class=\"dot a\" cx=\"196.9\" cy=\"142.7\" r=\"4\" style=\"--d:0.44000000000000006s;\"/><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx \" x=\"244\" y=\"10\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"26\" text-anchor=\"middle\">2M × 384 dims</text></g>"
+      },
+      {
+        "step": 2,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><path d=\"M54 46l12 12M66 46l-12 12\" style=\"stroke:var(--ink);stroke-width:2.4;stroke-linecap:round\"/></g><g class=\"a\" style=\"--d:0.12s\"><path d=\"M174 40l12 12M186 40l-12 12\" style=\"stroke:var(--ink);stroke-width:2.4;stroke-linecap:round\"/></g><g class=\"a\" style=\"--d:0.24s\"><path d=\"M60 144l12 12M72 144l-12 12\" style=\"stroke:var(--ink);stroke-width:2.4;stroke-linecap:round\"/></g><g class=\"a\" style=\"--d:0.36s\"><path d=\"M178 146l12 12M190 146l-12 12\" style=\"stroke:var(--ink);stroke-width:2.4;stroke-linecap:round\"/></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx \" x=\"244\" y=\"40\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"56\" text-anchor=\"middle\">nlist = 4 here</text></g>"
+      },
+      {
+        "step": 3,
+        "svg": "<path class=\"ln a\" d=\"M60 52L85.8 52.0\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L70.2 64.0\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L51.0 70.2\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L35.5 55.1\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L35.0 41.1\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L53.6 32.5\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L71.4 27.3\" style=\"--d:0s;stroke-width:.8\"/><path class=\"ln a\" d=\"M60 52L78.5 35.2\" style=\"--d:0s;stroke-width:.8\"/><text class=\"tag-t a\" x=\"16\" y=\"22\" style=\"--d:0.3s\">L1</text><path class=\"ln a\" d=\"M180 46L208.7 46.0\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L184.6 71.5\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L176.7 70.9\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L162.5 47.6\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L154.7 41.2\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L158.3 22.6\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L188.7 19.4\" style=\"--d:0.1s;stroke-width:.8\"/><path class=\"ln a\" d=\"M180 46L191.2 36.6\" style=\"--d:0.1s;stroke-width:.8\"/><text class=\"tag-t a\" x=\"220\" y=\"16\" style=\"--d:0.3s\">L2</text><path class=\"ln a\" d=\"M66 150L97.7 150.0\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L70.8 163.1\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L51.5 176.2\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L42.4 172.5\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L46.8 135.1\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L56.2 131.1\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L71.6 121.8\" style=\"--d:0.2s;stroke-width:.8\"/><path class=\"ln a\" d=\"M66 150L86.8 133.8\" style=\"--d:0.2s;stroke-width:.8\"/><text class=\"tag-t a\" x=\"22\" y=\"120\" style=\"--d:0.3s\">L3</text><path class=\"ln a\" d=\"M184 152L196.5 152.0\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L195.9 172.9\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L181.8 164.5\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L165.0 168.9\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L163.2 142.3\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L177.1 119.9\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L186.3 122.6\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><path class=\"ln a\" d=\"M184 152L196.9 142.7\" style=\"--d:0.30000000000000004s;stroke-width:.8\"/><text class=\"tag-t a\" x=\"224\" y=\"122\" style=\"--d:0.3s\">L4</text><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx \" x=\"244\" y=\"70\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"86\" text-anchor=\"middle\">lists 8·8·8·8</text></g>"
+      },
+      {
+        "step": 4,
+        "svg": "<path class=\"ln draw pass\" pathLength=\"1\" d=\"M120 86 L60 52\" style=\"--d:0s\"/><path class=\"ln draw pass\" pathLength=\"1\" d=\"M120 86 L180 46\" style=\"--d:0.08s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M120 86 L66 150\" style=\"--d:0.16s\"/><path class=\"ln draw \" pathLength=\"1\" d=\"M120 86 L184 152\" style=\"--d:0.24s\"/><g class=\"a\" style=\"--d:0s\"><path d=\"M120 78 l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z\" style=\"fill:var(--fail)\"/></g><g class=\"a\" style=\"--d:0.4s\"><rect class=\"bx acc\" x=\"244\" y=\"100\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"116\" text-anchor=\"middle\">nprobe = 2</text></g>"
+      },
+      {
+        "step": 5,
+        "svg": "<circle class=\"a\" cx=\"60\" cy=\"52\" r=\"42\" style=\"fill:none;stroke:var(--accent);stroke-dasharray:4 3;--d:0s\"/><circle class=\"a\" cx=\"180\" cy=\"46\" r=\"42\" style=\"fill:none;stroke:var(--accent);stroke-dasharray:4 3;--d:0.1s\"/><g class=\"a\" style=\"--d:0.3s\"><rect class=\"bx acc\" x=\"244\" y=\"130\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"146\" text-anchor=\"middle\">scanned 16 / 32</text></g><g class=\"a\" style=\"--d:0.5s\"><rect class=\"bx soft\" x=\"6\" y=\"204\" width=\"348\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"218\" text-anchor=\"middle\">at scale: 45 of 2,000 lists ≈ 2% of vectors scanned</text></g>"
+      },
+      {
+        "step": 6,
+        "svg": "<g class=\"a\" style=\"--d:0s\"><rect class=\"bx pass\" x=\"244\" y=\"160\" width=\"110\" height=\"24\" rx=\"6\"/><text class=\"mono\" x=\"299\" y=\"176\" text-anchor=\"middle\">recall@10 = 0.9</text></g><g class=\"a\" style=\"--d:0.25s\"><rect class=\"bx acc\" x=\"6\" y=\"228\" width=\"348\" height=\"20\" rx=\"6\"/><text class=\"mono\" x=\"180\" y=\"242\" text-anchor=\"middle\">low recall → raise nprobe · drift → rebuild</text></g>"
+      }
+    ]
+  },
+  "decision": {
+    "pros": [
+      "Fast index builds and modest memory",
+      "Two predictable knobs: lists and probes",
+      "probes can change per query with no rebuild",
+      "Pairs with product quantization (IVF-PQ) for large corpora"
+    ],
+    "cons": [
+      "Needs representative data before the index is built",
+      "Recall degrades as new data drifts from the trained centroids",
+      "Usually lower recall than HNSW at the same latency",
+      "Queries near cluster borders need more probes"
+    ],
+    "avoidWhen": [
+      "Data arrives continuously and shifts over time (HNSW needs no training)",
+      "Hundreds of millions of vectors on one machine with little RAM (DiskANN or IVF-PQ)"
+    ],
+    "tools": [
+      {
+        "name": "pgvector",
+        "type": "Open source · Postgres extension",
+        "what": "IVFFlat inside Postgres, next to your tables and SQL filters",
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "name": "FAISS",
+        "type": "Open source · Meta",
+        "what": "IndexIVFFlat and IndexIVFPQ on CPU and GPU",
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "name": "Milvus",
+        "type": "Open source · Zilliz",
+        "what": "IVF_FLAT, IVF_SQ8 and IVF_PQ at cluster scale",
+        "url": "https://milvus.io"
+      },
+      {
+        "name": "OpenSearch",
+        "type": "Open source",
+        "what": "IVF through the Faiss engine in the k-NN plugin",
+        "url": "https://opensearch.org"
+      },
+      {
+        "name": "LanceDB",
+        "type": "Open source",
+        "what": "IVF-PQ indexes over columnar files on disk or object storage",
+        "url": "https://lancedb.com"
+      }
+    ]
+  },
+  "playgroundGuide": {
+    "scenario": "A payments company's help centre stores its article chunks in Postgres with an IVFFlat index. Below is a scaled-down copy: 800 vectors in 8 topic clusters and 40 test queries. You choose how many lists k-means creates and how many of them each query scans, then compare the results with exact search.",
+    "controls": [
+      "Pick the number of lists (clusters) the index is built with.",
+      "Drag probes to set how many of the nearest lists each query scans.",
+      "Tick “build on the first 10% of rows” to see an index trained before most data arrived."
+    ],
+    "outputs": [
+      {
+        "name": "Recall@10",
+        "meaning": "Share of the true 10 nearest neighbours the index returns, averaged over 40 queries."
+      },
+      {
+        "name": "Vectors scanned",
+        "meaning": "Vectors in the probed lists ÷ all 800. The main cost of an IVF query."
+      },
+      {
+        "name": "Work saved vs exact search",
+        "meaning": "How many times fewer distances than scanning every vector."
+      },
+      {
+        "name": "Largest list",
+        "meaning": "Share of all vectors in the biggest list. Balanced lists keep query cost predictable."
+      }
+    ],
+    "presets": [
+      {
+        "k": "start",
+        "name": "Starting index",
+        "expect": "16 lists, 1 probe: 83% recall while scanning 6% of the vectors, about 16× less work than exact search."
+      },
+      {
+        "k": "tuned",
+        "name": "Tuned",
+        "expect": "32 lists, 3 probes: 99% recall while scanning 9% of the vectors."
+      },
+      {
+        "k": "tiny",
+        "name": "Built too early",
+        "expect": "Trained on the first 80 rows only: the largest list holds 46% of the data, so 2 probes scan 41% of the vectors to reach 98% recall."
+      },
+      {
+        "k": "many",
+        "name": "Many small lists",
+        "expect": "64 lists, 2 probes: only 3% scanned, but recall falls to 86%."
+      }
+    ],
+    "missions": [
+      {
+        "k": "target",
+        "text": "Reach at least 97% recall while scanning no more than 10% of the vectors.",
+        "hint": "Use more, smaller lists and 3 or more probes."
+      },
+      {
+        "k": "more",
+        "text": "Keep probes at 2 and find a number of lists that drops recall below 90%.",
+        "hint": "More lists means each one is smaller, so 2 probes cover less of the space."
+      },
+      {
+        "k": "skew",
+        "text": "Build the index on early data and make one list hold at least 40% of all vectors.",
+        "hint": "Tick the first-10% box; 16 lists shows it clearly."
+      }
+    ],
+    "tools": [
+      {
+        "n": "pgvector",
+        "type": "Open source · Postgres extension",
+        "start": 3,
+        "prod": 3,
+        "best": "IVFFlat and HNSW indexes inside Postgres, queried with plain SQL next to your other tables.",
+        "ex": "CREATE INDEX … USING ivfflat (embedding vector_cosine_ops) WITH (lists = 2000); then SET ivfflat.probes = 45.",
+        "pros": [
+          "No extra database to run",
+          "Filters, joins and transactions in the same query"
+        ],
+        "cons": [
+          "Index must be built after data is loaded",
+          "Very large collections need careful tuning and hardware"
+        ],
+        "url": "https://github.com/pgvector/pgvector"
+      },
+      {
+        "n": "FAISS",
+        "type": "Open source · Meta",
+        "start": 2,
+        "prod": 3,
+        "best": "A library of index types, including IndexIVFFlat and IndexIVFPQ, on CPU or GPU.",
+        "ex": "Train IndexIVFPQ on 1 million sample vectors, add 100 million, and serve with nprobe = 32.",
+        "pros": [
+          "Fast and flexible, with GPU support",
+          "Many index and quantization choices"
+        ],
+        "cons": [
+          "A library, not a database: no filtering or persistence layer",
+          "Tuning takes expertise"
+        ],
+        "url": "https://github.com/facebookresearch/faiss"
+      },
+      {
+        "n": "Milvus",
+        "type": "Open source · managed cloud (Zilliz)",
+        "start": 2,
+        "prod": 3,
+        "best": "A distributed vector database offering IVF_FLAT, IVF_SQ8 and IVF_PQ alongside HNSW and DiskANN.",
+        "ex": "A product catalogue of 300 million vectors using IVF_SQ8 to cut memory four-fold.",
+        "pros": [
+          "Scales out across nodes",
+          "Several index families in one system"
+        ],
+        "cons": [
+          "Many moving parts to operate",
+          "Overkill for small collections"
+        ],
+        "url": "https://milvus.io"
+      },
+      {
+        "n": "OpenSearch",
+        "type": "Open source",
+        "start": 2,
+        "prod": 3,
+        "best": "IVF indexes through the Faiss engine in the k-NN plugin, next to full-text search.",
+        "ex": "Train an IVF model on a sample index, then build a k-NN index that references it.",
+        "pros": [
+          "Keyword and vector search in one cluster",
+          "Mature operations tooling"
+        ],
+        "cons": [
+          "IVF needs a separate training step",
+          "Tuning spans several plugin settings"
+        ],
+        "url": "https://opensearch.org"
+      },
+      {
+        "n": "LanceDB",
+        "type": "Open source · managed cloud",
+        "start": 3,
+        "prod": 2,
+        "best": "IVF-PQ indexes over columnar Lance files on local disk or object storage.",
+        "ex": "Embed 5 million documents into a Lance table on S3 and build an IVF-PQ index from a notebook.",
+        "pros": [
+          "Embedded, no server to run",
+          "Cheap storage on object stores"
+        ],
+        "cons": [
+          "Younger ecosystem",
+          "Fewer operational features than server databases"
+        ],
+        "url": "https://lancedb.com"
+      }
+    ],
+    "quickPicks": [
+      {
+        "need": "Already on Postgres",
+        "tool": "pgvector IVFFlat"
+      },
+      {
+        "need": "Maximum control, GPU",
+        "tool": "FAISS IVF-PQ"
+      },
+      {
+        "need": "Hundreds of millions, clustered",
+        "tool": "Milvus"
+      }
+    ],
+    "goals": [
+      "Explain how lists and probes trade recall for speed",
+      "Set lists and a starting probes value from the row count",
+      "Recognise when an IVF index needs rebuilding"
+    ]
+  },
+  "practice": {
+    "scenario": "A fintech keeps 2 million support-article chunks in Postgres. An IVFFlat index with 2,000 lists (rows ÷ 1,000) builds in minutes, and setting probes to about 45 (√lists) gives the recall they need, without adding a separate vector database.",
+    "industries": [
+      {
+        "industry": "SaaS on Postgres",
+        "use": "Add semantic search without running a new database"
+      },
+      {
+        "industry": "E-commerce",
+        "use": "Product indexes rebuilt nightly from fresh data"
+      },
+      {
+        "industry": "Analytics",
+        "use": "Similarity search over batch-loaded event embeddings"
+      }
+    ],
+    "analogy": "A library organised into sections. To find a book, you walk to the two most likely sections and ignore the rest.",
+    "library": {
+      "name": "pgvector",
+      "what": "The Postgres extension for vectors. Supports IVFFlat and HNSW indexes alongside your normal tables and SQL.",
+      "install": "CREATE EXTENSION vector;  -- in Postgres"
+    },
+    "samples": [
+      {
+        "file": "ivfflat.sql",
+        "language": "sql",
+        "code": "CREATE EXTENSION IF NOT EXISTS vector;\n\nCREATE TABLE chunks (\n  id        bigserial PRIMARY KEY,\n  body      text,\n  embedding vector(384)\n);\n\n-- Build AFTER loading data: clusters are learned from existing rows\nCREATE INDEX ON chunks USING ivfflat (embedding vector_cosine_ops)\n  WITH (lists = 2000);                  -- ≈ rows / 1000 for 2M rows\n\nSET ivfflat.probes = 45;                -- ≈ √lists; raise for better recall\n\nSELECT id, body\nFROM chunks\nORDER BY embedding <=> $1               -- cosine distance to the query vector\nLIMIT 5;"
+      }
+    ]
+  },
+  "numericDrill": {
+    "question": "A pgvector table has 600,000 rows. What value of lists does pgvector suggest?",
+    "answer": "Up to 1M rows, lists ≈ rows ÷ 1,000 = 600. Start probes around √600 ≈ 24 and tune for recall.",
+    "expected": {
+      "value": 600,
+      "tolerance": 1,
+      "label": "lists ="
+    },
+    "interview": [
+      {
+        "question": "How does IVF trade recall for speed?",
+        "answer": "It scans only the closest few clusters (probes) instead of every vector. More probes raise recall and latency; a true neighbour in an unscanned cluster is missed."
+      },
+      {
+        "question": "When would you choose IVFFlat over HNSW?",
+        "answer": "When you need faster index builds and less memory, or rebuild from batch data regularly, and can accept slightly lower recall at the same speed. HNSW is usually better for low-latency, high-recall search."
+      }
+    ],
+    "mistakes": [
+      {
+        "mistake": "Building the index before loading data",
+        "fix": "Load representative data, then build"
+      },
+      {
+        "mistake": "Never rebuilding after large changes",
+        "fix": "Rebuild when the data distribution drifts"
+      }
+    ]
+  },
+  "quiz": [
+    {
+      "id": "iv01",
+      "kind": "single",
+      "industry": "Banking",
+      "question": "A bank’s complaint-search table in pgvector holds 800,000 rows. What value of lists does pgvector suggest for an IVFFlat index?",
+      "options": [
+        "894",
+        "800",
+        "8,000",
+        "80"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Up to 1 million rows, pgvector suggests lists ≈ rows ÷ 1,000: 800,000 ÷ 1,000 = 800."
+    },
+    {
+      "id": "iv02",
+      "kind": "single",
+      "industry": "Stockbroking",
+      "question": "A brokerage embeds 16 million research-note chunks in pgvector. What value of lists is suggested?",
+      "options": [
+        "16,000",
+        "1,600",
+        "4,000",
+        "400"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Above 1 million rows the suggestion is √rows, and √16,000,000 = 4,000."
+    },
+    {
+      "id": "iv03",
+      "kind": "multi",
+      "industry": "E-commerce",
+      "question": "An IVFFlat product index had 0.96 recall at launch and now has 0.82. Which of these could explain the drop? Select all that apply.",
+      "options": [
+        "Whole new product categories were added after the index was built",
+        "The index was built when the table held 5% of today’s rows",
+        "probes was raised from 10 to 20",
+        "Many queries now fall near cluster borders"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "Stale centroids, unrepresentative training data and border queries all cost recall. Raising probes improves recall."
+    },
+    {
+      "id": "iv04",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "An IVF index over policy clauses has 2,500 lists. What starting value for probes does pgvector suggest?",
+      "options": [
+        "250",
+        "25",
+        "1,250",
+        "50"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Start probes around √lists: √2,500 = 50, then tune against measured recall."
+    },
+    {
+      "id": "iv05",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "3 million merchant-description vectors sit in 3,000 lists of roughly equal size. With probes = 30, about how many vectors get exact distances per query?",
+      "options": [
+        "30,000",
+        "90,000",
+        "3,000",
+        "300,000"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Each list holds about 3,000,000 ÷ 3,000 = 1,000 vectors, and 30 lists × 1,000 = 30,000, or 1% of the data."
+    },
+    {
+      "id": "iv06",
+      "kind": "single",
+      "industry": "Healthcare",
+      "question": "A hospital created an IVFFlat index on an empty table, then loaded 1.2 million note embeddings. Recall is very poor. What fixes it?",
+      "options": [
+        "Rebuild the index now that representative data is loaded",
+        "Raise probes to 1",
+        "Switch from cosine to L2 distance",
+        "Load more rows into the same index"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "IVF learns its centroids when the index is built. Built on no data, the clusters are meaningless until it is rebuilt."
+    },
+    {
+      "id": "iv07",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "What does “Flat” mean in IVFFlat?",
+      "options": [
+        "The index has a single graph layer",
+        "Vectors inside each list are stored uncompressed, so distances within a list are exact",
+        "Every list has exactly the same size",
+        "The centroids are fixed and never trained"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Flat means raw vectors in the lists. IVF-PQ is the variant that compresses them."
+    },
+    {
+      "id": "iv08",
+      "kind": "multi",
+      "industry": "SaaS",
+      "question": "Which of these can be changed per query without rebuilding the index? Select all that apply.",
+      "options": [
+        "ivfflat.probes in pgvector",
+        "nprobe in FAISS",
+        "The number of lists",
+        "hnsw.ef_search in pgvector"
+      ],
+      "correct": [
+        0,
+        1,
+        3
+      ],
+      "explanation": "probes, nprobe and ef_search are query-time settings. The number of lists is fixed when the index is trained."
+    },
+    {
+      "id": "iv09",
+      "kind": "single",
+      "industry": "Logistics",
+      "question": "A shipment-search index has recall@10 of 0.86 at probes = 10 against a 0.95 target, with latency to spare. What do you try first?",
+      "options": [
+        "Rebuild with twice as many lists",
+        "Switch to DiskANN",
+        "Raise probes and re-measure",
+        "Drop the index and use exact search"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "probes is the query-time recall dial. Rebuild only if the data has drifted from the centroids."
+    },
+    {
+      "id": "iv10",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A developer sets probes equal to lists. What does the search become?",
+      "options": [
+        "A search that finds nothing",
+        "An exact scan of every vector, plus the centroid comparisons",
+        "A search over half the lists",
+        "A rebuild of the index at query time"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Scanning every list means computing every distance, which is exact search with extra overhead."
+    },
+    {
+      "id": "iv11",
+      "kind": "single",
+      "industry": "Airlines",
+      "question": "A FAISS IVF index uses nlist = 4,096. FAISS warns when there are fewer than 39 training points per centroid. About how many training vectors do you need at minimum?",
+      "options": [
+        "About 4,096",
+        "About 40,000",
+        "About 1.6 million",
+        "About 160,000"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "39 × 4,096 = 159,744, so about 160,000 training vectors."
+    },
+    {
+      "id": "iv12",
+      "kind": "multi",
+      "industry": "Banking",
+      "question": "A bank builds an IVF index over 10 million transaction-narration embeddings. Which steps are sound? Select all that apply.",
+      "options": [
+        "Load representative data before training",
+        "Train on a random sample rather than the first rows loaded",
+        "Set lists near √10,000,000 ≈ 3,162",
+        "Build the index before loading any data, so inserts are fast"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Centroids must be learned from representative data, and √rows is the suggested list count above 1 million rows."
+    },
+    {
+      "id": "iv13",
+      "kind": "single",
+      "industry": "Legal",
+      "question": "A law firm stores 768-dimension float32 vectors in IVF-PQ with 64-byte codes. What is the compression factor inside the lists?",
+      "options": [
+        "12×",
+        "48×",
+        "64×",
+        "3×"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "768 × 4 B = 3,072 B per vector, and 3,072 ÷ 64 = 48."
+    },
+    {
+      "id": "iv14",
+      "kind": "single",
+      "industry": "Insurance",
+      "question": "After a build on early data, the largest of 16 lists holds 40% of all vectors. A query that probes 2 lists including that one scans at least what share?",
+      "options": [
+        "12.5%",
+        "Under 5%",
+        "At least 40%",
+        "Exactly 2 ÷ 16 of the vectors"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "That one list alone holds 40% of the rows. Skewed lists make probing expensive, which is why you rebuild on representative data."
+    },
+    {
+      "id": "iv15",
+      "kind": "single",
+      "industry": "E-commerce",
+      "question": "Why do queries near a cluster border need more probes?",
+      "options": [
+        "Their true neighbours can sit in a neighbouring list that is not among the nearest centroids",
+        "Vectors near borders are compressed",
+        "Centroids move at query time",
+        "The distance metric changes near borders"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Choosing lists by centroid distance can skip the list that holds a neighbour just across the border."
+    },
+    {
+      "id": "iv16",
+      "kind": "multi",
+      "industry": "Stockbroking",
+      "question": "When is IVFFlat a reasonable choice over HNSW? Select all that apply.",
+      "options": [
+        "Fast index builds matter on a moderate dataset",
+        "Data is batch-loaded and the index is rebuilt nightly",
+        "Memory is tight and slightly lower recall is acceptable",
+        "Data arrives continuously and drifts, with no chance to rebuild"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "IVF builds quickly and uses little memory, but it depends on trained centroids, so drifting data favours HNSW."
+    },
+    {
+      "id": "iv17",
+      "kind": "single",
+      "industry": "Payments",
+      "question": "2 million vectors sit in 2,000 balanced lists and probes = 45. About how many vectors are scanned per query?",
+      "options": [
+        "About 90,000 (4.5%)",
+        "About 2,000 (0.1%)",
+        "About 450,000 (22.5%)",
+        "About 45,000 (2.25%)"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Each list holds about 1,000 vectors, so 45 lists × 1,000 = 45,000, which is 45 ÷ 2,000 = 2.25%."
+    },
+    {
+      "id": "iv18",
+      "kind": "single",
+      "industry": "Telecom",
+      "question": "A pgvector query filters to one circle (5% of rows) and uses IVFFlat with probes = 10. It returns 3 rows instead of 10. Why?",
+      "options": [
+        "IVFFlat cannot be combined with a WHERE clause",
+        "The filter is applied after the probed lists are scanned, so few candidates match",
+        "The lists are too large",
+        "Cosine distance ignores filters"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Only about 5% of the scanned candidates survive the filter. Raise probes, or use iterative index scans in pgvector 0.8 and later."
+    },
+    {
+      "id": "iv19",
+      "kind": "multi",
+      "industry": "Healthcare",
+      "question": "What should you monitor after deploying an IVF index? Select all that apply.",
+      "options": [
+        "Recall@10 against exact search on sample queries",
+        "The largest list’s share of rows",
+        "p95 query latency",
+        "The number of database users"
+      ],
+      "correct": [
+        0,
+        1,
+        2
+      ],
+      "explanation": "Recall, list balance and latency show when probes need tuning or the index needs rebuilding."
+    },
+    {
+      "id": "iv20",
+      "kind": "single",
+      "industry": "EdTech",
+      "question": "A learning platform on Postgres has 1.2 million lesson chunks and wants semantic search without running a new database. What fits?",
+      "options": [
+        "A separate billion-scale DiskANN cluster",
+        "pgvector with an IVFFlat or HNSW index",
+        "BM25 alone in Elasticsearch",
+        "A hand-written brute-force service"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "pgvector adds vector indexes next to existing tables and SQL filters, with no new system to run."
+    }
+  ]
+}
